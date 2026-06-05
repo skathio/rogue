@@ -1,0 +1,25 @@
+# .github/workflows/publish.yml
+name: publish
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  publish:
+    uses: skathio/hashira-ops/.github/workflows/nuget-package-publish.yml@70762f37277be0e7646953a7c2f16057e38ebbd5
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+    with:
+      project_path: 'SkathIO.Rogue.sln'
+      dotnet_version: '10.0.x'
+      target: 'https://api.nuget.org/v3/index.json'
+      environment_name: 'production'
+      library_ref: '70762f37277be0e7646953a7c2f16057e38ebbd5'
+    secrets:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

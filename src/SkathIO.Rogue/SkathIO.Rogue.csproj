@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue</PackageId>
+    <Description>SkathIO.Rogue — AOT-safe, source-generated CQRS/mediator for .NET.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>cqrs;mediator;source-generator;aot</PackageTags>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SkathIO.Rogue.Abstractions\SkathIO.Rogue.Abstractions.csproj" />
+    <!-- Generator shipped as an analyzer asset (D5) -->
+    <ProjectReference Include="..\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+  <!-- IAsyncEnumerable<T> polyfill for netstandard2.0 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+  </ItemGroup>
+</Project>

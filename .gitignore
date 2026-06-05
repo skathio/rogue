@@ -1,0 +1,15 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+*.DotSettings.user
+TestResults/
+coverage/
+artifacts/
+.hashira/
+bench/results/
+
+# Internal planning and tooling — not part of the public repo
+.somi/
+.claude/

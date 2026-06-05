@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.Abstractions</PackageId>
+    <Description>Contracts-only package for SkathIO.Rogue — interfaces, Unit, and marker types.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>cqrs;mediator;abstractions</PackageTags>
+  </PropertyGroup>
+  <!-- ValueTask<T> polyfill for netstandard2.0 (built-in on net5+) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Threading.Tasks.Extensions" />
+  </ItemGroup>
+</Project>

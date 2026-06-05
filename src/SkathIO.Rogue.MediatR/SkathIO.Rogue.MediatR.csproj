@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.MediatR</PackageId>
+    <Description>MediatR compatibility shim and migration tooling for SkathIO.Rogue.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+  </ItemGroup>
+</Project>
