@@ -1,0 +1,118 @@
+# Getting started
+
+SkathIO.Rogue is an AOT-safe, source-generated CQRS/mediator for .NET. Handlers are discovered and
+wired at **compile time** — there is no runtime reflection or assembly scanning, so the whole thing
+works under Native AOT and IL trimming.
+
+Target frameworks: `netstandard2.0`, `net8.0`, `net10.0`.
+
+## Install
+
+```bash
+dotnet add package SkathIO.Rogue
+```
+
+The source generator ships **inside** the `SkathIO.Rogue` package as an analyzer asset
+(`analyzers/dotnet/cs`). Referencing the package is enough — the generator runs in your
+compilation automatically. No separate generator package to install.
+
+## Register
+
+```csharp
+using SkathIO.Rogue;
+
+builder.Services.AddRogue();
+```
+
+`AddRogue()` registers the generated dispatcher plus everything the generator discovered in your
+compilation. An optional configuration callback exposes `RogueOptions`:
+
+```csharp
+builder.Services.AddRogue(o =>
+{
+    o.EnableObjectDispatch = true;                 // opt into the untyped Send(object)/Publish(object) path
+    o.EnableTelemetry = true;                      // turn on the ActivitySource/Meter shim
+    o.Lifetime = ServiceLifetime.Transient;        // DI lifetime for discovered handlers + behaviors (default: Transient)
+    o.AddOpenBehavior(typeof(MyBehavior<,>));       // register an open-generic pipeline behavior
+});
+```
+
+## Define a request and handler
+
+A request implements `IRequest<TResponse>` (or `IRequest` for the void path). The handler implements
+`IRequestHandler<TRequest, TResponse>` and returns a `ValueTask`.
+
+```csharp
+public sealed record GreetRequest(string Name) : IRequest<GreetResponse>;
+public sealed record GreetResponse(string Greeting);
+
+public sealed class GreetHandler : IRequestHandler<GreetRequest, GreetResponse>
+{
+    public ValueTask<GreetResponse> Handle(GreetRequest request, CancellationToken ct)
+        => new(new GreetResponse($"Hello, {request.Name}!"));
+}
+```
+
+## Dispatch
+
+Inject `ISender` (requests/queries/streams) or `IPublisher` (notifications). `IMediator` combines
+both.
+
+```csharp
+app.MapGet("/greet/{name}", async (string name, ISender sender) =>
+    Results.Ok(await sender.Send(new GreetRequest(name))));
+```
+
+A full runnable version of this is in [`samples/minimal-api`](../samples/minimal-api).
+
+## Message shapes
+
+| Interface | Handler | Dispatch | Notes |
+|-----------|---------|----------|-------|
+| `IRequest<T>` | `IRequestHandler<TRequest, T>` | `ISender.Send` | One handler per request (FR-7). |
+| `IRequest` | `IRequestHandler<TRequest>` | `ISender.Send` | Void path returns `ValueTask` (`ValueTask<Unit>` on netstandard2.0). |
+| `IQuery<T>` / `ICommand<T>` / `ICommand` | the matching `*Handler` | `ISender.Send` | Semantic aliases of `IRequest` for CQRS naming. |
+| `INotification` | `INotificationHandler<TNotification>` | `IPublisher.Publish` | Zero-to-many handlers, fan-out. |
+| `IStreamRequest<T>` | `IStreamRequestHandler<TRequest, T>` | `ISender.CreateStream` | Returns `IAsyncEnumerable<T>` (net8.0+). |
+
+The untyped `Send(object)` / `Publish(object)` overloads exist for dynamic dispatch but are **opt-in**
+via `RogueOptions.EnableObjectDispatch` (FR-17); they route through a generated type `switch`.
+
+## Lifetimes
+
+The generated **dispatcher** is registered **scoped** — it is per-scope so it can resolve handlers
+that themselves depend on scoped services (the prior singleton dispatcher captured the root
+provider — a captive-dependency defect fixed in Phase 7.3.1). **Discovered handlers and behaviors**
+default to **transient** (`RogueOptions.Lifetime`, overridable per your needs).
+`IRoguePipelineInspector` and the notification publishers are stateless singletons.
+
+## Troubleshooting
+
+The generator emits compile-time diagnostics so wiring mistakes surface as build errors/warnings, not
+runtime exceptions:
+
+| ID | Meaning |
+|----|---------|
+| `ROGUE001` | No handler registered for a request type used in source. |
+| `ROGUE002` | More than one handler registered for a request type. |
+| `ROGUE003` | Handler response type does not match the request's declared response. |
+| `ROGUE004` | Handler may not be constructable from DI. |
+| `ROGUE005` | Handler or behavior is abstract or has no public constructor. |
+| `ROGUE006` | Open-generic request type is not supported by the generator. |
+| `ROGUE007` | Suggestion: inject `ISender`/`IPublisher` instead of `IMediator`. |
+
+If a dispatch throws `RogueUnregisteredRequestException` at runtime, the generator did not run in the
+dispatching project's compilation. With the NuGet package this is automatic; with a **project
+reference** (as the samples use) you must add an explicit analyzer reference:
+
+```xml
+<ProjectReference Include="path/to/SkathIO.Rogue.SourceGenerator.csproj"
+                  OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+```
+
+## Where next
+
+- [Behaviors guide](behaviors.md) — pipeline behaviors, ordering, pre/post processors, logging, validation.
+- [API reference](api-reference.md) — the full public surface.
+- [Migration guide](migration-guide.md) — moving from MediatR.
+- [Benchmarks](benchmarks.md) — performance characteristics and the honesty scenario.

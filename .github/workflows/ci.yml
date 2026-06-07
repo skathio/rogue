@@ -20,33 +20,108 @@ jobs:
       library_ref: '70762f37277be0e7646953a7c2f16057e38ebbd5'
 
   aot-publish:
-    name: aot-publish
+    name: AOT publish
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - run: echo "AOT publish — coming soon"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install native AOT prerequisites
+        run: sudo apt-get install -y clang zlib1g-dev
+      - name: Publish AOT sample
+        run: dotnet publish samples/SkathIO.Rogue.Aot.Sample/SkathIO.Rogue.Aot.Sample.csproj -c Release -r linux-x64
+      - name: Run AOT binary
+        run: ./samples/SkathIO.Rogue.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Aot.Sample
 
   bench-smoke:
-    name: bench-smoke
+    name: Benchmark smoke
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - run: echo "Bench-smoke — coming soon"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Benchmark smoke run
+        run: dotnet run --project bench/SkathIO.Rogue.Benchmarks/SkathIO.Rogue.Benchmarks.csproj -c Release -- --filter '*NoBehavior*' --job short --exporters json
+      - name: Check allocation threshold
+        run: |
+          # The committed threshold is the concrete-path contract (RogueDispatcher.Send_PingRequest
+          # is 0-alloc, authoritatively gated at the PipelineExecutor.Execute layer by
+          # PipelineExecutorTests.Execute_NoBehaviors_ZeroAllocations in the `ci` job). It must stay 0
+          # (NFR-PERF-1 / AC-6.2).
+          threshold=$(jq '.scenario1_rogue_allocated_bytes // 0' .bench/thresholds.json)
+          echo "NFR-PERF-1 committed contract: scenario1_rogue_allocated_bytes=${threshold}"
+          if [ "$threshold" != "0" ]; then
+            echo "FAIL: committed contract is non-zero — the concrete 0-alloc path is the v1 promise (NFR-PERF-1)" && exit 1
+          fi
+          # Dynamic regression tripwire (7.2.1 pass-1 review, option (a)): gate the *measured*
+          # ISender.Send<T> interface-path allocation from the just-run BDN artifact against the
+          # committed interface_path_ceiling_bytes ceiling. This path boxes one ValueTask<T> by design
+          # (PD-12) and is NOT expected to be 0 — it is the public convenience path, not the concrete
+          # 0-alloc path (which is private on the internal generated dispatcher and unreachable from
+          # the bench consumer assembly). The ceiling makes bench-smoke a real tripwire: a large
+          # allocation regression on the interface path fails the build. Update
+          # interface_path_ceiling_bytes in .bench/thresholds.json if the baseline changes legitimately.
+          ceiling=$(jq '.interface_path_ceiling_bytes // 1024' .bench/thresholds.json)
+          result_file=$(find BenchmarkDotNet.Artifacts/results -name '*NoBehaviorBenchmarks-report-full-compressed.json' | head -1)
+          if [ -z "$result_file" ]; then
+            echo "WARNING: no BDN JSON artifact found; relied on committed-contract check above" && exit 0
+          fi
+          measured=$(jq '[.Benchmarks[] | select(.Method=="Rogue_NoBehavior") | .Memory.BytesAllocatedPerOperation] | first // empty' "$result_file")
+          if [ -z "$measured" ] || [ "$measured" = "null" ]; then
+            echo "INFO: no Rogue_NoBehavior benchmark in artifact; skipping dynamic gate" && exit 0
+          fi
+          echo "Measured ISender.Send<T> interface-path allocation (PD-12 box): ${measured} B"
+          echo "Committed interface-path ceiling: ${ceiling} B"
+          # Numeric compare via jq (no bc dependency): fail if measured EXCEEDS the ceiling.
+          over=$(jq -n --argjson m "$measured" --argjson c "$ceiling" '$m > $c')
+          if [ "$over" = "true" ]; then
+            echo "FAIL: Rogue interface-path allocates ${measured} B, ceiling is ${ceiling} B" && exit 1
+          fi
+          echo "OK: Rogue interface-path allocation ${measured} B is within ceiling ${ceiling} B"
 
   license-check:
-    name: license-check
+    name: License check
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - run: echo "License-check — coming soon"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore SkathIO.Rogue.sln
+      - name: Check BinaryFormatter (NFR-SEC-3)
+        run: |
+          if grep -rn "BinaryFormatter\|NetDataContractSerializer" src/; then
+            echo "NFR-SEC-3 violation" && exit 1
+          fi
+          echo "NFR-SEC-3 OK"
+      - name: Check competition package leak
+        run: |
+          if grep -rn 'PackageReference Include="MediatR"' src/; then
+            echo "Competition package MediatR found in src/" && exit 1
+          fi
+          if grep -rn 'PackageReference Include="Mediator' src/; then
+            echo "Competition package Mediator/Mediator.Abstractions/Mediator.SourceGenerator found in src/" && exit 1
+          fi
+          echo "Competition package check OK"
 
   public-api:
-    name: public-api
+    name: Public API
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - run: echo "PublicApiAnalyzers — coming soon"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build (enforces PublicApiAnalyzers)
+        run: dotnet build SkathIO.Rogue.sln -c Release

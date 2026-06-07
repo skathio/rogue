@@ -7,6 +7,14 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Abstractions\SkathIO.Rogue.Abstractions.csproj" />
+    <!--
+      The runtime DLL (PipelineExecutor / RogueDispatcher / RequestExceptionHandlerState) is referenced
+      so the compile-verification helper can feed the generated RogueDispatcher.g.cs through a real
+      CSharpCompilation and assert it produces zero Error-severity diagnostics. The generator inside
+      this project is a plain ProjectReference (not OutputItemType="Analyzer"), so it does not run over
+      the test project's own source.
+    -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
@@ -14,5 +22,7 @@
     <PackageReference Include="Verify.Xunit" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <!-- ServiceCollection / BuildServiceProvider for the runtime-dispatch verification helper. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 </Project>

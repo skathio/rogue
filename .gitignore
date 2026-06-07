@@ -8,7 +8,11 @@ TestResults/
 coverage/
 artifacts/
 .hashira/
-bench/results/
+# Generated benchmark result dirs (bench/results/<date>-<sha>/) — but keep the README.
+bench/results/*
+!bench/results/README.md
+# BenchmarkDotNet artifact output (local + CI)
+BenchmarkDotNet.Artifacts/
 
 # Internal planning and tooling — not part of the public repo
 .somi/

@@ -8,5 +8,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <!-- Analyzer reference makes the generator run in this sample's compilation, -->
+    <!-- discovering PingHandler and emitting the dispatcher + registration (PD-26). -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 </Project>

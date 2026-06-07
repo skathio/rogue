@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Reflection;
 using Xunit;
 
 namespace SkathIO.Rogue.Generator.Tests;
@@ -553,5 +554,293 @@ public class QueryHandler : IRequestHandler<Query, string>
         Assert.Contains("global::SkathIO.Rogue.IRequestHandler<", text);
         Assert.Contains("global::SkathIO.Rogue.PipelineExecutor", text);
         Assert.Contains("global::SkathIO.Rogue.Unit", text);
+    }
+
+    // ── FR-25/26/27 processor bridge (PD-29 resolution) ────────────────────────────────
+
+    private const string ProcessorSource = @"
+using System;
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class Ping : IRequest<string> { }
+public class PingHandler : IRequestHandler<Ping, string>
+{
+    public ValueTask<string> Handle(Ping request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+}
+public class PrePing : IRequestPreProcessor<Ping>
+{
+    public ValueTask Process(Ping request, CancellationToken ct) => default;
+}
+public class PostPing : IRequestPostProcessor<Ping, string>
+{
+    public ValueTask Process(Ping request, string response, CancellationToken ct) => default;
+}
+public class ExHandlerPing : IRequestExceptionHandler<Ping, string, InvalidOperationException>
+{
+    public ValueTask Handle(Ping request, InvalidOperationException ex, RequestExceptionHandlerState<string> state, CancellationToken ct)
+    {
+        state.SetHandled(""fallback"");
+        return default;
+    }
+}
+public class ExActionPing : IRequestExceptionAction<Ping, InvalidOperationException>
+{
+    public ValueTask Execute(Ping request, InvalidOperationException ex, CancellationToken ct) => default;
+}";
+
+    // Covers: FR-25 — the generated dispatch loop resolves and invokes the pre/post processors.
+    [Fact]
+    public void Processors_DispatcherInvokes_PreAndPostProcessors()
+    {
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(ProcessorSource);
+        var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs");
+        var text = dispatcher.SourceText.ToString();
+
+        // Pre-processors are resolved as a set and awaited before the pipeline; post-processors after.
+        Assert.Contains("GetServices<global::SkathIO.Rogue.IRequestPreProcessor<global::Ping>>", text);
+        Assert.Contains("GetServices<global::SkathIO.Rogue.IRequestPostProcessor<global::Ping, global::System.String>>", text);
+        Assert.Contains("await pre.Process(request, cancellationToken)", text);
+        Assert.Contains("await postProc.Process(request, response, cancellationToken)", text);
+    }
+
+    // Covers: FR-26 — the generated dispatch loop catches exceptions, runs observe-only actions, and
+    // invokes exception handlers that may supply a fallback response.
+    [Fact]
+    public void Processors_DispatcherInvokes_ExceptionHandlerAndAction()
+    {
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(ProcessorSource);
+        var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs");
+        var text = dispatcher.SourceText.ToString();
+
+        // Statically-typed `is TEx` matching — no reflection (NFR-SEC-1).
+        Assert.Contains("catch (global::System.Exception ex)", text);
+        Assert.Contains("ex is global::System.InvalidOperationException", text);
+        Assert.Contains("new global::SkathIO.Rogue.RequestExceptionHandlerState<global::System.String>()", text);
+        Assert.Contains("exHandler.Handle(request,", text);
+        Assert.Contains("action.Execute(request,", text);
+        Assert.Contains("if (exState.Handled)", text);
+        Assert.Contains("return exState.Response!;", text);
+    }
+
+    // Covers: FR-27 — processors run through the SAME PipelineExecutor engine as behaviors (no second
+    // pipeline), and NFR-SEC-1 is preserved (no reflection-heavy APIs on the dispatch path).
+    [Fact]
+    public void Processors_RunThroughSingleEngine_NoReflection()
+    {
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(ProcessorSource);
+        var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs");
+        var text = dispatcher.SourceText.ToString();
+
+        // The behavior pipeline still runs through PipelineExecutor.Execute inside the processor wrap.
+        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor.Execute<global::Ping, global::System.String>", text);
+
+        // NFR-SEC-1: no reflection-heavy APIs introduced on the generated dispatch path.
+        Assert.DoesNotContain("MakeGenericMethod", text);
+        Assert.DoesNotContain("Activator.CreateInstance", text);
+        Assert.DoesNotContain("Expression.Compile", text);
+    }
+
+    // A request type with NO processors keeps the allocation-conscious fast path (PD-2/PD-12): a
+    // direct PipelineExecutor.Execute call with no try/catch and no processor resolution.
+    [Fact]
+    public void NoProcessors_KeepsFastPath_NoTryCatchOrProcessorResolution()
+    {
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class Plain : IRequest<string> { }
+public class PlainHandler : IRequestHandler<Plain, string>
+{
+    public ValueTask<string> Handle(Plain request, CancellationToken ct) => ValueTask.FromResult(""x"");
+}";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs");
+        var text = dispatcher.SourceText.ToString();
+
+        // The Send_Plain method body must not contain processor resolution or a try/catch.
+        int start = text.IndexOf("Send_Plain", System.StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        // Look at the slice that contains the Send_Plain method body (up to the next private method).
+        string after = text.Substring(start);
+        int nextMethod = after.IndexOf("private ", 1, System.StringComparison.Ordinal);
+        string body = nextMethod > 0 ? after.Substring(0, nextMethod) : after;
+
+        Assert.DoesNotContain("GetServices<global::SkathIO.Rogue.IRequestPreProcessor", body);
+        Assert.DoesNotContain("catch (", body);
+        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor.Execute", body);
+    }
+
+    // ── FR-25/26/27 compile-verification matrix (pass 2, review 2026-06-07) ─────────────
+    //
+    // RunGeneratorAndAssertClean only proves the generator did not throw — it does NOT prove the
+    // emitted dispatcher compiles in a consumer project. These tests feed the generated source through
+    // a real CSharpCompilation and assert zero Error diagnostics, across the processor-combination
+    // space that string-matching alone left uncovered (which is how defects #1 and #2 shipped in
+    // pass 1). Reverting either emitter fix makes the corresponding test below fail.
+
+    // Defect #1 repro shape: an exception ACTION registered with NO matching handler and NO
+    // post-processors. Pass-1 emitted `var response` inside the try but referenced it in the post-try
+    // `return response;` → CS0103. This test compiles the emitted dispatcher and fails on that error.
+    [Fact]
+    public void Compiles_ExceptionActionOnly_NoHandler_NoPostProcessor()
+    {
+        const string source = @"
+using System;
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class ActionOnly : IRequest<string> { }
+public class ActionOnlyHandler : IRequestHandler<ActionOnly, string>
+{
+    public ValueTask<string> Handle(ActionOnly request, CancellationToken ct) => ValueTask.FromResult(""r"");
+}
+public class ActionOnlyExAction : IRequestExceptionAction<ActionOnly, InvalidOperationException>
+{
+    public ValueTask Execute(ActionOnly request, InvalidOperationException ex, CancellationToken ct) => default;
+}";
+        // Compiles cleanly => `response` is declared at RunWithProcessors scope, covering both the
+        // try body assignment and the post-try `return response;`.
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(source);
+    }
+
+    // Defect #2 repro shape (compile half): two exception actions sharing one TEx. Pass-1 emitted two
+    // `if (ex is InvalidOperationException ...)` blocks, each resolving the full action set. The
+    // grouping fix collapses them to one block — assert exactly one `is` block is emitted for the
+    // shared TEx, and that the result still compiles.
+    [Fact]
+    public void Compiles_TwoExceptionActions_SharingOneExceptionType_SingleBlock()
+    {
+        const string source = TwoActionsSharingTExSource;
+
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs");
+        var text = dispatcher.SourceText.ToString();
+
+        // Exactly ONE `if (ex is InvalidOperationException ...)` block for the shared exception type.
+        int count = CountOccurrences(text, "if (ex is global::System.InvalidOperationException");
+        Assert.Equal(1, count);
+
+        // And it still compiles.
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(source);
+    }
+
+    // Defect #2 repro shape (runtime half): with two actions registered for the same TEx, each action
+    // must fire EXACTLY ONCE per thrown exception. Pass-1 fired each twice (4 total for 2 actions).
+    // Compile-cleanliness cannot see this — only a runtime dispatch can. This test loads the generated
+    // assembly, builds the DI container from the generated registration, dispatches a request that
+    // throws, and asserts each action's invocation count is exactly 1.
+    [Fact]
+    public void Runtime_TwoExceptionActions_SharingOneExceptionType_EachFiresExactlyOnce()
+    {
+        var assembly = GeneratorTestHelper.EmitAndLoadAssembly(TwoActionsSharingTExSource);
+        var provider = GeneratorTestHelper.BuildProviderFromGenerated(assembly);
+
+        var senderType = typeof(SkathIO.Rogue.ISender);
+        var sender = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+            .GetRequiredService(provider, senderType);
+
+        // Resolve the request type from the loaded assembly and create an instance.
+        var requestType = assembly.GetType("Faulting", throwOnError: true)!;
+        var request = System.Activator.CreateInstance(requestType)!;
+
+        // ISender.Send<TResponse>(IRequest<TResponse>, CancellationToken) — close over the request's response.
+        var sendMethod = senderType.GetMethods()
+            .First(m => m.Name == "Send" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(string));
+
+        // The handler throws InvalidOperationException; no exception handler is registered, so the
+        // exception propagates out of Send after the (observe-only) actions run. Await the ValueTask.
+        var ex = Assert.ThrowsAny<System.Exception>(() =>
+        {
+            object valueTask = sendMethod.Invoke(sender, new object?[] { request, System.Threading.CancellationToken.None })!;
+            // ValueTask<string>.AsTask().GetAwaiter().GetResult()
+            var asTask = valueTask.GetType().GetMethod("AsTask")!.Invoke(valueTask, null)!;
+            ((System.Threading.Tasks.Task)asTask).GetAwaiter().GetResult();
+        });
+
+        // The two actions write their invocation counts into the shared static counter on the request
+        // assembly's type. Read them back via reflection and assert each fired exactly once.
+        var counterType = assembly.GetType("ActionCounter", throwOnError: true)!;
+        int countA = (int)counterType.GetField("CountA", BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
+        int countB = (int)counterType.GetField("CountB", BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
+
+        Assert.Equal(1, countA);
+        Assert.Equal(1, countB);
+    }
+
+    // The "everything" combination: pre + post + exception handler + exception action all present
+    // together. The pass-1 happy path covered this string-wise; this asserts it actually compiles.
+    [Fact]
+    public void Compiles_AllProcessorKindsPresent_Together()
+    {
+        // ProcessorSource already registers one of each kind, matched to one request/response/exception.
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(ProcessorSource);
+    }
+
+    // Regression: the existing single-fixture combination must keep compiling.
+    [Fact]
+    public void Compiles_ExistingSingleFixtureCombination()
+    {
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(ProcessorSource);
+    }
+
+    // Fixture: two IRequestExceptionAction implementations sharing one TEx, on a handler that throws
+    // (so the catch path is exercised at runtime). The actions bump a shared static counter so the
+    // runtime test can assert each fired exactly once.
+    private const string TwoActionsSharingTExSource = @"
+using System;
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+
+public static class ActionCounter
+{
+    public static int CountA;
+    public static int CountB;
+}
+
+public class Faulting : IRequest<string> { }
+
+public class FaultingHandler : IRequestHandler<Faulting, string>
+{
+    public ValueTask<string> Handle(Faulting request, CancellationToken ct)
+        => throw new InvalidOperationException(""boom"");
+}
+
+public class ActionA : IRequestExceptionAction<Faulting, InvalidOperationException>
+{
+    public ValueTask Execute(Faulting request, InvalidOperationException ex, CancellationToken ct)
+    {
+        ActionCounter.CountA++;
+        return default;
+    }
+}
+
+public class ActionB : IRequestExceptionAction<Faulting, InvalidOperationException>
+{
+    public ValueTask Execute(Faulting request, InvalidOperationException ex, CancellationToken ct)
+    {
+        ActionCounter.CountB++;
+        return default;
+    }
+}";
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        int count = 0;
+        int idx = 0;
+        while ((idx = haystack.IndexOf(needle, idx, System.StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            idx += needle.Length;
+        }
+        return count;
     }
 }

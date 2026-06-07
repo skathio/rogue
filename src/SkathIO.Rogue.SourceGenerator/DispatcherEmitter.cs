@@ -55,7 +55,7 @@ internal static class DispatcherEmitter
         // ── Per-request Send methods ──────────────────────────────────────────────────
         foreach (var handler in models.Handlers)
         {
-            EmitSendMethod(w, handler);
+            EmitSendMethod(w, handler, models.Processors);
             w.Line();
         }
 
@@ -112,7 +112,7 @@ internal static class DispatcherEmitter
     // Per-request Send_XXX method
     // ────────────────────────────────────────────────────────────────────────────────────
 
-    private static void EmitSendMethod(CodeWriter w, HandlerModel handler)
+    private static void EmitSendMethod(CodeWriter w, HandlerModel handler, EquatableArray<ProcessorModel> processors)
     {
         bool isVoid = handler.ResponseFqn is null;
         string responseFqn = isVoid ? "global::SkathIO.Rogue.Unit" : ToGlobalFqn(handler.ResponseFqn!);
@@ -126,6 +126,16 @@ internal static class DispatcherEmitter
         string behaviorListType = "global::System.Collections.Generic.IReadOnlyList<" + behaviorIface + ">";
         string methodName       = "Send_" + MakeSafeName(handler.RequestFqn);
 
+        // FR-25/26/27: collect the pre/post processors and exception handlers/actions discovered
+        // for THIS request (matched by request FQN, and response FQN for the response-typed kinds).
+        // The match uses the model FQNs (no global:: prefix) — the same form RogueGenerator records.
+        var pre        = CollectProcessors(processors, handler.RequestFqn, handler.ResponseFqn, ProcessorKind.Pre,              matchResponse: false);
+        var post       = CollectProcessors(processors, handler.RequestFqn, handler.ResponseFqn, ProcessorKind.Post,             matchResponse: true);
+        var exHandlers = CollectProcessors(processors, handler.RequestFqn, handler.ResponseFqn, ProcessorKind.ExceptionHandler, matchResponse: true);
+        var exActions  = CollectProcessors(processors, handler.RequestFqn, handler.ResponseFqn, ProcessorKind.ExceptionAction,  matchResponse: false);
+
+        bool hasProcessors = pre.Count > 0 || post.Count > 0 || exHandlers.Count > 0 || exActions.Count > 0;
+
         w.Open(
             "private global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
             methodName + "(" + requestFqn + " request, global::System.Threading.CancellationToken cancellationToken)");
@@ -137,33 +147,266 @@ internal static class DispatcherEmitter
         w.Line("var behaviors = " + SP + ".GetService<" + behaviorListType + ">(" + SVC + ")");
         w.Line("    ?? ((" + behaviorListType + ")global::System.Array.Empty<" + behaviorIface + ">());");
 
-        // Execute pipeline
+        // The innermost producer — the handler call — is identical for the fast and processor paths.
+        // PipelineExecutor always works with ValueTask<TResponse>, so the void case is wrapped to Unit.
+        string handlerCall;
         if (isVoid)
         {
-            // IRequestHandler<TReq>.Handle returns ValueTask<Unit> on ns2.0, ValueTask on net8+.
-            // PipelineExecutor always works with ValueTask<TResponse>, so we wrap the void case.
             w.Line("#if NETSTANDARD2_0");
-            w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", global::SkathIO.Rogue.Unit>(");
-            w.Line("    request, behaviors, () => handler.Handle(request, cancellationToken), cancellationToken);");
+            w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () => handler.Handle(request, cancellationToken);");
             w.Line("#else");
-            w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", global::SkathIO.Rogue.Unit>(");
-            w.Line("    request, behaviors,");
-            w.Line("    () =>");
-            w.Line("    {");
-            w.Line("        var voidVt = handler.Handle(request, cancellationToken);");
-            w.Line("        if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
-            w.Line("        return AwaitVoidThenUnit(voidVt);");
-            w.Line("    },");
-            w.Line("    cancellationToken);");
+            w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () =>");
+            w.Line("{");
+            w.Line("    var voidVt = handler.Handle(request, cancellationToken);");
+            w.Line("    if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
+            w.Line("    return AwaitVoidThenUnit(voidVt);");
+            w.Line("};");
             w.Line("#endif");
+            handlerCall = "handlerCall";
         }
         else
         {
+            w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () => handler.Handle(request, cancellationToken);");
+            handlerCall = "handlerCall";
+        }
+
+        if (!hasProcessors)
+        {
+            // FAST PATH (no pre/post processors, no exception handlers/actions for this request type):
+            // PD-2/PD-12 — call the single behavior engine directly with zero extra allocation. The
+            // generated delegate above is the only addition over the original direct call and is JIT-
+            // inlinable; the no-behavior + no-processor case still bottoms out in a direct handler call.
             w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
-            w.Line("    request, behaviors, () => handler.Handle(request, cancellationToken), cancellationToken);");
+            w.Line("    request, behaviors, " + handlerCall + ", cancellationToken);");
+        }
+        else
+        {
+            // PROCESSOR PATH (FR-25/26/27): pre-processors → behavior pipeline (the SAME engine) →
+            // post-processors, all inside a try/catch that runs exception actions (observe-only) and
+            // exception handlers (may supply a fallback response). The matching of a thrown exception
+            // to a registered handler/action is emitted as a statically-typed `is TEx` chain — no
+            // reflection (NFR-SEC-1), AOT-safe, and the exact TEx types are known at generate time.
+            EmitProcessorPath(w, requestFqn, responseFqn, handlerCall, pre, post, exHandlers, exActions);
         }
 
         w.Close(); // method
+    }
+
+    /// <summary>
+    /// Emits the FR-25/26/27 processor-aware dispatch body for a single request type. The method
+    /// is declared as a returning expression by the caller; this emits an inlined async local
+    /// function so the whole body can <c>await</c> processors without changing the method signature.
+    /// </summary>
+    private static void EmitProcessorPath(
+        CodeWriter w,
+        string requestFqn,
+        string responseFqn,
+        string handlerCall,
+        List<ProcessorModel> pre,
+        List<ProcessorModel> post,
+        List<ProcessorModel> exHandlers,
+        List<ProcessorModel> exActions)
+    {
+        string preIface  = "global::SkathIO.Rogue.IRequestPreProcessor<" + requestFqn + ">";
+        string postIface = "global::SkathIO.Rogue.IRequestPostProcessor<" + requestFqn + ", " + responseFqn + ">";
+
+        // Resolve the processor sets via DI (registered by RegistrationEmitter). GetServices returns
+        // every registered instance in registration order — FR-25 deterministic order.
+        if (pre.Count > 0)
+            w.Line("var preProcessors = " + SP + ".GetServices<" + preIface + ">(" + SVC + ");");
+        if (post.Count > 0)
+            w.Line("var postProcessors = " + SP + ".GetServices<" + postIface + ">(" + SVC + ");");
+
+        // Inlined async local function: returns the ValueTask<TResponse> the method hands back. Using a
+        // local function (rather than making Send_X itself async) keeps the fast-path methods cheap and
+        // localizes the state machine to request types that actually have processors.
+        w.Open("async global::System.Threading.Tasks.ValueTask<" + responseFqn + "> RunWithProcessors()");
+
+        // FR-25: pre-processors run before the behavior pipeline, in deterministic (registration) order.
+        if (pre.Count > 0)
+        {
+            // IRequestPreProcessor.Process returns ValueTask<Unit> on ns2.0 and ValueTask on net8+;
+            // both are awaitable identically, so no #if split is needed here.
+            w.Open("foreach (var pre in preProcessors)");
+            w.Line("await pre.Process(request, cancellationToken).ConfigureAwait(false);");
+            w.Close(); // foreach
+        }
+
+        string resultExpr =
+            "await global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(" +
+            "request, behaviors, " + handlerCall + ", cancellationToken).ConfigureAwait(false)";
+
+        bool hasCatch = exHandlers.Count > 0 || exActions.Count > 0;
+
+        // `response` must be declared at the RunWithProcessors scope (not inside the try) whenever a
+        // try/catch wraps the pipeline call, because the `return response;` below sits outside the
+        // try. This holds even when nothing inside the catch reads `response` (exception-action-only
+        // registration): without the function-scoped declaration the emitted `return response;` would
+        // reference an undeclared local (CS0103). The fast path (no processors at all) is emitted by
+        // the caller and never reaches here. (Defect #1, review 2026-06-07.)
+        w.Line(responseFqn + " response;");
+
+        if (hasCatch)
+        {
+            w.Open("try");
+            // FR-27: the behavior pipeline runs through the SAME PipelineExecutor engine inside the
+            // processor wrapper — there is no second/competing pipeline.
+            w.Line("response = " + resultExpr + ";");
+
+            // FR-25: post-processors run after a successful handler/pipeline completion.
+            EmitPostProcessors(w, post);
+
+            w.Close(); // try
+
+            // FR-26: exception actions observe (do not suppress); exception handlers may supply a
+            // fallback response and suppress propagation. Both are matched by a statically-typed
+            // `is TEx` chain — no reflection.
+            EmitExceptionCatch(w, requestFqn, responseFqn, exHandlers, exActions);
+        }
+        else
+        {
+            // No exception handling for this request type — just pipeline + post-processors.
+            w.Line("response = " + resultExpr + ";");
+
+            EmitPostProcessors(w, post);
+        }
+
+        w.Line("return response;");
+        w.Close(); // RunWithProcessors local function
+        w.Line("return RunWithProcessors();");
+    }
+
+    private static void EmitPostProcessors(CodeWriter w, List<ProcessorModel> post)
+    {
+        if (post.Count == 0) return;
+        w.Open("foreach (var postProc in postProcessors)");
+        w.Line("await postProc.Process(request, response, cancellationToken).ConfigureAwait(false);");
+        w.Close(); // foreach
+    }
+
+    /// <summary>
+    /// Emits the catch block(s) for FR-26. Exception actions (observe-only) run first, then exception
+    /// handlers, both matched against the thrown exception via a statically-typed <c>is TEx</c> test
+    /// (no reflection — NFR-SEC-1). When a handler marks the exception handled, its fallback response
+    /// is returned via the enclosing <c>RunWithProcessors</c> local function; otherwise the original
+    /// exception is re-thrown preserving its stack trace.
+    /// </summary>
+    private static void EmitExceptionCatch(
+        CodeWriter w,
+        string requestFqn,
+        string responseFqn,
+        List<ProcessorModel> exHandlers,
+        List<ProcessorModel> exActions)
+    {
+        w.Open("catch (global::System.Exception ex)");
+
+        // FR-26 (Should): observe-only actions. They run regardless of whether a handler suppresses.
+        //
+        // Actions are grouped by their exception type (TEx) so each distinct TEx produces EXACTLY ONE
+        // `if (ex is TEx ...)` block. GetServices<IRequestExceptionAction<TReq,TEx>> already resolves
+        // EVERY registered implementation for that closed interface, so one block + one GetServices
+        // call covers the full set for that exception type. Emitting one block per *implementation*
+        // (the previous shape) made every action fire once per registered implementation sharing the
+        // same TEx — N² invocations for N actions on one exception type. (Defect #2, review 2026-06-07.)
+        var actionExFqns = DistinctExceptionFqns(exActions);
+        for (int i = 0; i < actionExFqns.Count; i++)
+        {
+            string exFqn = ToGlobalFqn(actionExFqns[i]);
+            string iface = "global::SkathIO.Rogue.IRequestExceptionAction<" + requestFqn + ", " + exFqn + ">";
+            // Index-based suffix (not MakeSafeName(exFqn)): MakeSafeName is a non-injective character
+            // substitution — two distinct exception FQNs could collide on the same safe name and emit
+            // duplicate locals (CS0128). The loop index is unique by construction.
+            string sfx   = i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            w.Open("if (ex is " + exFqn + " exForAction" + sfx + ")");
+            w.Line("var actions" + sfx + " = " + SP + ".GetServices<" + iface + ">(" + SVC + ");");
+            w.Open("foreach (var action in actions" + sfx + ")");
+            w.Line("await action.Execute(request, exForAction" + sfx + ", cancellationToken).ConfigureAwait(false);");
+            w.Close(); // foreach
+            w.Close(); // if
+        }
+
+        // FR-26: exception handlers. Grouped by exception type for the same reason as actions: one
+        // `is TEx` block per distinct TEx, one GetServices call resolving the full handler set for
+        // that type. The first handler that marks the state handled supplies the fallback response and
+        // short-circuits the rest (within and across exception-type blocks via the !Handled guard).
+        var handlerExFqns = DistinctExceptionFqns(exHandlers);
+        if (handlerExFqns.Count > 0)
+        {
+            w.Line("var exState = new global::SkathIO.Rogue.RequestExceptionHandlerState<" + responseFqn + ">();");
+            for (int i = 0; i < handlerExFqns.Count; i++)
+            {
+                string exFqn = ToGlobalFqn(handlerExFqns[i]);
+                string iface = "global::SkathIO.Rogue.IRequestExceptionHandler<" + requestFqn + ", " + responseFqn + ", " + exFqn + ">";
+                // Index-based suffix — see the actions loop above for why MakeSafeName(exFqn) is unsafe here.
+                string sfx   = i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                w.Open("if (!exState.Handled && ex is " + exFqn + " exForHandler" + sfx + ")");
+                w.Line("var handlers" + sfx + " = " + SP + ".GetServices<" + iface + ">(" + SVC + ");");
+                w.Open("foreach (var exHandler in handlers" + sfx + ")");
+                w.Line("await exHandler.Handle(request, exForHandler" + sfx + ", exState, cancellationToken).ConfigureAwait(false);");
+                w.Line("if (exState.Handled) break;");
+                w.Close(); // foreach
+                w.Close(); // if
+            }
+            w.Open("if (exState.Handled)");
+            w.Line("return exState.Response!;");
+            w.Close(); // if
+        }
+
+        // Not handled — preserve the original exception (and its stack) unchanged.
+        w.Line("throw;");
+        w.Close(); // catch
+    }
+
+    /// <summary>
+    /// Collects the processor models of <paramref name="kind"/> that apply to a request identified by
+    /// <paramref name="requestFqn"/> (and <paramref name="responseFqn"/> for response-typed kinds).
+    /// Matching uses the model FQNs (no <c>global::</c> prefix) recorded by <c>RogueGenerator</c>.
+    /// A void-path handler's response FQN is null and matches a processor recorded against
+    /// <c>SkathIO.Rogue.Unit</c>.
+    /// </summary>
+    private static List<ProcessorModel> CollectProcessors(
+        EquatableArray<ProcessorModel> processors,
+        string requestFqn,
+        string? handlerResponseFqn,
+        ProcessorKind kind,
+        bool matchResponse)
+    {
+        // A void handler's response is Unit; processors record the Unit FQN as their response.
+        string expectedResponse = handlerResponseFqn ?? "SkathIO.Rogue.Unit";
+
+        var result = new List<ProcessorModel>();
+        foreach (var p in processors)
+        {
+            if (p.Kind != kind) continue;
+            if (!string.Equals(p.RequestFqn, requestFqn, System.StringComparison.Ordinal)) continue;
+            if (matchResponse)
+            {
+                string pResponse = p.ResponseFqn ?? "SkathIO.Rogue.Unit";
+                if (!string.Equals(pResponse, expectedResponse, System.StringComparison.Ordinal)) continue;
+            }
+            result.Add(p);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Returns the distinct, registration-order-preserving set of <c>ExceptionFqn</c> values across
+    /// the given exception-handler/action models. Each distinct exception type is emitted as exactly
+    /// one <c>is TEx</c> block (the single <c>GetServices&lt;...&gt;</c> call inside resolves the full
+    /// implementation set for that closed interface), so two implementations sharing one exception
+    /// type do not produce duplicate blocks / duplicate invocation. (Defect #2, review 2026-06-07.)
+    /// </summary>
+    private static List<string> DistinctExceptionFqns(List<ProcessorModel> models)
+    {
+        var seen   = new HashSet<string>(System.StringComparer.Ordinal);
+        var result = new List<string>();
+        foreach (var m in models)
+        {
+            if (m.ExceptionFqn is null) continue;
+            if (seen.Add(m.ExceptionFqn))
+                result.Add(m.ExceptionFqn);
+        }
+        return result;
     }
 
     // ────────────────────────────────────────────────────────────────────────────────────

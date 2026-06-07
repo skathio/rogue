@@ -11,4 +11,14 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <PackageReference Include="System.Threading.Tasks.Extensions" />
   </ItemGroup>
+  <!-- Public API surface differs by TFM (the void-path handlers return ValueTask<Unit> on -->
+  <!-- netstandard2.0 vs ValueTask on net8+, and the stream types are net8+ only), so the -->
+  <!-- PublicAPI.Unshipped.txt is supplied per TFM. PublicAPI.Shipped.txt (root, empty) is -->
+  <!-- auto-included for all TFMs by the analyzer package. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
+    <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Unshipped.txt" />
+  </ItemGroup>
 </Project>

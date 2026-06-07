@@ -7,6 +7,21 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <!-- Analyzer reference makes the Rogue generator run in this bench compilation, -->
+    <!-- discovering the benchmark handlers and emitting the dispatcher (PD-26). -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="MediatR" />
+    <!-- martinothamar/Mediator head-to-head (PD-22/PD-28). The runtime ships as
+         Mediator.Abstractions (marker interfaces) + Mediator.SourceGenerator (Roslyn generator);
+         the bare `Mediator` id is a different author with no 3.x runtime. The generator must be an
+         Analyzer (same pattern as Rogue's) or martinothamar dispatch is never generated. -->
+    <PackageReference Include="Mediator.Abstractions" />
+    <PackageReference Include="Mediator.SourceGenerator"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 </Project>

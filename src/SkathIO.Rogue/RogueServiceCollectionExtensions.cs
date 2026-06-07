@@ -16,6 +16,11 @@ public static class RogueServiceCollectionExtensions
         // Register options so Mediator can inject it
         services.TryAddSingleton(options);
 
+        // Flip the observability gate (FR-45). The ActivitySource/Meter are process-global (that is
+        // the System.Diagnostics model), so the gate is a process-global static too. Set unconditionally
+        // so a later AddRogue(...EnableTelemetry = false) can turn it back off within the same process.
+        RogueTelemetry.Enabled = options.EnableTelemetry;
+
         // Register the mediator and entry-point interfaces
         services.TryAddTransient<IMediator, Mediator>();
         services.TryAddTransient<ISender>(sp => sp.GetRequiredService<IMediator>());

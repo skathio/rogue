@@ -15,6 +15,15 @@ indent_size = 2
 trim_trailing_whitespace = false
 
 [*.cs]
+# PublicApiAnalyzers (Phase 7.1): RS0016/RS0017 track the public surface (the public-api CI
+# gate). RS0026/RS0027 are opinionated API-design lint ("do not add multiple overloads with
+# optional parameters" / "public API with optional parameter(s) should have the most
+# parameters amongst its public overloads"). The library deliberately uses the idiomatic
+# .NET pattern of `Send(request, CancellationToken ct = default)` overloads (mirroring
+# IServiceProvider/HttpClient conventions); these rules conflict with that approved design
+# and are not part of the surface-tracking contract. Disabled with justification (spec §4).
+dotnet_diagnostic.RS0026.severity = none
+dotnet_diagnostic.RS0027.severity = none
 # Naming
 dotnet_naming_rule.private_fields_underscore.symbols = private_fields
 dotnet_naming_rule.private_fields_underscore.style = underscore_prefix_style

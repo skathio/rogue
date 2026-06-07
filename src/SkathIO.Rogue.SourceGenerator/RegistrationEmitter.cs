@@ -32,10 +32,16 @@ internal static class RegistrationEmitter
         const string SCE = "global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions";
 
         // ── RogueDispatcher ────────────────────────────────────────────────────────────
-        // Singleton: only one dispatcher instance needed; it is stateless (resolves from DI on each call).
-        // The generated subclass (RogueDispatcherImpl) is registered as the RogueDispatcher service
-        // so the runtime Mediator resolves it transparently (PD-14).
-        w.Line(SCE + ".AddSingleton<global::SkathIO.Rogue.RogueDispatcher, global::SkathIO.Rogue.Generated.RogueDispatcherImpl>(services);");
+        // Scoped: the dispatcher captures the IServiceProvider it is constructed with and resolves
+        // handlers/behaviors from it on each call. A SINGLETON dispatcher captures the ROOT provider,
+        // so a handler with a SCOPED dependency (e.g. a per-request tracker) cannot be resolved —
+        // it throws under scope validation ("cannot resolve scoped service from root provider") and,
+        // worse, silently becomes a captive dependency when validation is off. Registering the
+        // dispatcher as scoped means that when the transient Mediator is resolved from a request
+        // scope, the dispatcher it resolves is bound to that same scope, so scoped handler
+        // dependencies resolve correctly (required by FR-24 configured lifetimes / FR-35 scoped
+        // handlers). The dispatcher itself is otherwise stateless; one instance per scope is cheap.
+        w.Line(SCE + ".AddScoped<global::SkathIO.Rogue.RogueDispatcher, global::SkathIO.Rogue.Generated.RogueDispatcherImpl>(services);");
         w.Line();
 
         // ── IRoguePipelineInspector ────────────────────────────────────────────────────
@@ -350,22 +356,26 @@ internal static class RegistrationEmitter
             }
             case ProcessorKind.Post:
             {
-                string responseFqn = "global::" + (p.ResponseFqn ?? "SkathIO.Rogue.Unit");
+                // Use ToGlobalFqn (not a bare "global::" concat) so keyword-aliased response types
+                // such as `string` become `global::System.String`, not the invalid `global::string`
+                // (which fails the consumer compile with "Identifier expected"). Surfaced by the
+                // pass-2 compile-verification tests (review 2026-06-07).
+                string responseFqn = DispatcherEmitter.ToGlobalFqn(p.ResponseFqn ?? "SkathIO.Rogue.Unit");
                 string iface       = "global::SkathIO.Rogue.IRequestPostProcessor<" + requestFqn + ", " + responseFqn + ">";
                 EmitDescriptor(w, iface, implFqn);
                 break;
             }
             case ProcessorKind.ExceptionHandler:
             {
-                string responseFqn  = "global::" + (p.ResponseFqn ?? "SkathIO.Rogue.Unit");
-                string exFqn        = "global::" + (p.ExceptionFqn ?? "System.Exception");
+                string responseFqn  = DispatcherEmitter.ToGlobalFqn(p.ResponseFqn ?? "SkathIO.Rogue.Unit");
+                string exFqn        = DispatcherEmitter.ToGlobalFqn(p.ExceptionFqn ?? "System.Exception");
                 string iface        = "global::SkathIO.Rogue.IRequestExceptionHandler<" + requestFqn + ", " + responseFqn + ", " + exFqn + ">";
                 EmitDescriptor(w, iface, implFqn);
                 break;
             }
             case ProcessorKind.ExceptionAction:
             {
-                string exFqn  = "global::" + (p.ExceptionFqn ?? "System.Exception");
+                string exFqn  = DispatcherEmitter.ToGlobalFqn(p.ExceptionFqn ?? "System.Exception");
                 string iface  = "global::SkathIO.Rogue.IRequestExceptionAction<" + requestFqn + ", " + exFqn + ">";
                 EmitDescriptor(w, iface, implFqn);
                 break;
