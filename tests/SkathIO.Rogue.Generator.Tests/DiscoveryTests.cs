@@ -221,6 +221,38 @@ public class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, 
         Assert.False(behavior.IsStream);
     }
 
+    // 2026-06-08 release-readiness review (9.1): GetUnboundFqn dropped the containing-*type* chain
+    // for nested behaviors, building the FQN from ContainingNamespace + symbol.Name alone — so
+    // "Outer.LoggingBehavior<,>" emitted "global::MyApp.LoggingBehavior<...>" (CS0234 in the
+    // consumer build, since no top-level "LoggingBehavior" exists in "MyApp"). Asserting on
+    // UnboundTypeFqn directly (rather than only on compile-cleanliness) pins the exact string shape
+    // so a future regression surfaces here, not as an opaque consumer-side CS0234.
+    [Fact]
+    public void NestedOpenGenericBehavior_UnboundTypeFqn_PreservesContainingTypeChain()
+    {
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class Outer
+{
+    public class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : notnull
+    {
+        public ValueTask<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+            => next();
+    }
+}
+";
+        DiscoveredModels models = GeneratorTestHelper.ExtractModels(source);
+
+        Assert.Single(models.Behaviors);
+        BehaviorModel behavior = models.Behaviors[0];
+        Assert.True(behavior.IsOpen);
+        Assert.Equal("Outer.LoggingBehavior", behavior.UnboundTypeFqn);
+    }
+
     [Fact]
     public void ClosedBehavior_IsDiscovered_WithIsOpenFalse()
     {

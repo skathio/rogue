@@ -490,13 +490,21 @@ public sealed class RogueGenerator : IIncrementalGenerator
     /// </summary>
     private static string GetMetadataFqn(INamedTypeSymbol symbol)
     {
+        // Walk the containing-type chain — nested types use '+' in metadata names
+        // (e.g. "Namespace.Outer+Inner`1"), not '.'. Dropping this chain (as the prior
+        // namespace-only build did) collapses "Outer.LoggingBehavior`2" to "LoggingBehavior`2",
+        // which can collide with or fail to match a well-known interface's metadata FQN.
+        var parts = new List<string>();
+        for (INamedTypeSymbol? current = symbol; current is not null; current = current.ContainingType)
+            parts.Add(current.MetadataName);
+        parts.Reverse();
+
         string ns = symbol.ContainingNamespace.IsGlobalNamespace
             ? string.Empty
             : symbol.ContainingNamespace.ToDisplayString();
 
-        return ns.Length == 0
-            ? symbol.MetadataName
-            : ns + "." + symbol.MetadataName;
+        string nameChain = string.Join("+", parts);
+        return ns.Length == 0 ? nameChain : ns + "." + nameChain;
     }
 
     /// <summary>Returns the fully-qualified display name without the <c>global::</c> prefix.</summary>
@@ -512,16 +520,26 @@ public sealed class RogueGenerator : IIncrementalGenerator
     /// </summary>
     private static string GetUnboundFqn(INamedTypeSymbol symbol)
     {
-        if (symbol.TypeParameters.Length == 0)
+        if (symbol.TypeParameters.Length == 0 && symbol.ContainingType is null)
             return GetFqn(symbol);
 
-        // Build namespace + name without the <T1, T2, ...> suffix
+        // Walk the containing-type chain, dropping each level's <T1, T2, ...> suffix — so a
+        // nested open-generic behavior like "Outer.LoggingBehavior<TReq, TRes>" collapses to
+        // "Namespace.Outer.LoggingBehavior" (nested types are referenced with '.' in C# source,
+        // matching SymbolDisplayFormat.FullyQualifiedFormat's display, unlike metadata names'
+        // '+'). The prior namespace-only build dropped "Outer" entirely, emitting
+        // "global::Namespace.LoggingBehavior<...>" — a CS0234 in the consumer build.
+        var parts = new List<string>();
+        for (INamedTypeSymbol? current = symbol; current is not null; current = current.ContainingType)
+            parts.Add(current.Name);
+        parts.Reverse();
+
         string ns = symbol.ContainingNamespace.IsGlobalNamespace
             ? string.Empty
             : symbol.ContainingNamespace.ToDisplayString();
 
-        string name = symbol.Name;
-        return ns.Length == 0 ? name : ns + "." + name;
+        string nameChain = string.Join(".", parts);
+        return ns.Length == 0 ? nameChain : ns + "." + nameChain;
     }
 
     private static TypeAccessibility GetAccessibility(INamedTypeSymbol symbol) =>

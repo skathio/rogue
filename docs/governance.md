@@ -27,7 +27,7 @@ shipped package.
   `public-api` CI job fails any unintended public-surface change. Surface that differs by target
   framework is tracked per-TFM.
 - **Releases are tag-triggered.** Pushing a `v*` tag runs `.github/workflows/publish.yml`, which calls
-  the `skathio/hashira-ops` reusable `nuget-package-publish` workflow (pinned to a SHA) to pack and
+  the `skathio/hashira` reusable `nuget-package-publish` workflow (pinned to a SHA) to pack and
   push all packages to NuGet.org atomically. The push is gated by the `production` GitHub Environment
   (required reviewer + `NUGET_API_KEY` secret). See [release readiness](#release-readiness).
 
@@ -51,7 +51,7 @@ Before tagging `v1.0.0`:
   repo would ship packages whose linked documentation 404s for consumers. Confirm visibility in the
   GitHub repository settings before tagging. This is a release-process check, not an automated gate.
 - The `production` GitHub Environment must have a required reviewer and the `NUGET_API_KEY` secret
-  configured (consumer responsibility per the hashira-ops nuget flow; an Environment with zero
+  configured (consumer responsibility per the hashira nuget flow; an Environment with zero
   reviewers publishes without pausing).
 - **Promote `PublicAPI.Unshipped.txt` entries to `PublicAPI.Shipped.txt`** for all packable projects
   (use the analyzer's "mark shipped" fixer; preserve the per-TFM split — `PublicAPI/netstandard2.0/`

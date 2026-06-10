@@ -8,9 +8,12 @@ TestResults/
 coverage/
 artifacts/
 .hashira/
-# Generated benchmark result dirs (bench/results/<date>-<sha>/) — but keep the README.
+# Generated benchmark result dirs (bench/results/<date>-<sha>/). Ad-hoc local runs are
+# ignored, but the README and committed baseline runs (the artifacts AC-G's "reproducible by a
+# third party" criterion rests on) are kept — negate each committed run dir explicitly.
 bench/results/*
 !bench/results/README.md
+!bench/results/2026-06-09-b037bd9/
 # BenchmarkDotNet artifact output (local + CI)
 BenchmarkDotNet.Artifacts/
 

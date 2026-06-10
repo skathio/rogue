@@ -9,7 +9,7 @@ internal static class MigrationDiagnostics
     public static readonly DiagnosticDescriptor UsingMediatR = new(
         id: "ROGM001",
         title: "Replace MediatR using directive",
-        messageFormat: "Replace 'using MediatR;' with 'using SkathIO.Rogue;' (and 'using SkathIO.Rogue.Compatibility;' if needed)",
+        messageFormat: "Replace 'using MediatR;' with 'using SkathIO.Rogue;'",
         category: "Migration",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,

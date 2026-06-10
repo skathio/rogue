@@ -90,7 +90,7 @@ using System.Threading.Tasks;
 public class Ping : IRequest<string> { }
 public class PingHandler : IRequestHandler<Ping, string>
 {
-    public ValueTask<string> Handle(Ping request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+    public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var sources = result.Results.SelectMany(r => r.GeneratedSources).ToList();
@@ -128,7 +128,7 @@ using System.Threading.Tasks;
 public class Ping : IRequest<string> { }
 public class PingHandler : IRequestHandler<Ping, string>
 {
-    public ValueTask<string> Handle(Ping request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+    public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var sources = result.Results.SelectMany(r => r.GeneratedSources).ToList();
@@ -166,7 +166,7 @@ using System.Threading.Tasks;
 public class Ping : IRequest<string> { }
 public class PingHandler : IRequestHandler<Ping, string>
 {
-    public ValueTask<string> Handle(Ping request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+    public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
@@ -192,9 +192,9 @@ public class DeleteUser : ICommand { }
 public class DeleteUserHandler : ICommandHandler<DeleteUser>
 {
 #if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(DeleteUser request, CancellationToken ct) => Unit.Task;
+    public ValueTask<Unit> Handle(DeleteUser request, System.Threading.CancellationToken ct) => Unit.Task;
 #else
-    public ValueTask Handle(DeleteUser request, CancellationToken ct) => ValueTask.CompletedTask;
+    public ValueTask Handle(DeleteUser request, System.Threading.CancellationToken ct) => ValueTask.CompletedTask;
 #endif
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
@@ -225,11 +225,11 @@ using System.Collections.Generic;
 public class GetUser : IRequest<string> { }
 public class GetUserHandler : IRequestHandler<GetUser, string>
 {
-    public ValueTask<string> Handle(GetUser request, CancellationToken ct) => ValueTask.FromResult(""user"");
+    public System.Threading.Tasks.ValueTask<string> Handle(GetUser request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""user"");
 }
 public class LoggingBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnull
 {
-    public ValueTask<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, CancellationToken ct) => next();
+    public ValueTask<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, System.Threading.CancellationToken ct) => next();
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var reg = result.Results.SelectMany(r => r.GeneratedSources)
@@ -256,9 +256,9 @@ public class UserCreated : INotification { }
 public class UserCreatedHandler : INotificationHandler<UserCreated>
 {
 #if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(UserCreated n, CancellationToken ct) => Unit.Task;
+    public ValueTask<Unit> Handle(UserCreated n, System.Threading.CancellationToken ct) => Unit.Task;
 #else
-    public ValueTask Handle(UserCreated n, CancellationToken ct) => ValueTask.CompletedTask;
+    public ValueTask Handle(UserCreated n, System.Threading.CancellationToken ct) => ValueTask.CompletedTask;
 #endif
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
@@ -289,9 +289,9 @@ public class Cmd : ICommand { }
 public class CmdHandler : ICommandHandler<Cmd>
 {
 #if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(Cmd request, CancellationToken ct) => Unit.Task;
+    public ValueTask<Unit> Handle(Cmd request, System.Threading.CancellationToken ct) => Unit.Task;
 #else
-    public ValueTask Handle(Cmd request, CancellationToken ct) => ValueTask.CompletedTask;
+    public ValueTask Handle(Cmd request, System.Threading.CancellationToken ct) => ValueTask.CompletedTask;
 #endif
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
@@ -320,11 +320,11 @@ using System.Threading.Tasks;
 public class GetOrder : IRequest<string> { }
 public class GetOrderHandler : IRequestHandler<GetOrder, string>
 {
-    public ValueTask<string> Handle(GetOrder request, CancellationToken ct) => ValueTask.FromResult(""order"");
+    public System.Threading.Tasks.ValueTask<string> Handle(GetOrder request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""order"");
 }
 public class TracingBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnull
 {
-    public ValueTask<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, CancellationToken ct) => next();
+    public ValueTask<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, System.Threading.CancellationToken ct) => next();
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var inspector = result.Results.SelectMany(r => r.GeneratedSources)
@@ -349,7 +349,7 @@ using System.Threading;
 public class Tick : IStreamRequest<int> { }
 public class TickHandler : IStreamRequestHandler<Tick, int>
 {
-    public async IAsyncEnumerable<int> Handle(Tick request, CancellationToken ct)
+    public async IAsyncEnumerable<int> Handle(Tick request, System.Threading.CancellationToken ct)
     {
         yield return 1;
         await System.Threading.Tasks.Task.CompletedTask;
@@ -357,7 +357,7 @@ public class TickHandler : IStreamRequestHandler<Tick, int>
 }
 public class StreamLogBehavior<TReq, TRes> : IStreamPipelineBehavior<TReq, TRes> where TReq : notnull
 {
-    public IAsyncEnumerable<TRes> Handle(TReq request, StreamHandlerDelegate<TRes> next, CancellationToken ct) => next();
+    public IAsyncEnumerable<TRes> Handle(TReq request, StreamHandlerDelegate<TRes> next, System.Threading.CancellationToken ct) => next();
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var reg = result.Results.SelectMany(r => r.GeneratedSources)
@@ -384,7 +384,7 @@ using System.Threading;
 public class Tick : IStreamRequest<int> { }
 public class TickHandler : IStreamRequestHandler<Tick, int>
 {
-    public async IAsyncEnumerable<int> Handle(Tick request, CancellationToken ct)
+    public async IAsyncEnumerable<int> Handle(Tick request, System.Threading.CancellationToken ct)
     {
         yield return 1;
         await System.Threading.Tasks.Task.CompletedTask;
@@ -392,7 +392,7 @@ public class TickHandler : IStreamRequestHandler<Tick, int>
 }
 public class StreamLogBehavior<TReq, TRes> : IStreamPipelineBehavior<TReq, TRes> where TReq : notnull
 {
-    public IAsyncEnumerable<TRes> Handle(TReq request, StreamHandlerDelegate<TRes> next, CancellationToken ct) => next();
+    public IAsyncEnumerable<TRes> Handle(TReq request, StreamHandlerDelegate<TRes> next, System.Threading.CancellationToken ct) => next();
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
@@ -421,7 +421,7 @@ using System.Threading;
 public class Tail : IStreamRequest<string> { }
 public class TailHandler : IStreamRequestHandler<Tail, string>
 {
-    public async IAsyncEnumerable<string> Handle(Tail request, CancellationToken ct)
+    public async IAsyncEnumerable<string> Handle(Tail request, System.Threading.CancellationToken ct)
     {
         yield return ""x"";
         await System.Threading.Tasks.Task.CompletedTask;
@@ -452,17 +452,17 @@ using System.Threading.Tasks;
 public class GetUser : IRequest<string> { }
 public class GetUserHandler : IRequestHandler<GetUser, string>
 {
-    public ValueTask<string> Handle(GetUser request, CancellationToken ct) => ValueTask.FromResult(""u"");
+    public System.Threading.Tasks.ValueTask<string> Handle(GetUser request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""u"");
 }
 [BehaviorOrder(10)]
 public class InnerB<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnull
 {
-    public ValueTask<TRes> Handle(TReq r, RequestHandlerDelegate<TRes> next, CancellationToken ct) => next();
+    public ValueTask<TRes> Handle(TReq r, RequestHandlerDelegate<TRes> next, System.Threading.CancellationToken ct) => next();
 }
 [BehaviorOrder(0)]
 public class OuterB<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnull
 {
-    public ValueTask<TRes> Handle(TReq r, RequestHandlerDelegate<TRes> next, CancellationToken ct) => next();
+    public ValueTask<TRes> Handle(TReq r, RequestHandlerDelegate<TRes> next, System.Threading.CancellationToken ct) => next();
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var reg = result.Results.SelectMany(r => r.GeneratedSources)
@@ -490,7 +490,7 @@ using System.Threading.Tasks;
 public class P : IRequest<string> { }
 public class PHandler : IRequestHandler<P, string>
 {
-    public ValueTask<string> Handle(P request, CancellationToken ct) => ValueTask.FromResult(""x"");
+    public System.Threading.Tasks.ValueTask<string> Handle(P request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""x"");
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var sources = result.Results.SelectMany(r => r.GeneratedSources).ToList();
@@ -513,11 +513,11 @@ using System.Collections.Generic;
 public class Q1 : IRequest<int> { }
 public class Q1Handler : IRequestHandler<Q1, int>
 {
-    public ValueTask<int> Handle(Q1 r, CancellationToken ct) => ValueTask.FromResult(1);
+    public ValueTask<int> Handle(Q1 r, System.Threading.CancellationToken ct) => ValueTask.FromResult(1);
 }
 public class LogB<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnull
 {
-    public ValueTask<TRes> Handle(TReq req, RequestHandlerDelegate<TRes> next, CancellationToken ct) => next();
+    public ValueTask<TRes> Handle(TReq req, RequestHandlerDelegate<TRes> next, System.Threading.CancellationToken ct) => next();
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var sources = result.Results.SelectMany(r => r.GeneratedSources).ToList();
@@ -543,7 +543,7 @@ using System.Threading.Tasks;
 public class Query : IRequest<string> { }
 public class QueryHandler : IRequestHandler<Query, string>
 {
-    public ValueTask<string> Handle(Query request, CancellationToken ct) => ValueTask.FromResult(""result"");
+    public System.Threading.Tasks.ValueTask<string> Handle(Query request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""result"");
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
@@ -556,6 +556,48 @@ public class QueryHandler : IRequestHandler<Query, string>
         Assert.Contains("global::SkathIO.Rogue.Unit", text);
     }
 
+    // 2026-06-08 release-readiness review (9.1): GetUnboundFqn built an open-generic behavior's FQN
+    // from ContainingNamespace + symbol.Name alone, dropping the containing-*type* chain — so a
+    // behavior nested in "Outer" emitted "global::MyApp.LoggingBehavior<...>" instead of
+    // "global::MyApp.Outer.LoggingBehavior<...>", a CS0234 ("type or namespace does not exist") in
+    // the consumer's compile step. RunGeneratorAndAssertCompiles is the only check that proves the
+    // *emitted* closed-generic construction — not just the model string — actually resolves; a
+    // string-only assertion on UnboundTypeFqn (see DiscoveryTests) could pass while the consumer
+    // build still breaks if InspectorEmitter/RegistrationEmitter mis-assembled the closed FQN.
+    [Fact]
+    public void NestedOpenGenericBehavior_GeneratedDispatcher_CompilesCleanly()
+    {
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class Ping : IRequest<string> { }
+public class PingHandler : IRequestHandler<Ping, string>
+{
+    public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
+}
+
+public class Outer
+{
+    public class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : notnull
+    {
+        public ValueTask<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, System.Threading.CancellationToken cancellationToken)
+            => next();
+    }
+}";
+        // RunGeneratorAndAssertCompiles asserts zero Error-severity diagnostics on the consumer
+        // source + every generated source recompiled together — the exact gate a CS0234 trips.
+        var compilation = GeneratorTestHelper.RunGeneratorAndAssertCompiles(source);
+
+        // Pin the corrected FQN shape in the emitted registration/inspector source too, so a
+        // regression that re-drops "Outer" surfaces here with a precise diff, not just a CS0234.
+        var generated = string.Join("\n", compilation.SyntaxTrees.Select(t => t.ToString()));
+        Assert.Contains("global::Outer.LoggingBehavior<", generated);
+        Assert.DoesNotContain("global::LoggingBehavior<", generated);
+    }
+
     // ── FR-25/26/27 processor bridge (PD-29 resolution) ────────────────────────────────
 
     private const string ProcessorSource = @"
@@ -566,19 +608,19 @@ using System.Threading.Tasks;
 public class Ping : IRequest<string> { }
 public class PingHandler : IRequestHandler<Ping, string>
 {
-    public ValueTask<string> Handle(Ping request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+    public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }
 public class PrePing : IRequestPreProcessor<Ping>
 {
-    public ValueTask Process(Ping request, CancellationToken ct) => default;
+    public ValueTask Process(Ping request, System.Threading.CancellationToken ct) => default;
 }
 public class PostPing : IRequestPostProcessor<Ping, string>
 {
-    public ValueTask Process(Ping request, string response, CancellationToken ct) => default;
+    public ValueTask Process(Ping request, string response, System.Threading.CancellationToken ct) => default;
 }
 public class ExHandlerPing : IRequestExceptionHandler<Ping, string, InvalidOperationException>
 {
-    public ValueTask Handle(Ping request, InvalidOperationException ex, RequestExceptionHandlerState<string> state, CancellationToken ct)
+    public ValueTask Handle(Ping request, InvalidOperationException ex, RequestExceptionHandlerState<string> state, System.Threading.CancellationToken ct)
     {
         state.SetHandled(""fallback"");
         return default;
@@ -586,7 +628,7 @@ public class ExHandlerPing : IRequestExceptionHandler<Ping, string, InvalidOpera
 }
 public class ExActionPing : IRequestExceptionAction<Ping, InvalidOperationException>
 {
-    public ValueTask Execute(Ping request, InvalidOperationException ex, CancellationToken ct) => default;
+    public ValueTask Execute(Ping request, InvalidOperationException ex, System.Threading.CancellationToken ct) => default;
 }";
 
     // Covers: FR-25 — the generated dispatch loop resolves and invokes the pre/post processors.
@@ -656,7 +698,7 @@ using System.Threading.Tasks;
 public class Plain : IRequest<string> { }
 public class PlainHandler : IRequestHandler<Plain, string>
 {
-    public ValueTask<string> Handle(Plain request, CancellationToken ct) => ValueTask.FromResult(""x"");
+    public System.Threading.Tasks.ValueTask<string> Handle(Plain request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""x"");
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
@@ -664,16 +706,33 @@ public class PlainHandler : IRequestHandler<Plain, string>
         var text = dispatcher.SourceText.ToString();
 
         // The Send_Plain method body must not contain processor resolution or a try/catch.
-        int start = text.IndexOf("Send_Plain", System.StringComparison.Ordinal);
+        int start = text.IndexOf("Send_Plain(global::Plain request", System.StringComparison.Ordinal);
         Assert.True(start >= 0);
-        // Look at the slice that contains the Send_Plain method body (up to the next private method).
+        // Look at the slice that contains the Send_Plain method body (up to the next private method —
+        // which, per PD-31, is the Send_Plain_WithBehaviors companion the fast path delegates to for
+        // the has-behaviors case; see EmitSendWithBehaviorsMethod).
         string after = text.Substring(start);
         int nextMethod = after.IndexOf("private ", 1, System.StringComparison.Ordinal);
         string body = nextMethod > 0 ? after.Substring(0, nextMethod) : after;
 
         Assert.DoesNotContain("GetServices<global::SkathIO.Rogue.IRequestPreProcessor", body);
         Assert.DoesNotContain("catch (", body);
-        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor.Execute", body);
+
+        // PD-31 (AC-C / NFR-PERF-1 closure elimination): the fast path must not build a
+        // RequestHandlerDelegate or call PipelineExecutor.Execute inline — both would force a
+        // display-class allocation that Roslyn would hoist to the top of THIS method (shared
+        // `handler`/`request`/`cancellationToken` locals). Instead it delegates the has-behaviors
+        // case to a companion method, confining that closure's scope away from the fast path.
+        Assert.DoesNotContain("RequestHandlerDelegate<", body);
+        Assert.DoesNotContain("global::SkathIO.Rogue.PipelineExecutor.Execute", body);
+        Assert.Contains("Send_Plain_WithBehaviors(handler, request, behaviors, cancellationToken)", body);
+
+        // The companion method must exist and be the one that actually drives PipelineExecutor.
+        Assert.Contains("private static global::System.Threading.Tasks.ValueTask<global::System.String> Send_Plain_WithBehaviors(", text);
+        int companionStart = text.IndexOf("Send_Plain_WithBehaviors(global::SkathIO.Rogue.IRequestHandler", System.StringComparison.Ordinal);
+        Assert.True(companionStart >= 0);
+        string companionBody = text.Substring(companionStart);
+        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor.Execute", companionBody);
     }
 
     // ── FR-25/26/27 compile-verification matrix (pass 2, review 2026-06-07) ─────────────
@@ -698,11 +757,11 @@ using System.Threading.Tasks;
 public class ActionOnly : IRequest<string> { }
 public class ActionOnlyHandler : IRequestHandler<ActionOnly, string>
 {
-    public ValueTask<string> Handle(ActionOnly request, CancellationToken ct) => ValueTask.FromResult(""r"");
+    public System.Threading.Tasks.ValueTask<string> Handle(ActionOnly request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""r"");
 }
 public class ActionOnlyExAction : IRequestExceptionAction<ActionOnly, InvalidOperationException>
 {
-    public ValueTask Execute(ActionOnly request, InvalidOperationException ex, CancellationToken ct) => default;
+    public ValueTask Execute(ActionOnly request, InvalidOperationException ex, System.Threading.CancellationToken ct) => default;
 }";
         // Compiles cleanly => `response` is declared at RunWithProcessors scope, covering both the
         // try body assignment and the post-try `return response;`.
@@ -750,7 +809,7 @@ public class ActionOnlyExAction : IRequestExceptionAction<ActionOnly, InvalidOpe
         var requestType = assembly.GetType("Faulting", throwOnError: true)!;
         var request = System.Activator.CreateInstance(requestType)!;
 
-        // ISender.Send<TResponse>(IRequest<TResponse>, CancellationToken) — close over the request's response.
+        // ISender.Send<TResponse>(IRequest<TResponse>, System.Threading.CancellationToken) — close over the request's response.
         var sendMethod = senderType.GetMethods()
             .First(m => m.Name == "Send" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)
             .MakeGenericMethod(typeof(string));
@@ -760,7 +819,7 @@ public class ActionOnlyExAction : IRequestExceptionAction<ActionOnly, InvalidOpe
         var ex = Assert.ThrowsAny<System.Exception>(() =>
         {
             object valueTask = sendMethod.Invoke(sender, new object?[] { request, System.Threading.CancellationToken.None })!;
-            // ValueTask<string>.AsTask().GetAwaiter().GetResult()
+            // System.Threading.Tasks.ValueTask<string>.AsTask().GetAwaiter().GetResult()
             var asTask = valueTask.GetType().GetMethod("AsTask")!.Invoke(valueTask, null)!;
             ((System.Threading.Tasks.Task)asTask).GetAwaiter().GetResult();
         });
@@ -810,13 +869,13 @@ public class Faulting : IRequest<string> { }
 
 public class FaultingHandler : IRequestHandler<Faulting, string>
 {
-    public ValueTask<string> Handle(Faulting request, CancellationToken ct)
+    public System.Threading.Tasks.ValueTask<string> Handle(Faulting request, System.Threading.CancellationToken ct)
         => throw new InvalidOperationException(""boom"");
 }
 
 public class ActionA : IRequestExceptionAction<Faulting, InvalidOperationException>
 {
-    public ValueTask Execute(Faulting request, InvalidOperationException ex, CancellationToken ct)
+    public ValueTask Execute(Faulting request, InvalidOperationException ex, System.Threading.CancellationToken ct)
     {
         ActionCounter.CountA++;
         return default;
@@ -825,12 +884,130 @@ public class ActionA : IRequestExceptionAction<Faulting, InvalidOperationExcepti
 
 public class ActionB : IRequestExceptionAction<Faulting, InvalidOperationException>
 {
-    public ValueTask Execute(Faulting request, InvalidOperationException ex, CancellationToken ct)
+    public ValueTask Execute(Faulting request, InvalidOperationException ex, System.Threading.CancellationToken ct)
     {
         ActionCounter.CountB++;
         return default;
     }
 }";
+
+    // ── PD-31 / AC-C / NFR-PERF-1: end-to-end closure-elimination allocation proof ─────
+
+    private const string PingFastPathSource = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+
+public class PingRequest : IRequest<string> { }
+
+public class PingHandler : IRequestHandler<PingRequest, string>
+{
+    public System.Threading.Tasks.ValueTask<string> Handle(PingRequest request, System.Threading.CancellationToken ct) => new System.Threading.Tasks.ValueTask<string>(""pong"");
+}";
+
+    /// <summary>
+    /// PD-31 (AC-C / NFR-PERF-1): the no-behavior, no-processor, sync-completing dispatch path must
+    /// allocate zero bytes — the prior <c>RequestHandlerDelegate&lt;TResponse&gt; handlerCall = () =&gt;
+    /// handler.Handle(...)</c> lambda captured <c>handler</c>/<c>request</c>/<c>cancellationToken</c>
+    /// (a per-dispatch display-class closure) on every <c>Send</c>, defeating the "0 bytes" promise.
+    ///
+    /// Per <c>spec.md</c> scenario 1 (PD-12), the "0 bytes" claim is specifically about the
+    /// <b>concrete</b> <c>RogueDispatcher.Send_PingRequest()</c> method — NOT the polymorphic
+    /// <c>ISender.Send&lt;TResponse&gt;()</c> entry point, whose <c>(object)(ValueTask&lt;TResponse&gt;)</c>
+    /// generic-variance cast unavoidably boxes the returned <c>ValueTask&lt;TResponse&gt;</c> on every
+    /// call (a separate, pre-existing cost of polymorphic dispatch, orthogonal to the closure PD-31
+    /// removes — confirmed empirically: routing this same scenario through <c>ISender.Send&lt;string&gt;</c>
+    /// measures ~80 B/call even after the fix, while the concrete method measures 0). So this test
+    /// resolves the live <c>RogueDispatcher</c>, finds the private <c>Send_PingRequest</c> via
+    /// reflection, and binds a genuinely non-boxing, compiled delegate to it through
+    /// <see cref="MeasureConcreteSendAllocations{TRequest, TResponse}"/> — a generic helper invoked
+    /// ONCE via <c>MakeGenericMethod</c> (so reflection overhead lands outside the measured loop) whose
+    /// JIT-specialized body creates a statically-typed <c>Func&lt;TRequest, CancellationToken,
+    /// ValueTask&lt;TResponse&gt;&gt;</c> delegate — NOT <c>MethodInfo.Invoke</c>/<c>DynamicInvoke</c>,
+    /// both of which box the <c>ValueTask</c> return and the <c>CancellationToken</c> argument on every
+    /// call and would swamp the measurement with harness noise (D2: loop 1000x to average out any
+    /// residual tiered-JIT/GC bookkeeping noise from a single sample).
+    ///
+    /// Handler lifetime is pinned to Singleton (not <c>GeneratorTestHelper</c>'s/<c>RogueOptions</c>'s
+    /// Transient default), which would allocate a fresh <c>PingHandler</c> on every
+    /// <c>GetRequiredService&lt;IRequestHandler&lt;...&gt;&gt;</c> resolution inside
+    /// <c>Send_PingRequest</c> — a real, expected, user-controlled cost of the *default* lifetime,
+    /// orthogonal to the closure this fix eliminates.
+    /// </summary>
+    [Fact]
+    public async System.Threading.Tasks.Task Send_PingRequest_NoBehaviorsSyncCompletingPath_AllocatesZeroBytes()
+    {
+        var assembly = GeneratorTestHelper.EmitAndLoadAssembly(PingFastPathSource);
+
+        var anyGeneratedType = assembly.GetType("SkathIO.Rogue.Generated.RogueGeneratedRegistration", throwOnError: true)!;
+        System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(anyGeneratedType.Module.ModuleHandle);
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        SkathIO.Rogue.RogueServiceCollectionExtensions.AddRogue(services, o => o.Lifetime = Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton);
+        var provider = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services);
+
+        var dispatcher = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+            .GetRequiredService(provider, typeof(SkathIO.Rogue.RogueDispatcher));
+
+        var requestType = assembly.GetType("PingRequest", throwOnError: true)!;
+        var request = System.Activator.CreateInstance(requestType)!;
+
+        var sendPingRequest = dispatcher.GetType().GetMethod(
+            "Send_PingRequest",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+        // Invoke the generic measurer with TRequest/TResponse bound to the loaded assembly's
+        // PingRequest/string — the ONE reflective call in this test, made before the measured loop.
+        var measure = typeof(EmissionTests)
+            .GetMethod(nameof(MeasureConcreteSendAllocations), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .MakeGenericMethod(requestType, typeof(string));
+
+        var task = (System.Threading.Tasks.Task<long>)measure.Invoke(null, new[] { dispatcher, sendPingRequest, request, (object)1000 })!;
+        long delta = await task;
+
+        Assert.Equal(0L, delta);
+    }
+
+    /// <summary>
+    /// Generic so the JIT specializes <typeparamref name="TRequest"/>/<typeparamref name="TResponse"/>
+    /// concretely — letting <c>Delegate.CreateDelegate</c> bind a compiled, non-boxing
+    /// <c>Func&lt;TRequest, CancellationToken, ValueTask&lt;TResponse&gt;&gt;</c> directly to the
+    /// (otherwise-private, runtime-discovered) <c>Send_&lt;Request&gt;</c> method.
+    /// </summary>
+    private static async System.Threading.Tasks.Task<long> MeasureConcreteSendAllocations<TRequest, TResponse>(
+        object dispatcher, System.Reflection.MethodInfo sendMethod, object request, int iterations)
+        where TRequest : notnull
+    {
+        var send = (System.Func<TRequest, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<TResponse>>)
+            sendMethod.CreateDelegate(
+                typeof(System.Func<TRequest, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<TResponse>>),
+                dispatcher);
+        var typedRequest = (TRequest)request;
+
+        // Warm up: let tiered JIT settle on steady-state codegen before measuring (D2/D6). `await`
+        // (not `.Result`/`.GetAwaiter().GetResult()`) on an already-synchronously-completed
+        // ValueTask<T> takes the allocation-free fast path.
+        for (int i = 0; i < iterations; i++)
+        {
+            var warm = send(typedRequest, System.Threading.CancellationToken.None);
+            if (!warm.IsCompletedSuccessfully)
+            {
+                throw new System.InvalidOperationException("Expected a synchronously-completing handler for this scenario.");
+            }
+            _ = await warm;
+        }
+
+        long before = System.GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+        {
+            var vt = send(typedRequest, System.Threading.CancellationToken.None);
+            if (!vt.IsCompletedSuccessfully)
+            {
+                throw new System.InvalidOperationException("Expected a synchronously-completing handler for this scenario.");
+            }
+            _ = await vt;
+        }
+        return System.GC.GetAllocatedBytesForCurrentThread() - before;
+    }
 
     private static int CountOccurrences(string haystack, string needle)
     {

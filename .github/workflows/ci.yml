@@ -9,7 +9,7 @@ permissions: {}
 
 jobs:
   ci:
-    uses: skathio/hashira-ops/.github/workflows/nuget-package-ci.yml@70762f37277be0e7646953a7c2f16057e38ebbd5
+    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@70762f37277be0e7646953a7c2f16057e38ebbd5
     permissions:
       contents: read
       pull-requests: write
@@ -70,11 +70,11 @@ jobs:
           ceiling=$(jq '.interface_path_ceiling_bytes // 1024' .bench/thresholds.json)
           result_file=$(find BenchmarkDotNet.Artifacts/results -name '*NoBehaviorBenchmarks-report-full-compressed.json' | head -1)
           if [ -z "$result_file" ]; then
-            echo "WARNING: no BDN JSON artifact found; relied on committed-contract check above" && exit 0
+            echo "FAIL: no BDN JSON artifact found — bench-smoke runs the benchmark to read it; a missing artifact is a broken run, not a pass" && exit 1
           fi
           measured=$(jq '[.Benchmarks[] | select(.Method=="Rogue_NoBehavior") | .Memory.BytesAllocatedPerOperation] | first // empty' "$result_file")
           if [ -z "$measured" ] || [ "$measured" = "null" ]; then
-            echo "INFO: no Rogue_NoBehavior benchmark in artifact; skipping dynamic gate" && exit 0
+            echo "FAIL: no Rogue_NoBehavior benchmark in artifact — the dynamic interface-path tripwire cannot run; treat as a broken run" && exit 1
           fi
           echo "Measured ISender.Send<T> interface-path allocation (PD-12 box): ${measured} B"
           echo "Committed interface-path ceiling: ${ceiling} B"

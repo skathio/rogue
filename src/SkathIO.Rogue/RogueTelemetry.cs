@@ -104,7 +104,11 @@ public static class RogueTelemetry
             activity.SetTag("outcome", outcome);
             if (exception is not null)
             {
-                activity.SetStatus(ActivityStatusCode.Error, exception.Message);
+                // NFR-SEC-2: tag the exception *type name*, never its Message — validator/handler
+                // exception messages can embed request-payload fragments (e.g. FluentValidation's
+                // "'Email' must be a valid email. You entered 'attacker@evil'.") and the span-status
+                // description is an export surface. Type name is safe to export.
+                activity.SetStatus(ActivityStatusCode.Error, exception.GetType().Name);
             }
 
             activity.Dispose();

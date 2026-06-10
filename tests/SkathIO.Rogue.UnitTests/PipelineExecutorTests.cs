@@ -73,14 +73,21 @@ public sealed class PipelineExecutorTests
     {
         var request = new PingRequest();
         // Warm up JIT — use the same static delegate to avoid spurious first-run allocs
-        PipelineExecutor.Execute<PingRequest, string>(request, [], PongHandler, CancellationToken.None);
+        for (var i = 0; i < 100; i++)
+        {
+            PipelineExecutor.Execute<PingRequest, string>(request, [], PongHandler, CancellationToken.None);
+        }
 
         var before = GC.GetAllocatedBytesForCurrentThread();
-        var vt = PipelineExecutor.Execute<PingRequest, string>(request, [], PongHandler, CancellationToken.None);
+        for (var i = 0; i < 1000; i++)
+        {
+            // Force completion without allocating a Task
+            var vt = PipelineExecutor.Execute<PingRequest, string>(request, [], PongHandler, CancellationToken.None);
+            Assert.True(vt.IsCompleted);
+        }
         var after = GC.GetAllocatedBytesForCurrentThread();
 
-        // Force completion without allocating a Task
-        Assert.True(vt.IsCompleted);
+        // Per-operation delta of zero over 1000 iterations — robust against tiered-JIT noise.
         Assert.Equal(0L, after - before);
     }
 

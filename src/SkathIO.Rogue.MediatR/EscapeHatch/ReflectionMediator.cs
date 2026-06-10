@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+#if !NETSTANDARD2_0
+using System.Diagnostics.CodeAnalysis;
+#endif
 using Microsoft.Extensions.DependencyInjection;
 
 namespace SkathIO.Rogue.Compatibility;
@@ -19,6 +22,10 @@ namespace SkathIO.Rogue.Compatibility;
 /// </remarks>
 [Obsolete("Not AOT-safe — use the generator path (ISender / RogueDispatcher) for AOT-compatible requests. " +
           "See https://docs.skathio.io/rogue/escape-hatch")]
+#if !NETSTANDARD2_0
+[RequiresDynamicCode("ReflectionMediator uses MakeGenericType and MethodInfo.Invoke, which are not compatible with Native AOT.")]
+[RequiresUnreferencedCode("ReflectionMediator uses reflection over IRequestHandler<,>/INotificationHandler<> which may be trimmed.")]
+#endif
 public sealed class ReflectionMediator : global::SkathIO.Rogue.IMediator
 {
     private readonly IServiceProvider _serviceProvider;

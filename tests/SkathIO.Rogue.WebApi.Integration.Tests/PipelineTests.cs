@@ -36,9 +36,11 @@ public sealed class PipelineTests : IClassFixture<WebApplicationFactory<Program>
 
     public PipelineTests(WebApplicationFactory<Program> factory) => _factory = factory;
 
-    // TODO Covers: FR-45 — OTel ActivityListener assertion deferred to post-v1
-    // (phases.md §7.3.2 deliverable 5). The RogueTelemetry shim (ActivitySource + Meter) is built
-    // in Phase 5.1; its WAF assertion is a Should NFR and does not gate v1.
+    // Covers: FR-45 — telemetry is wired into the generated dispatcher (Phase 9.2) and asserted
+    // end-to-end by two ActivityListener tests in TelemetryTests (SkathIO.Rogue.Behaviors.Tests):
+    // Send_EmitsActivity_WhenTelemetryEnabled / Send_EmitsErrorOutcome_DoesNotLeakExceptionMessage.
+    // Only the WAF HTTP-boundary assertion stays deferred (a Should NFR that does not gate v1); the
+    // FR itself is no longer "deferred"/"dead code" — see the FR-ledger row in this project's README.
 
     // Covers: FR-19 — an IPipelineBehavior wraps the handler: it runs BEFORE and AFTER it. The
     // package LoggingBehavior is woven onto every request; a single dispatch emits both a

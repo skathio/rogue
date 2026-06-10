@@ -1,96 +1,101 @@
 # SkathIO.Rogue — Benchmark Results
 
-> Generated: 2026-06-06 · SDK: .NET 10.0.108 · CPU: [local environment]
-> BenchmarkDotNet 0.14.0 · ShortRun job (5 iterations, 1 warmup)
+> Generated: 2026-06-09 · commit `b037bd9` · SDK: .NET 10.0.108 · Runtime: .NET 10.0.8 (X64 RyuJIT AVX2)
+> CPU: Intel Core i7-6700HQ (Skylake), 4 physical / 8 logical cores · OS: Ubuntu 24.04.4 LTS
+> BenchmarkDotNet 0.15.2 · ShortRun job (3 iterations, 3 warmup, 1 launch)
 > Competitors: MediatR 12.4.1 (Apache-2.0) · martinothamar/Mediator 3.0.2 (MIT)
-> Actual CI results are committed under `bench/results/` after each baseline run.
+> Raw artifacts (JSON / CSV / GitHub-MD per class): `bench/results/2026-06-09-b037bd9/`
+> Reproduce: `dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks -- --filter '*' --job short`
 
 ## Summary
 
+Mean wall-clock (ns) and allocated bytes per operation. Lower is better. **Bold** marks the
+best (lowest) value in each row. martinothamar/Mediator's compile-time-monomorphized dispatch is
+the fastest and lowest-allocating library in every head-to-head scenario; Rogue's structural win
+is **cold-start** (no reflection-based assembly scan), where it is ~40× faster than MediatR.
+
 | # | Scenario | Rogue | MediatR | martinothamar | Notes |
 |---|----------|-------|---------|---------------|-------|
-| 1 | NoBehavior (typed Send, 0 behaviors) | TBD | TBD | TBD | Interface path (384 B box; concrete path needs Phase 4 change — see below) |
-| 1 | Cold-start (first dispatch incl. DI build) | TBD | TBD | TBD | Cold-start overhead expected similar across libs (NFR-PERF-5) |
-| 2 | Send + 3 pipeline behaviors | TBD | TBD | n/a | Rogue only (martinothamar does not have open behaviors in 3.0.2) |
-| 3 | Object-path (untyped Send) | TBD | TBD | TBD | |
-| 3b | Object-path at 25 handler types | TBD | n/a | n/a | PD-3a evidence: switch scales O(1) at 25 types |
-| 4a | Publish N=2 notification handlers | TBD | TBD | TBD | |
-| 4b | Publish N=5 notification handlers | TBD | TBD | TBD | |
-| 5 | CreateStream (10 items) | TBD | n/a | TBD | MediatR v12 core has no streaming |
-| 6 | Publish N=20 (honesty scenario, NFR-PERF-5) | TBD | TBD | TBD | **See A1 hypothesis below** |
+| 1 | NoBehavior (typed Send, 0 behaviors) | 246 ns / 384 B | 107 ns / 224 B | **18 ns / 24 B** | Interface path boxes one `ValueTask<T>` (PD-12); see concrete-path note below |
+| 1 | Cold-start (first dispatch incl. DI build) | **14.2 µs / 27.4 KB** | 567 µs / 824 KB | 63 µs / 75.6 KB | Rogue wins: no runtime assembly scan (source-generated registration) |
+| 2 | Send + 1 / 3 / 5 pipeline behaviors | 232 / 240 / 237 ns · 384 B (flat) | n/a | n/a | Rogue only; allocation flat across behavior depth (no per-behavior heap growth) |
+| 3 | Object-path (untyped Send, 1 handler) | 225 ns / 384 B | 123 ns / 296 B | **22 ns / 24 B** | |
+| 3b | Object-path at 25 handler types | 226 ns / 384 B | n/a | n/a | PD-3a evidence: generated switch scales O(1) — 1 vs 25 handlers identical |
+| 4a | Publish N=2 notification handlers | 354 ns / 784 B | 212 ns / 464 B | **23 ns / 24 B** | |
+| 4b | Publish N=5 notification handlers | 727 ns / 1936 B | 390 ns / 920 B | **43 ns / 24 B** | |
+| 5 | CreateStream (10 items) | 415 ns / 344 B | n/a | **300 ns / 216 B** | MediatR v12 core has no streaming |
+| 6 | Publish N=20 (honesty scenario, NFR-PERF-5) | 2445 ns / 7312 B | 1363 ns / 3200 B | **141 ns / 24 B** | **See A1 hypothesis below** |
+| C | ConcurrentSend (8 scopes via `Task.WhenAll`) | 4.1 µs / 6.9 KB | n/a | n/a | Rogue-only; 0 lock contentions across N=1/4/8/16 (scales linearly) |
 
-*TBD = not yet committed; run `dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks -- --filter '*' --job short` and commit the output to `bench/results/<date>-<sha>/`.*
+Full concurrency sweep (Rogue only, `[ThreadingDiagnoser]` + `[MemoryDiagnoser]`):
 
-### Dry-run sighting (allocation only — informative, not authoritative)
+| Concurrency | Mean | Allocated | Lock Contentions |
+|------------:|-----:|----------:|-----------------:|
+| 1  |   617 ns |  1.02 KB | 0 |
+| 4  | 2,110 ns |  3.52 KB | 0 |
+| 8  | 4,145 ns |  6.87 KB | 0 |
+| 16 | 8,180 ns | 13.55 KB | 0 |
 
-A `--job dry` pass (1 op/iteration; timings are JIT/warmup-dominated and NOT comparable, but the
-allocation column is meaningful) was run while authoring this file to confirm all three libraries
-dispatch the new fan-out and stream scenarios without throwing. Observed **allocated bytes per op**:
+Allocation and latency scale linearly with concurrency (one DI scope + one boxed `ValueTask<T>`
+per dispatch), with **zero lock contention** — the generated dispatcher holds no shared mutable
+state, so concurrent dispatch is contention-free.
 
-| Scenario | Rogue | MediatR | martinothamar |
-|----------|------:|--------:|--------------:|
-| Publish N=2  |  8,464 B | 10,952 B | ~0 B |
-| Publish N=5  |  8,584 B | 15,120 B | ~0 B |
-| Publish N=20 | 13,960 B | 40,600 B | ~0 B |
-| CreateStream 10 items | 9,512 B | n/a | ~0 B |
+## AC-G — "≥1 scenario where SkathIO.Rogue is not fastest"
 
-These are dry-run figures (high absolute values include one-time JIT/setup attribution) and will be
-replaced by the committed ShortRun numbers. The **shape** is the load-bearing signal: martinothamar
-allocates ~0 B on the notification fan-out at every N, while Rogue's and MediatR's allocation grows
-with N. That is the direct, observable mechanism behind hypothesis A1 (below).
+This criterion is **over-satisfied** by the measured data, and honestly so: martinothamar/Mediator
+is the fastest and lowest-allocating library in *every* head-to-head dispatch scenario (NoBehavior,
+object-path, Publish N=2/5/20, CreateStream), and MediatR is faster than Rogue on the single-dispatch
+hot path. **Rogue is not the fastest mediator.** Its measured advantage is **cold-start** (scenario
+1, cold): Rogue's first dispatch is ~14 µs vs MediatR's ~567 µs and martinothamar's ~63 µs, because
+Rogue's registration is source-generated and does no runtime assembly scan. The honesty entry below
+documents the most pronounced not-fastest scenario; the table above shows it is far from the only one.
 
-## NFR-PERF-5 Honesty (Hypothesis A1)
+### NFR-PERF-5 Honesty (Hypothesis A1) — Notification fan-out (N=20)
 
-**Hypothesis A1:** Rogue is not the fastest library in at least one realistic scenario.
+**Hypothesis A1 (PD-24):** Rogue is not the fastest library in at least one realistic scenario;
+specifically, martinothamar's monomorphized fan-out should win on allocation at N=20.
 
-**Scenario 6 — Notification fan-out (N=20):**
+**A1 status: CONFIRMED — on both allocation and wall-clock.**
 
-**Mechanism:** Rogue's generated `Publish_PingNotificationN20()` method resolves handlers at runtime
-via `serviceProvider.GetServices<INotificationHandler<PingNotificationN20>>()` — a DI list
-enumeration that allocates a `List<NotificationHandlerExecutor>` (plus one closure per handler) on
-**every** `Publish` call. martinothamar's `Mediator.SourceGenerator` instead bakes a compile-time
+| Library | Publish N=20 mean | Publish N=20 allocated |
+|---------|------------------:|-----------------------:|
+| Rogue | 2,445 ns | 7,312 B |
+| MediatR | 1,363 ns | 3,200 B |
+| martinothamar | **141 ns** | **24 B** |
+
+**Mechanism:** Rogue's generated `Publish_PingNotificationN20()` resolves handlers at runtime via
+`serviceProvider.GetServices<INotificationHandler<PingNotificationN20>>()` — a DI list enumeration
+that allocates a `List<NotificationHandlerExecutor>` (plus one closure per handler) on **every**
+`Publish` call. martinothamar's `Mediator.SourceGenerator` instead bakes a compile-time
 `NotificationHandlers<T>` fan-out for each notification type, so its `Publish` path performs **no
-per-call DI lookup and no per-call list allocation** (the dry-run sighting above shows ~0 B for
-martinothamar at every N). At N=20 this runtime `GetServices<>()` + list-build cost grows with the
-handler count and becomes a measurable factor relative to the no-op handler bodies
-(`ValueTask.CompletedTask`).
+per-call DI lookup and no per-call list allocation** (24 B flat regardless of N). Rogue's allocation
+grows with N (784 B → 1936 B → 7312 B for N=2 → 5 → 20); martinothamar's stays at 24 B. At N=20 the
+runtime `GetServices<>()` + list-build cost is ~17× martinothamar's wall-clock and ~300× its
+allocation.
 
 This is a **realistic, idiomatic** scenario (PD-24 / Major #5): publishing a domain event to 20
-registered handlers is ordinary fan-out a real consumer writes — not a pathological config. The
-notification count N is encoded as a distinct notification type with exactly N declared handlers (see
+registered handlers is ordinary fan-out, not a pathological config. The notification count N is
+encoded as a distinct notification type with exactly N declared handlers (see
 `bench/SkathIO.Rogue.Benchmarks/Shared/BenchmarkHandlers.cs`), which yields an identical N across all
 three libraries (each library's generator/scanner auto-discovers every handler for a notification
 type, so selective DI registration cannot control N for MediatR/martinothamar — one type per N is the
 only honest parameterization).
 
-**A1 status: CONFIRMED (allocation) / timing-pending (committed ShortRun).**
-- The **allocation** dimension is confirmed: martinothamar allocates ~0 B on the fan-out path at
-  every N while Rogue's allocation grows with N, because Rogue's `Publish` does a runtime
-  `GetServices<>()` + list-build that martinothamar's compile-time fan-out avoids. Rogue is therefore
-  **not the lowest-allocating library** on the notification fan-out path. This is the documented
-  NFR-PERF-5 not-fastest scenario, with the mechanism named above.
-- The **wall-clock** dimension is recorded as TBD until the committed ShortRun run lands in
-  `bench/results/`; the dry-run timings are JIT/warmup-dominated and not authoritative. If the
-  committed ShortRun shows Rogue ahead on wall-clock despite the allocation gap, the allocation
-  finding still stands as the NFR-PERF-5 honesty entry (lower allocation is martinothamar's win), and
-  the mechanism explanation is unchanged.
-
 If a future Rogue change ever made the fan-out allocation-free (e.g. a generator-emitted static
-handler array per notification type, mirroring martinothamar), this scenario would need re-evaluation
-and a replacement not-fastest scenario would be chosen from the PD-24 candidates (cold-start DI
-resolution, small-set object-path, or streaming-with-many-behaviors).
+handler array per notification type, mirroring martinothamar), this scenario would need
+re-evaluation — though martinothamar would still lead on the single-dispatch hot path, so AC-G's
+not-fastest criterion would remain satisfied regardless.
 
 ## Concrete 0-Alloc Path (AC-6.2 / PD-12)
 
 The `scenario1_rogue_allocated_bytes: 0` in `.bench/thresholds.json` refers to the **concrete**
-`RogueDispatcher.Send_PingRequest()` path (PD-12), which is currently `private` on `internal
-RogueDispatcherImpl` and therefore not directly measurable from a consumer assembly. The generator
-would need to expose a `public` entry point for third-party reproducibility.
+`RogueDispatcher.Send_PingRequest()` path (PD-12), which is `private` on `internal
+RogueDispatcherImpl` and therefore not directly measurable from a consumer assembly. The published
+`Rogue_NoBehavior` benchmark measures the public `ISender.Send<T>` interface path, which boxes one
+`ValueTask<T>` struct by design and allocates exactly **384 B** (measured here; this is the real
+source for the figure previously cited unsourced in the docs). The 0-byte concrete-path claim is
+authoritatively gated by `PipelineExecutorTests.Execute_NoBehaviors_ZeroAllocations`, which asserts
+a per-operation delta of 0 B over 1000 iterations via `GC.GetAllocatedBytesForCurrentThread`.
 
-The 0-byte claim is **authoritatively gated by the Phase 4 unit test**
-`PipelineExecutorTests.Execute_NoBehaviors_ZeroAllocations`, which asserts 0 B via
-`GC.GetAllocatedBytesForCurrentThread` on the `PipelineExecutor.Execute` call path. The published
-benchmark (interface path) measures 384 B — one `ValueTask<T>` struct box by design (PD-12).
-
-Before v1.0 GA: decide whether to expose a public concrete entry point so the 0-byte claim is
-reproducible by a third party (see `progress.md` HIGH follow-up).
+To machine-verify the 0-byte claim end-to-end from a consumer, the generator would need to expose a
+`public` per-request dispatch entry point — tracked as a HIGH follow-up in `progress.md`.

@@ -10,7 +10,7 @@ permissions: {}
 
 jobs:
   publish:
-    uses: skathio/hashira-ops/.github/workflows/nuget-package-publish.yml@70762f37277be0e7646953a7c2f16057e38ebbd5
+    uses: skathio/hashira/.github/workflows/nuget-package-publish.yml@70762f37277be0e7646953a7c2f16057e38ebbd5
     permissions:
       id-token: write
       contents: write

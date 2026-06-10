@@ -39,16 +39,22 @@ public sealed class WhenAllPublisher : INotificationPublisher
             return;
         }
 
-        // Run all tasks to completion without propagating exceptions yet.
-        // ContinueWith wraps each faulted task in a successful task so WhenAll completes.
-        var completionTasks = new Task[tasks.Count];
-        for (int i = 0; i < tasks.Count; i++)
+        // Task.WhenAll always waits for every supplied task to complete — faulted or not —
+        // before its own task completes, so "wait for all" holds without the prior
+        // ContinueWith double-pass (which captured TaskScheduler.Current, a CA2008 hazard).
+        // `await` only re-throws the *first* faulted task's exception, so swallow that and
+        // collect every faulted task's exceptions ourselves (FR-29 E2) — by the time WhenAll
+        // completes (faulted or not), every antecedent task is already in a terminal state.
+        try
         {
-            completionTasks[i] = tasks[i].ContinueWith(static _ => { }, TaskContinuationOptions.ExecuteSynchronously);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+            return;
         }
-        await Task.WhenAll(completionTasks).ConfigureAwait(false);
+        catch (System.Exception)
+        {
+            // Fall through to aggregate every handler's failure below.
+        }
 
-        // Collect all exceptions from faulted tasks (FR-29 E2).
         var exceptions = new List<System.Exception>();
         foreach (var task in tasks)
         {

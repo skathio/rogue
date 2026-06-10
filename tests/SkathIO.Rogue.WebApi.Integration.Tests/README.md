@@ -117,7 +117,7 @@ Every SRS FR is accounted for below — either as an HTTP-boundary test or a nam
 | FR-42 | **migration-tooling-only** | Covered by `SkathIO.Rogue.Migration.Tests` (Phase 6). |
 | FR-43 | **migration-tooling-only** | Covered by `SkathIO.Rogue.Migration.Tests` (Phase 6). |
 | FR-44 | **migration-tooling-only** | Covered by `SkathIO.Rogue.Migration.Tests` (Phase 6). |
-| FR-45 | **post-v1 deferred** | OTel `ActivitySource`/`Meter` shim built in Phase 5.1. WAF assertion (observable via `ActivityListener`) deferred — OTel is a "Should" NFR (SRS FR-45) and adds test surface without gating v1. `// TODO Covers: FR-45` tracked as a follow-up. |
+| FR-45 | **Met** (telemetry-wired) | OTel `ActivitySource`/`Meter` shim built in Phase 5.1 and **genuinely invoked** by the generated dispatcher as of Phase 9.2 (`StartDispatch`/`StopDispatch` emitted on `Send_X`/`Publish_X`/`CreateStream_X`). Two end-to-end `ActivityListener` tests in `tests/SkathIO.Rogue.Behaviors.Tests/TelemetryTests.cs` (`Send_EmitsActivity_WhenTelemetryEnabled`, `Send_EmitsErrorOutcome_DoesNotLeakExceptionMessage`) observe the real `rogue.dispatch` activity over a real DI + generated-dispatcher path. The WAF HTTP-boundary assertion remains deliberately omitted (a "Should" NFR adds WAF test surface without gating v1), but FR-45 is no longer "dead code"/"deferred" — it is covered by behavior-tests-level e2e assertions. |
 
 ### Named exclusion categories
 

@@ -31,7 +31,7 @@ public sealed class ReplaceUsingMediatRCodeFix : CodeFixProvider
 
         context.RegisterCodeFix(
             CodeAction.Create(
-                title: "Replace with SkathIO.Rogue usings",
+                title: "Replace with SkathIO.Rogue using",
                 createChangedDocument: ct => ReplaceUsing(context.Document, node, ct),
                 equivalenceKey: "ReplaceUsingMediatR"),
             diagnostic);
@@ -45,18 +45,18 @@ public sealed class ReplaceUsingMediatRCodeFix : CodeFixProvider
         var root = await document.GetSyntaxRootAsync(ct).ConfigureAwait(false);
         if (root is null) return document;
 
-        // Build replacement usings.
+        // Emit only `using SkathIO.Rogue;` — the marker interfaces (IRequest<>, IRequestHandler<,>,
+        // INotification, ISender, …) all live there, so migrated declarations resolve unambiguously.
+        // Adding `using SkathIO.Rogue.Compatibility;` as well would make every such reference a CS0104
+        // ambiguous reference (the compat shim re-declares the same names); the compat namespace is an
+        // opt-in transitional aid for DI-only call sites (AddMediatR/Unit.Value/ReflectionMediator),
+        // which migrators add by hand. See PD-32a.
         var rogueUsing = SyntaxFactory.UsingDirective(
                 SyntaxFactory.ParseName("SkathIO.Rogue"))
             .WithLeadingTrivia(usingNode.GetLeadingTrivia())
-            .WithTrailingTrivia(SyntaxFactory.ElasticCarriageReturnLineFeed);
-
-        var compatUsing = SyntaxFactory.UsingDirective(
-                SyntaxFactory.ParseName("SkathIO.Rogue.Compatibility"))
             .WithTrailingTrivia(usingNode.GetTrailingTrivia());
 
-        // Replace the single MediatR using with two usings.
-        var newRoot = root.ReplaceNode(usingNode, new SyntaxNode[] { rogueUsing, compatUsing });
+        var newRoot = root.ReplaceNode(usingNode, rogueUsing);
         return document.WithSyntaxRoot(newRoot);
     }
 }

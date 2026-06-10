@@ -17,6 +17,10 @@ internal static class DispatcherEmitter
     private const string SP  = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
     private const string SVC = "_serviceProvider";
 
+    // FR-45 / PD-30: telemetry shim FQN. StartDispatch returns DispatchScope? (null when telemetry
+    // is disabled or unsubscribed — the zero-overhead path that preserves PD-31's 0-alloc guarantee).
+    private const string RT = "global::SkathIO.Rogue.RogueTelemetry";
+
     internal static string Emit(DiscoveredModels models, RogueEmitOptions opts)
     {
         var w = new CodeWriter();
@@ -147,9 +151,176 @@ internal static class DispatcherEmitter
         w.Line("var behaviors = " + SP + ".GetService<" + behaviorListType + ">(" + SVC + ")");
         w.Line("    ?? ((" + behaviorListType + ")global::System.Array.Empty<" + behaviorIface + ">());");
 
-        // The innermost producer — the handler call — is identical for the fast and processor paths.
-        // PipelineExecutor always works with ValueTask<TResponse>, so the void case is wrapped to Unit.
-        string handlerCall;
+        if (!hasProcessors)
+        {
+            // FAST PATH — no pre/post processors, no exception handlers/actions for this request type.
+            //
+            // PD-31 (AC-C / NFR-PERF-1 closure elimination): when this request *also* has no behaviors
+            // (the common case, and the path the "0 bytes" claim is actually about), bypass
+            // RequestHandlerDelegate construction and PipelineExecutor.Execute entirely — call the
+            // handler directly.
+            //
+            // Critically, the `() => handler.Handle(...)` lambda must NOT appear inline in this method
+            // at all — not even in an `else`/has-behaviors branch. `handler`, `request`, and
+            // `cancellationToken` are used by BOTH the fast-path direct return AND the lambda, so if the
+            // lambda were declared here, Roslyn would hoist the display-class allocation to the point
+            // those locals are first assigned (i.e. to the top of THIS method, before the
+            // `behaviors.Count == 0` check) — allocating the closure on every dispatch regardless of
+            // which branch runs. Delegating the has-behaviors case to a separate static method
+            // (`{methodName}_WithBehaviors`, taking `handler`/`request`/`behaviors`/`cancellationToken`
+            // as parameters) confines the lambda's captured-variable scope to that method, so the
+            // closure allocates only when behaviors are actually present — never on the fast path.
+            //
+            // Behavior presence is a RUNTIME fact (open behaviors discovered by the PD-17 metadata scan
+            // apply to all requests and are resolved from DI), so the bypass is a runtime branch on
+            // `behaviors.Count == 0`.
+            // FR-45 / PD-30: begin a dispatch scope. When telemetry is disabled or unsubscribed,
+            // StartDispatch returns null and we take the existing fast path verbatim — no Activity,
+            // no allocation, PD-31's 0-byte guarantee fully preserved.
+            w.Line("var __scope = " + RT + ".StartDispatch<" + requestFqn + ">();");
+            w.Open("if (__scope is null)");
+
+            w.Open("if (behaviors.Count == 0)");
+            EmitDirectHandlerReturn(w, isVoid);
+            w.Close(); // if (behaviors.Count == 0)
+            w.Line();
+
+            w.Line("return " + methodName + "_WithBehaviors(handler, request, behaviors, cancellationToken);");
+            w.Close(); // if (__scope is null)
+            w.Line();
+
+            // Telemetry-on path: delegate to the async companion, which owns the try/finally that
+            // observes the dispatch outcome and stops the scope.
+            w.Line("return " + methodName + "_WithTelemetry(handler, request, behaviors, cancellationToken, __scope.Value);");
+        }
+        else
+        {
+            // PROCESSOR PATH (FR-25/26/27): pre-processors → behavior pipeline (the SAME engine) →
+            // post-processors, all inside a try/catch that runs exception actions (observe-only) and
+            // exception handlers (may supply a fallback response). The matching of a thrown exception
+            // to a registered handler/action is emitted as a statically-typed `is TEx` chain — no
+            // reflection (NFR-SEC-1), AOT-safe, and the exact TEx types are known at generate time.
+            //
+            // The processor wrap calls the handler from inside a try/fold the call site can't inline
+            // away, so it genuinely needs the deferred RequestHandlerDelegate (built here, unaffected
+            // by the PD-31 fast-path bypass above). Every dispatch to a processor-bearing request goes
+            // through this wrap regardless of behavior count, so there is no fast path here to protect
+            // from the closure — the allocation is an intrinsic, by-design cost of FR-25/26/27.
+            EmitHandlerCallDelegate(w, isVoid, responseFqn);
+            EmitProcessorPath(w, requestFqn, responseFqn, "handlerCall", pre, post, exHandlers, exActions);
+        }
+
+        w.Close(); // method
+
+        if (!hasProcessors)
+        {
+            w.Line();
+            EmitSendWithBehaviorsMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType, isVoid);
+            w.Line();
+            EmitSendWithTelemetryMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType);
+        }
+    }
+
+    /// <summary>
+    /// FR-45 / PD-30: the telemetry-on continuation of the no-processor path. Reached only when
+    /// <c>StartDispatch</c> returned a non-null scope (telemetry enabled AND subscribed), so this
+    /// path is already allocating an async state machine — the <c>RequestHandlerDelegate</c> closure
+    /// inside <c>_WithBehaviors</c> (which itself handles the empty-behavior case via
+    /// <c>PipelineExecutor.Execute</c>) is no additional concern here. The <c>try/catch/finally</c>
+    /// observes the outcome and stops the scope, capturing any exception for the span status.
+    /// </summary>
+    private static void EmitSendWithTelemetryMethod(
+        CodeWriter w, string methodName, string handlerIface, string requestFqn, string responseFqn,
+        string behaviorListType)
+    {
+        w.Open(
+            "private static async global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
+            methodName + "_WithTelemetry(" +
+            handlerIface + " handler, " + requestFqn + " request, " + behaviorListType + " behaviors, " +
+            "global::System.Threading.CancellationToken cancellationToken, " +
+            "global::SkathIO.Rogue.DispatchScope scope)");
+
+        w.Line("global::System.Exception? __exc = null;");
+        w.Open("try");
+        w.Line("return await " + methodName + "_WithBehaviors(handler, request, behaviors, cancellationToken).ConfigureAwait(false);");
+        w.Close(); // try
+        w.Open("catch (global::System.Exception __ex)");
+        w.Line("__exc = __ex;");
+        w.Line("throw;");
+        w.Close(); // catch
+        w.Open("finally");
+        w.Line(RT + ".StopDispatch(scope, __exc);");
+        w.Close(); // finally
+
+        w.Close(); // method
+    }
+
+    /// <summary>
+    /// PD-31 (AC-C / NFR-PERF-1 closure elimination): the has-behaviors continuation of the
+    /// no-processor fast path, factored into its own <c>private static</c> method so that the
+    /// <c>() =&gt; handler.Handle(...)</c> closure's captured variables (<c>handler</c>,
+    /// <c>request</c>, <c>cancellationToken</c>) are PARAMETERS here — not locals shared with
+    /// {methodName}'s fast-path branch. See the comment in <see cref="EmitSendMethod"/> for why
+    /// sharing those locals would hoist the display-class allocation onto every dispatch.
+    /// </summary>
+    private static void EmitSendWithBehaviorsMethod(
+        CodeWriter w, string methodName, string handlerIface, string requestFqn, string responseFqn,
+        string behaviorListType, bool isVoid)
+    {
+        w.Open(
+            "private static global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
+            methodName + "_WithBehaviors(" +
+            handlerIface + " handler, " + requestFqn + " request, " + behaviorListType + " behaviors, " +
+            "global::System.Threading.CancellationToken cancellationToken)");
+
+        EmitHandlerCallDelegate(w, isVoid, responseFqn);
+        w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
+        w.Line("    request, behaviors, handlerCall, cancellationToken);");
+
+        w.Close(); // method
+    }
+
+    /// <summary>
+    /// PD-31 (AC-C / NFR-PERF-1 closure elimination): emits a direct, non-deferred
+    /// <c>return handler.Handle(...)</c> for the no-behavior fast path — no
+    /// <see cref="global::SkathIO.Rogue.RequestHandlerDelegate{TResponse}"/> is constructed, so no
+    /// per-dispatch display-class closure is allocated. Mirrors the void-wrapping shape of
+    /// <see cref="EmitHandlerCallDelegate"/> exactly (same TFM split, same <c>AwaitVoidThenUnit</c>
+    /// fast-completion check) — only the *shape* differs (an immediate <c>return</c> vs. a deferred
+    /// delegate assignment).
+    /// </summary>
+    private static void EmitDirectHandlerReturn(CodeWriter w, bool isVoid)
+    {
+        if (isVoid)
+        {
+            // IRequestHandler<TReq>.Handle returns ValueTask<Unit> on netstandard2.0 (no bare
+            // ValueTask-returning handler interface there) and bare ValueTask on net8+.
+            w.Line("#if NETSTANDARD2_0");
+            w.Line("return handler.Handle(request, cancellationToken);");
+            w.Line("#else");
+            w.Line("var voidVt = handler.Handle(request, cancellationToken);");
+            w.Line("if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
+            w.Line("return AwaitVoidThenUnit(voidVt);");
+            w.Line("#endif");
+        }
+        else
+        {
+            w.Line("return handler.Handle(request, cancellationToken);");
+        }
+    }
+
+    /// <summary>
+    /// Emits a <c>global::SkathIO.Rogue.RequestHandlerDelegate&lt;TResponse&gt; handlerCall = ...</c>
+    /// declaration that defers the handler invocation — required wherever the call must be threaded
+    /// through <see cref="global::SkathIO.Rogue.PipelineExecutor"/> (the has-behaviors path) or the
+    /// FR-25/26/27 processor wrap (<see cref="EmitProcessorPath"/>), both of which need an invokable,
+    /// deferred reference rather than an immediate result. This is the allocating shape PD-31
+    /// deliberately keeps — and keeps confined to — the paths that genuinely need deferral; the
+    /// no-behavior, no-processor fast path bypasses it entirely via
+    /// <see cref="EmitDirectHandlerReturn"/>.
+    /// </summary>
+    private static void EmitHandlerCallDelegate(CodeWriter w, bool isVoid, string responseFqn)
+    {
         if (isVoid)
         {
             w.Line("#if NETSTANDARD2_0");
@@ -162,34 +333,11 @@ internal static class DispatcherEmitter
             w.Line("    return AwaitVoidThenUnit(voidVt);");
             w.Line("};");
             w.Line("#endif");
-            handlerCall = "handlerCall";
         }
         else
         {
             w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () => handler.Handle(request, cancellationToken);");
-            handlerCall = "handlerCall";
         }
-
-        if (!hasProcessors)
-        {
-            // FAST PATH (no pre/post processors, no exception handlers/actions for this request type):
-            // PD-2/PD-12 — call the single behavior engine directly with zero extra allocation. The
-            // generated delegate above is the only addition over the original direct call and is JIT-
-            // inlinable; the no-behavior + no-processor case still bottoms out in a direct handler call.
-            w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
-            w.Line("    request, behaviors, " + handlerCall + ", cancellationToken);");
-        }
-        else
-        {
-            // PROCESSOR PATH (FR-25/26/27): pre-processors → behavior pipeline (the SAME engine) →
-            // post-processors, all inside a try/catch that runs exception actions (observe-only) and
-            // exception handlers (may supply a fallback response). The matching of a thrown exception
-            // to a registered handler/action is emitted as a statically-typed `is TEx` chain — no
-            // reflection (NFR-SEC-1), AOT-safe, and the exact TEx types are known at generate time.
-            EmitProcessorPath(w, requestFqn, responseFqn, handlerCall, pre, post, exHandlers, exActions);
-        }
-
-        w.Close(); // method
     }
 
     /// <summary>
@@ -273,7 +421,29 @@ internal static class DispatcherEmitter
 
         w.Line("return response;");
         w.Close(); // RunWithProcessors local function
+
+        // FR-45 / PD-30: wrap the whole processor dispatch (pre-processors → pipeline → post) in a
+        // telemetry scope. Disabled/unsubscribed → StartDispatch returns null and we hand back the
+        // RunWithProcessors() ValueTask unwrapped (no extra state machine). Enabled → a second async
+        // local function owns the try/catch/finally that observes the outcome.
+        w.Line("var __scope = " + RT + ".StartDispatch<" + requestFqn + ">();");
+        w.Open("if (__scope is null)");
         w.Line("return RunWithProcessors();");
+        w.Close(); // if (__scope is null)
+        w.Open("async global::System.Threading.Tasks.ValueTask<" + responseFqn + "> RunWithTelemetry(global::SkathIO.Rogue.DispatchScope scope)");
+        w.Line("global::System.Exception? __exc = null;");
+        w.Open("try");
+        w.Line("return await RunWithProcessors().ConfigureAwait(false);");
+        w.Close(); // try
+        w.Open("catch (global::System.Exception __ex)");
+        w.Line("__exc = __ex;");
+        w.Line("throw;");
+        w.Close(); // catch
+        w.Open("finally");
+        w.Line(RT + ".StopDispatch(scope, __exc);");
+        w.Close(); // finally
+        w.Close(); // RunWithTelemetry local function
+        w.Line("return RunWithTelemetry(__scope.Value);");
     }
 
     private static void EmitPostProcessors(CodeWriter w, List<ProcessorModel> post)
@@ -551,7 +721,25 @@ internal static class DispatcherEmitter
         w.Line("next = () => behavior.Handle(request, prevNext, cancellationToken);");
         w.Close(); // for
 
+        // FR-45 / PD-30: scope the dispatch (DI-resolution + behavior-fold + the next() call that
+        // produces the stream). IAsyncEnumerable is lazy, so this scopes the dispatch phase, not the
+        // streaming iteration (a v1 choice — see phases.md 9.2). Disabled/unsubscribed →
+        // StartDispatch returns null and we return the stream unwrapped.
+        w.Line("var __scope = " + RT + ".StartDispatch<" + requestFqn + ">();");
+        w.Open("if (__scope is null)");
         w.Line("return next();");
+        w.Close(); // if (__scope is null)
+        w.Line("global::System.Exception? __exc = null;");
+        w.Open("try");
+        w.Line("return next();");
+        w.Close(); // try
+        w.Open("catch (global::System.Exception __ex)");
+        w.Line("__exc = __ex;");
+        w.Line("throw;");
+        w.Close(); // catch
+        w.Open("finally");
+        w.Line(RT + ".StopDispatch(__scope.Value, __exc);");
+        w.Close(); // finally
 
         w.Close(); // method
     }
@@ -602,13 +790,14 @@ internal static class DispatcherEmitter
         string notifType  = ToGlobalFqn(notifFqn);
         string methodName = "Publish_" + MakeSafeName(notifFqn);
 
-        // ns2.0: ValueTask<Unit>; net8+: ValueTask
+        // ns2.0: ValueTask<Unit>; net8+: ValueTask. async: FR-45/PD-30 telemetry wraps the dispatch
+        // in a try/finally that observes the outcome.
         w.Line("#if NETSTANDARD2_0");
-        w.Open("private global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "(" + notifType + " notification, global::System.Threading.CancellationToken cancellationToken)");
+        w.Open("private async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "(" + notifType + " notification, global::System.Threading.CancellationToken cancellationToken)");
         EmitPublishNotifBody(w, notifType, handlerFqns, returnsUnit: true);
         w.Close();
         w.Line("#else");
-        w.Open("private global::System.Threading.Tasks.ValueTask " + methodName + "(" + notifType + " notification, global::System.Threading.CancellationToken cancellationToken)");
+        w.Open("private async global::System.Threading.Tasks.ValueTask " + methodName + "(" + notifType + " notification, global::System.Threading.CancellationToken cancellationToken)");
         EmitPublishNotifBody(w, notifType, handlerFqns, returnsUnit: false);
         w.Close();
         w.Line("#endif");
@@ -627,7 +816,35 @@ internal static class DispatcherEmitter
         w.Line("executors.Add(new global::SkathIO.Rogue.NotificationHandlerExecutor(hCopy, (n, ct) => hCopy.Handle((" + notifTypeFqn + ")n, ct)));");
         w.Close();
 
-        w.Line("return publisher.Publish(executors, notification, cancellationToken);");
+        // FR-45 / PD-30: one dispatch scope per Publish call. The method is async; on the
+        // disabled/unsubscribed path StartDispatch returns null and we await the publisher directly
+        // (the async state machine is unavoidable here — Publish is already a ValueTask-returning
+        // fan-out). On the enabled path the try/catch/finally observes the aggregate outcome.
+        w.Line("var __scope = " + RT + ".StartDispatch<" + notifTypeFqn + ">();");
+        w.Open("if (__scope is null)");
+        if (returnsUnit)
+            w.Line("return await publisher.Publish(executors, notification, cancellationToken).ConfigureAwait(false);");
+        else
+        {
+            w.Line("await publisher.Publish(executors, notification, cancellationToken).ConfigureAwait(false);");
+            w.Line("return;");
+        }
+        w.Close(); // if (__scope is null)
+
+        w.Line("global::System.Exception? __exc = null;");
+        w.Open("try");
+        if (returnsUnit)
+            w.Line("return await publisher.Publish(executors, notification, cancellationToken).ConfigureAwait(false);");
+        else
+            w.Line("await publisher.Publish(executors, notification, cancellationToken).ConfigureAwait(false);");
+        w.Close(); // try
+        w.Open("catch (global::System.Exception __ex)");
+        w.Line("__exc = __ex;");
+        w.Line("throw;");
+        w.Close(); // catch
+        w.Open("finally");
+        w.Line(RT + ".StopDispatch(__scope.Value, __exc);");
+        w.Close(); // finally
     }
 
     // ────────────────────────────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ dotnet add package SkathIO.Rogue.MediatR  # compat shim + migration analyzer
 The `SkathIO.Rogue.MediatR` package includes a Roslyn analyzer (`ROGM001`/`ROGM002`). In Visual Studio or Rider, run **Analyze → Fix all in Solution** for both diagnostics.
 
 What the code-fix does automatically:
-- `ROGM001`: Replaces `using MediatR;` → `using SkathIO.Rogue; using SkathIO.Rogue.Compatibility;`
+- `ROGM001`: Replaces `using MediatR;` → `using SkathIO.Rogue;` (the marker interfaces all live in `SkathIO.Rogue`; add `using SkathIO.Rogue.Compatibility;` by hand only where you call the DI-only compat helpers such as `AddMediatR`)
 - `ROGM002`: Replaces handler `Task<T>` return types → `ValueTask<T>`
 
 ## Step 3 — Build and verify
@@ -53,4 +53,4 @@ If you have open-generic request types (e.g. `class MyRequest<T> : IRequest<T>`)
 
 ## Removing the compat shim (optional cleanup)
 
-After migration, the compat `using SkathIO.Rogue.Compatibility;` lines can be removed once all handler implementations use `SkathIO.Rogue` directly. The `SkathIO.Rogue.MediatR` package can also be removed once migration is complete.
+The migration code-fix does not add `using SkathIO.Rogue.Compatibility;` (doing so would make the marker-interface references ambiguous). You add it by hand only where you call the DI-only compat helpers (`AddMediatR`, `Unit.Value`, `ReflectionMediator`); once those call sites move to `AddRogue`/`SkathIO.Rogue` directly, drop the compat using and remove the `SkathIO.Rogue.MediatR` package.
