@@ -18,6 +18,29 @@ shipped package.
   `Microsoft.Extensions.DependencyInjection.Abstractions` (plus netstandard2.0 polyfills). Integration
   packages add exactly one dependency each (`Microsoft.Extensions.Logging.Abstractions`,
   `FluentValidation`).
+- **Transitive dependency allow-list (AC-H / NFR-LIC-1).** The `license-check` CI job runs
+  `dotnet list <project> package --include-transitive --format json` for each of the 5 packable
+  projects (`SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`, `SkathIO.Rogue.MediatR`,
+  `SkathIO.Rogue.Logging`, `SkathIO.Rogue.Validation.FluentValidation`), unions the resulting
+  top-level + transitive package ids across all target frameworks, and **fails the build** if any id
+  is not listed in [`.github/allowed-packages.txt`](../.github/allowed-packages.txt). **Adding a new
+  package — or upgrading an existing one to a version that pulls in a new transitive dependency —
+  requires adding its package id to `.github/allowed-packages.txt`.** Before adding an id, you
+  **must first verify that the package's license is permissive**: MIT, Apache-2.0, BSD-2-Clause,
+  BSD-3-Clause, MS-PL, 0BSD, Unlicense, or the .NET-foundation/`MICROSOFT` family. Record the
+  verification on the same line as a comment directly above the id, in the format
+  `# <id> — <SPDX/license> — verified <date>`. The gate itself only checks package *identity* — the
+  license check is this human step at allow-list-edit time, and the per-line annotation is what makes
+  "CI fails if a non-permissive transitive dependency enters the core" literally true. A package whose
+  license is **not** permissive must not be added to the allow-list, and therefore cannot ship in any
+  packable project.
+- **Allow-list scope is the full build-time restore graph, not just shipped `.nuspec`
+  dependencies.** `dotnet list package --include-transitive` enumerates everything needed to
+  restore and build each packable project, including `PrivateAssets="All"`/build-time-only
+  tooling (e.g. MinVer, SourceLink, `Microsoft.CodeAnalysis.PublicApiAnalyzers`,
+  `Microsoft.NET.ILLink.Tasks`) that never flows to a consumer's `.nuspec`. This is intentionally
+  broader than "what a consumer of the published package pulls in" — adding a dev-only analyzer
+  or build tool will also trip this gate and require an allow-list entry.
 
 ## Versioning and releases
 

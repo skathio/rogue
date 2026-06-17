@@ -25,10 +25,24 @@ public sealed class Mediator : IMediator
     }
 
     /// <inheritdoc/>
-    public ValueTask<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
+    public ValueTask Send(ICommand command, CancellationToken cancellationToken = default)
     {
         var dispatcher = _serviceProvider.GetRequiredService<RogueDispatcher>();
-        return dispatcher.Send(request, cancellationToken);
+        return dispatcher.Send(command, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<TResponse> Send<TResponse>(ICommand<TResponse> command, CancellationToken cancellationToken = default)
+    {
+        var dispatcher = _serviceProvider.GetRequiredService<RogueDispatcher>();
+        return dispatcher.Send(command, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<TResponse> Send<TResponse>(IQuery<TResponse> query, CancellationToken cancellationToken = default)
+    {
+        var dispatcher = _serviceProvider.GetRequiredService<RogueDispatcher>();
+        return dispatcher.Send(query, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -40,45 +54,45 @@ public sealed class Mediator : IMediator
 
 #if !NETSTANDARD2_0
     /// <inheritdoc/>
-    public IAsyncEnumerable<TResponse> CreateStream<TResponse>(IStreamRequest<TResponse> request, CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<TItem> CreateStream<TItem>(IStreamQuery<TItem> query, CancellationToken cancellationToken = default)
     {
         var dispatcher = _serviceProvider.GetRequiredService<RogueDispatcher>();
-        return dispatcher.CreateStream(request, cancellationToken);
+        return dispatcher.CreateStream(query, cancellationToken);
     }
 #endif
 
     /// <inheritdoc/>
 #if NETSTANDARD2_0
-    public ValueTask<Unit> Publish(INotification notification, CancellationToken cancellationToken = default)
+    public ValueTask<Unit> Publish(IEvent @event, CancellationToken cancellationToken = default)
     {
         var dispatcher = _serviceProvider.GetRequiredService<RogueDispatcher>();
-        return dispatcher.Publish(notification, cancellationToken);
+        return dispatcher.Publish(@event, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public ValueTask<Unit> Publish(object notification, CancellationToken cancellationToken = default)
+    public ValueTask<Unit> Publish(object @event, CancellationToken cancellationToken = default)
     {
-        if (notification is not INotification n)
+        if (@event is not IEvent e)
         {
-            throw new ArgumentException($"Object of type '{notification?.GetType().FullName}' does not implement {nameof(INotification)}.", nameof(notification));
+            throw new ArgumentException($"Object of type '{@event?.GetType().FullName}' does not implement {nameof(IEvent)}.", nameof(@event));
         }
-        return Publish(n, cancellationToken);
+        return Publish(e, cancellationToken);
     }
 #else
-    public ValueTask Publish(INotification notification, CancellationToken cancellationToken = default)
+    public ValueTask Publish(IEvent @event, CancellationToken cancellationToken = default)
     {
         var dispatcher = _serviceProvider.GetRequiredService<RogueDispatcher>();
-        return dispatcher.Publish(notification, cancellationToken);
+        return dispatcher.Publish(@event, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public ValueTask Publish(object notification, CancellationToken cancellationToken = default)
+    public ValueTask Publish(object @event, CancellationToken cancellationToken = default)
     {
-        if (notification is not INotification n)
+        if (@event is not IEvent e)
         {
-            throw new ArgumentException($"Object of type '{notification?.GetType().FullName}' does not implement {nameof(INotification)}.", nameof(notification));
+            throw new ArgumentException($"Object of type '{@event?.GetType().FullName}' does not implement {nameof(IEvent)}.", nameof(@event));
         }
-        return Publish(n, cancellationToken);
+        return Publish(e, cancellationToken);
     }
 #endif
 }

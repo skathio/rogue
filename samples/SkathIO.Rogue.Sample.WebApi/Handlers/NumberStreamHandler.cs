@@ -5,7 +5,7 @@ using SkathIO.Rogue;
 namespace SkathIO.Rogue.Sample.WebApi;
 
 /// <summary>Streams <c>Count</c> integers for <see cref="NumberStreamRequest"/> (FR-5, FR-11).</summary>
-public sealed class NumberStreamHandler : IStreamRequestHandler<NumberStreamRequest, int>
+public sealed class NumberStreamHandler : IStreamQueryHandler<NumberStreamRequest, int>
 {
     /// <inheritdoc />
 #pragma warning disable CS1998 // async iterator has no awaits — the stream is synchronous by design.

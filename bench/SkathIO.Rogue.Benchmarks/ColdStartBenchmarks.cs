@@ -19,7 +19,7 @@ public class ColdStartBenchmarks
     {
         var services = new ServiceCollection();
         services.AddRogue();
-        services.AddTransient<IRequestHandler<PingRequest, string>, PingHandler>();
+        services.AddTransient<ICommandHandler<PingRequest, string>, PingHandler>();
         var sp = services.BuildServiceProvider();
         return await sp.GetRequiredService<ISender>().Send(new PingRequest("ping"));
     }
@@ -31,14 +31,5 @@ public class ColdStartBenchmarks
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<MediatRPingHandler>());
         var sp = services.BuildServiceProvider();
         return await sp.GetRequiredService<global::MediatR.ISender>().Send(new MediatRPingRequest("ping"));
-    }
-
-    [Benchmark]
-    public async Task<string> Mediator_ColdStart()
-    {
-        var services = new ServiceCollection();
-        services.AddMediator();
-        var sp = services.BuildServiceProvider();
-        return await sp.GetRequiredService<global::Mediator.IMediator>().Send(new MedPingRequest("ping"));
     }
 }

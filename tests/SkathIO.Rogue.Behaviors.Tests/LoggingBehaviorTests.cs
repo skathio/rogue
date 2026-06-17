@@ -34,7 +34,7 @@ internal sealed class RecordingLogger<T> : ILogger<T>
 
 // ── Requests with a distinctive payload value to assert on ───────────────────
 
-// Plain records (not IRequest<T>): these exercise LoggingBehavior directly without a dispatch, so
+// Plain records (not ICommand<T>): these exercise LoggingBehavior directly without a dispatch, so
 // they need no handler and avoid ROGUE001. Their compiler-generated ToString() renders property
 // values, mirroring real DTOs and letting us assert the payload is/isn't in the rendered output.
 internal sealed record LoggedRequest

@@ -8,15 +8,15 @@ namespace SkathIO.Rogue.Integration.Tests;
 
 // ── Test message types ───────────────────────────────────────────────────────
 
-public sealed class Ping : IRequest<string> { }
-public sealed class PingHandler : IRequestHandler<Ping, string>
+public sealed class Ping : ICommand<string> { }
+public sealed class PingHandler : ICommandHandler<Ping, string>
 {
     public ValueTask<string> Handle(Ping request, CancellationToken ct)
         => ValueTask.FromResult("pong");
 }
 
-public sealed class FireAndForget : IRequest { }
-public sealed class FireAndForgetHandler : IRequestHandler<FireAndForget>
+public sealed class FireAndForget : ICommand { }
+public sealed class FireAndForgetHandler : ICommandHandler<FireAndForget>
 {
     public static bool WasCalled;
     public ValueTask Handle(FireAndForget request, CancellationToken ct)
@@ -27,8 +27,8 @@ public sealed class FireAndForgetHandler : IRequestHandler<FireAndForget>
 }
 
 // A request whose only behavior short-circuits (never calls next) so the handler must not run.
-public sealed class ShortCircuited : IRequest<string> { }
-public sealed class ShortCircuitedHandler : IRequestHandler<ShortCircuited, string>
+public sealed class ShortCircuited : ICommand<string> { }
+public sealed class ShortCircuitedHandler : ICommandHandler<ShortCircuited, string>
 {
     public static bool WasCalled;
     public ValueTask<string> Handle(ShortCircuited request, CancellationToken ct)
@@ -44,15 +44,15 @@ public sealed class ShortCircuitBehavior : IPipelineBehavior<ShortCircuited, str
 }
 
 // A notification whose single handler always throws — used to assert first-exception propagation.
-public sealed class FailingNotification : INotification { }
-public sealed class FailingNotificationHandler : INotificationHandler<FailingNotification>
+public sealed class FailingNotification : IEvent { }
+public sealed class FailingNotificationHandler : IEventHandler<FailingNotification>
 {
     public ValueTask Handle(FailingNotification notification, CancellationToken ct)
         => throw new System.InvalidOperationException("handler failed");
 }
 
-public sealed class CountStream : IStreamRequest<int> { }
-public sealed class CountStreamHandler : IStreamRequestHandler<CountStream, int>
+public sealed class CountStream : IStreamQuery<int> { }
+public sealed class CountStreamHandler : IStreamQueryHandler<CountStream, int>
 {
     public async System.Collections.Generic.IAsyncEnumerable<int> Handle(
         CountStream request,
@@ -68,8 +68,8 @@ public sealed class CountStreamHandler : IStreamRequestHandler<CountStream, int>
 
 // A stream request plus an open-generic stream behavior that records whether it was woven into the
 // CreateStream dispatch (Phase 4.2.1 / FR-23 acceptance (c)).
-public sealed class TickStream : IStreamRequest<int> { }
-public sealed class TickStreamHandler : IStreamRequestHandler<TickStream, int>
+public sealed class TickStream : IStreamQuery<int> { }
+public sealed class TickStreamHandler : IStreamQueryHandler<TickStream, int>
 {
     public async System.Collections.Generic.IAsyncEnumerable<int> Handle(
         TickStream request,
@@ -94,8 +94,8 @@ public sealed class RecordingStreamBehavior<TReq, TRes> : IStreamPipelineBehavio
     }
 }
 
-public sealed class OrderPlaced : INotification { }
-public sealed class OrderPlacedHandler1 : INotificationHandler<OrderPlaced>
+public sealed class OrderPlaced : IEvent { }
+public sealed class OrderPlacedHandler1 : IEventHandler<OrderPlaced>
 {
     public static int CallCount;
     public ValueTask Handle(OrderPlaced notification, CancellationToken ct)
@@ -104,7 +104,7 @@ public sealed class OrderPlacedHandler1 : INotificationHandler<OrderPlaced>
         return ValueTask.CompletedTask;
     }
 }
-public sealed class OrderPlacedHandler2 : INotificationHandler<OrderPlaced>
+public sealed class OrderPlacedHandler2 : IEventHandler<OrderPlaced>
 {
     public static int CallCount;
     public ValueTask Handle(OrderPlaced notification, CancellationToken ct)

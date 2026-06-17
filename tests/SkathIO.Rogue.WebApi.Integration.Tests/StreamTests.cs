@@ -23,8 +23,8 @@ public sealed class StreamTests : IClassFixture<WebApplicationFactory<Program>>
 
     public StreamTests(WebApplicationFactory<Program> factory) => _factory = factory;
 
-    // Covers: FR-5 — IStreamRequest<T> dispatch via ISender.CreateStream.
-    // Covers: FR-11 — IStreamRequestHandler<,> yields IAsyncEnumerable<T>; elements stream to the
+    // Covers: FR-5 — IStreamQuery<T> dispatch via ISender.CreateStream.
+    // Covers: FR-11 — IStreamQueryHandler<,> yields IAsyncEnumerable<T>; elements stream to the
     // response (the host streams 10 integers 0..9).
     [Fact]
     public async Task Stream_YieldsAllElements()

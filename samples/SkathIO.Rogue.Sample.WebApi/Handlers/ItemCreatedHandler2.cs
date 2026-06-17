@@ -6,7 +6,7 @@ using SkathIO.Rogue;
 namespace SkathIO.Rogue.Sample.WebApi;
 
 /// <summary>Second of two fan-out handlers for <see cref="ItemCreatedNotification"/> (FR-4, FR-10).</summary>
-public sealed class ItemCreatedHandler2 : INotificationHandler<ItemCreatedNotification>
+public sealed class ItemCreatedHandler2 : IEventHandler<ItemCreatedNotification>
 {
     private readonly ILogger<ItemCreatedHandler2> _logger;
     private readonly IHandlerCallTracker _tracker;

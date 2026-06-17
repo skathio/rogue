@@ -8,7 +8,7 @@ namespace SkathIO.Rogue.Tests;
 
 public sealed class PipelineExecutorTests
 {
-    private sealed class PingRequest : IRequest<string> { }
+    private sealed class PingRequest : ICommand<string> { }
 
     // Static to avoid lambda allocation inside the measurement window (NFR-PERF-1 gate)
     private static readonly RequestHandlerDelegate<string> PongHandler = () => ValueTask.FromResult("pong");

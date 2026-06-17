@@ -34,11 +34,14 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
   <!-- ReflectionMediator's Publish/CreateStream surface differs by TFM (ValueTask<Unit> vs -->
-  <!-- ValueTask, and CreateStream is net8+ only), so PublicAPI.Unshipped.txt is per TFM. -->
+  <!-- ValueTask, and CreateStream is net8+ only), so PublicAPI.Shipped.txt and -->
+  <!-- PublicAPI.Unshipped.txt are both supplied per TFM (PD-36). -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Shipped.txt" />
     <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Unshipped.txt" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
+    <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Shipped.txt" />
     <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Unshipped.txt" />
   </ItemGroup>
 </Project>

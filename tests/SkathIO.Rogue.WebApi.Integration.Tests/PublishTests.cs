@@ -15,7 +15,7 @@ namespace SkathIO.Rogue.WebApi.Integration.Tests;
 /// <summary>
 /// HTTP-boundary coverage for notification fan-out (<c>Publish</c>). The default host wires the
 /// sequential <see cref="ForeachAwaitPublisher"/>; the parallel <see cref="WhenAllPublisher"/> is
-/// exercised via a derived factory that overrides the DI-registered <see cref="INotificationPublisher"/>.
+/// exercised via a derived factory that overrides the DI-registered <see cref="IEventPublisher"/>.
 /// </summary>
 public sealed class PublishTests : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -23,8 +23,8 @@ public sealed class PublishTests : IClassFixture<WebApplicationFactory<Program>>
 
     public PublishTests(WebApplicationFactory<Program> factory) => _factory = factory;
 
-    // Covers: FR-4 — INotification dispatch via IPublisher.
-    // Covers: FR-10 — INotificationHandler<T> handlers run.
+    // Covers: FR-4 — IEvent dispatch via IPublisher.
+    // Covers: FR-10 — IEventHandler<T> handlers run.
     // Covers: FR-28 — the default ForeachAwait publisher fans out to ALL handlers (both ran).
     [Fact]
     public async Task Notify_FansOutToAllHandlers_Sequential()
@@ -47,7 +47,7 @@ public sealed class PublishTests : IClassFixture<WebApplicationFactory<Program>>
     {
         using var parallel = _factory.WithWebHostBuilder(b =>
             b.ConfigureServices(s =>
-                s.AddSingleton<INotificationPublisher>(new WhenAllPublisher())));
+                s.AddSingleton<IEventPublisher>(new WhenAllPublisher())));
 
         var client = parallel.CreateClient();
         var response = await client.PostAsJsonAsync("/notify", new ItemCreatedNotification(9));
@@ -107,7 +107,7 @@ public sealed class PublishTests : IClassFixture<WebApplicationFactory<Program>>
     {
         using var parallel = _factory.WithWebHostBuilder(b =>
             b.ConfigureServices(s =>
-                s.AddSingleton<INotificationPublisher>(new WhenAllPublisher())));
+                s.AddSingleton<IEventPublisher>(new WhenAllPublisher())));
 
         using var scope = parallel.Services.CreateScope();
         var publisher = scope.ServiceProvider.GetRequiredService<IPublisher>();

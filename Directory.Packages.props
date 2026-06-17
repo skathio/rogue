@@ -35,11 +35,6 @@
          net10.0-compatible"; 0.15.2 recognizes Net10_0. See diary 2026-06-09 plan-change. -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.2" />
     <PackageVersion Include="MediatR" Version="12.4.1" />
-    <!-- martinothamar/Mediator (Phase 7.2): the runtime ships as Mediator.Abstractions +
-         Mediator.SourceGenerator (martinothamar), NOT a bare `Mediator` package (that id is a
-         different author with no 3.x release). PD-22/PD-23 versions corrected in Phase 7.2. -->
-    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
-    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <!-- Public API surface enforcement -->
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="3.3.4" />

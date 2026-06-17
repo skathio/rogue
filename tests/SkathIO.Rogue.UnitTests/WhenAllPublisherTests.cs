@@ -8,7 +8,7 @@ namespace SkathIO.Rogue.Tests;
 
 public sealed class WhenAllPublisherTests
 {
-    private sealed class TestNotification : INotification { }
+    private sealed class TestNotification : IEvent { }
 
     [Fact]
     public async Task Publish_RunsAllHandlers()
@@ -16,8 +16,8 @@ public sealed class WhenAllPublisherTests
         var count = 0;
         var executors = new[]
         {
-            new NotificationHandlerExecutor(new object(), (_, _) => { count++; return ValueTask.CompletedTask; }),
-            new NotificationHandlerExecutor(new object(), (_, _) => { count++; return ValueTask.CompletedTask; }),
+            new EventHandlerExecutor(new object(), (_, _) => { count++; return ValueTask.CompletedTask; }),
+            new EventHandlerExecutor(new object(), (_, _) => { count++; return ValueTask.CompletedTask; }),
         };
 
         await new WhenAllPublisher().Publish(executors, new TestNotification(), CancellationToken.None);
@@ -30,8 +30,8 @@ public sealed class WhenAllPublisherTests
     {
         var executors = new[]
         {
-            new NotificationHandlerExecutor(new object(), (_, _) => throw new InvalidOperationException("one")),
-            new NotificationHandlerExecutor(new object(), (_, _) => throw new InvalidOperationException("two")),
+            new EventHandlerExecutor(new object(), (_, _) => throw new InvalidOperationException("one")),
+            new EventHandlerExecutor(new object(), (_, _) => throw new InvalidOperationException("two")),
         };
 
         // `await` unwraps AggregateException; inspect the Task directly to verify aggregation.

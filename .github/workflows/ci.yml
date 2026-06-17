@@ -112,6 +112,40 @@ jobs:
             echo "Competition package Mediator/Mediator.Abstractions/Mediator.SourceGenerator found in src/" && exit 1
           fi
           echo "Competition package check OK"
+      - name: Check transitive dependency allow-list (AC-H / NFR-LIC-1)
+        run: |
+          # Enumerate the union of all top-level + transitive package ids (all
+          # target frameworks) across the 5 packable projects, and fail the
+          # build if any id is not on the committed allow-list
+          # (.github/allowed-packages.txt). The allow-list gates on package
+          # identity: adding a new id requires a human to first verify the
+          # package's license is permissive (see docs/governance.md).
+          packable_projects=(
+            "src/SkathIO.Rogue.Abstractions/SkathIO.Rogue.Abstractions.csproj"
+            "src/SkathIO.Rogue/SkathIO.Rogue.csproj"
+            "src/SkathIO.Rogue.MediatR/SkathIO.Rogue.MediatR.csproj"
+            "src/SkathIO.Rogue.Logging/SkathIO.Rogue.Logging.csproj"
+            "src/SkathIO.Rogue.Validation.FluentValidation/SkathIO.Rogue.Validation.FluentValidation.csproj"
+          )
+
+          : > closure-ids.txt
+          for project in "${packable_projects[@]}"; do
+            dotnet list "$project" package --include-transitive --format json \
+              | jq -r '.projects[].frameworks[] | (.topLevelPackages[]?.id, .transitivePackages[]?.id)' \
+              >> closure-ids.txt
+          done
+          sort -u closure-ids.txt -o closure-ids.txt
+
+          grep -v '^\s*#' .github/allowed-packages.txt | grep -v '^\s*$' | sort -u > allowed-ids.txt
+
+          violations=$(comm -23 closure-ids.txt allowed-ids.txt)
+          if [ -n "$violations" ]; then
+            echo "FAIL: the following transitive dependency ids are not on .github/allowed-packages.txt:"
+            echo "$violations"
+            echo "Add each id to .github/allowed-packages.txt after verifying its license is permissive (see docs/governance.md)."
+            exit 1
+          fi
+          echo "OK: all $(wc -l < closure-ids.txt) transitive dependency ids are on the allow-list"
 
   public-api:
     name: Public API

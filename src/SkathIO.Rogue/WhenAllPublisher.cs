@@ -5,31 +5,31 @@ using System.Threading.Tasks;
 namespace SkathIO.Rogue;
 
 /// <summary>
-/// Publishes notifications concurrently. All handlers run; exceptions from multiple handlers
+/// Publishes events concurrently. All handlers run; exceptions from multiple handlers
 /// are aggregated into an <see cref="System.AggregateException"/> (FR-29 E2).
 /// </summary>
-public sealed class WhenAllPublisher : INotificationPublisher
+public sealed class WhenAllPublisher : IEventPublisher
 {
     /// <inheritdoc/>
 #if NETSTANDARD2_0
-    public async ValueTask<Unit> Publish(IEnumerable<NotificationHandlerExecutor> handlerExecutors, INotification notification, CancellationToken cancellationToken)
+    public async ValueTask<Unit> Publish(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event, CancellationToken cancellationToken)
     {
-        await PublishCore(handlerExecutors, notification, cancellationToken).ConfigureAwait(false);
+        await PublishCore(handlerExecutors, @event, cancellationToken).ConfigureAwait(false);
         return Unit.Value;
     }
 #else
-    public System.Threading.Tasks.ValueTask Publish(IEnumerable<NotificationHandlerExecutor> handlerExecutors, INotification notification, CancellationToken cancellationToken)
-        => new System.Threading.Tasks.ValueTask(PublishCore(handlerExecutors, notification, cancellationToken));
+    public System.Threading.Tasks.ValueTask Publish(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event, CancellationToken cancellationToken)
+        => new System.Threading.Tasks.ValueTask(PublishCore(handlerExecutors, @event, cancellationToken));
 #endif
 
-    private static async Task PublishCore(IEnumerable<NotificationHandlerExecutor> handlerExecutors, INotification notification, CancellationToken cancellationToken)
+    private static async Task PublishCore(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event, CancellationToken cancellationToken)
     {
         var tasks = new List<Task>();
         foreach (var executor in handlerExecutors)
         {
             // Capture synchronous throws as faulted Tasks so WhenAll sees them all.
             Task t;
-            try { t = executor.ExecuteAsync(notification, cancellationToken).AsTask(); }
+            try { t = executor.ExecuteAsync(@event, cancellationToken).AsTask(); }
             catch (System.Exception ex) { t = Task.FromException(ex); }
             tasks.Add(t);
         }

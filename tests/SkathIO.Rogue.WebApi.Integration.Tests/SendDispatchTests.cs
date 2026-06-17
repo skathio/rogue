@@ -21,7 +21,7 @@ public sealed class SendDispatchTests : IClassFixture<WebApplicationFactory<Prog
 
     public SendDispatchTests(WebApplicationFactory<Program> factory) => _factory = factory;
 
-    // Covers: FR-1 — IRequest<TResponse> round-trips (Ping returns a response at the HTTP boundary).
+    // Covers: FR-1 — ICommand<TResponse> round-trips (Ping returns a response at the HTTP boundary).
     // Covers: FR-7 — handler returns ValueTask<TResponse>; the response is observed at HTTP.
     [Fact]
     public async Task Ping_RequestResponse_RoundTrips()
@@ -36,7 +36,7 @@ public sealed class SendDispatchTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal("hello", body!.Echo);
     }
 
-    // Covers: FR-2 — IRequest (no response) completes.
+    // Covers: FR-2 — ICommand (no response) completes.
     // Covers: FR-8 — no-response handler returns ValueTask; 204 No Content observed.
     [Fact]
     public async Task SilentCommand_NoResponse_Completes()
@@ -172,4 +172,4 @@ public sealed class SendDispatchTests : IClassFixture<WebApplicationFactory<Prog
 /// object-dispatch unknown-type contract (FR-17). No handler exists for it, so the generated
 /// dispatcher throws <c>RogueUnregisteredRequestException</c>.
 /// </summary>
-public sealed record UnregisteredRequest : SkathIO.Rogue.IRequest<string>;
+public sealed record UnregisteredRequest : SkathIO.Rogue.ICommand<string>;

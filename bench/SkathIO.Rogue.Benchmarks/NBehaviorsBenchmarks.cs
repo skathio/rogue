@@ -37,7 +37,7 @@ public class NBehaviorsBenchmarks
     {
         var services = new ServiceCollection();
         services.AddRogue();
-        services.AddTransient<IRequestHandler<PingRequest, string>, PingHandler>();
+        services.AddTransient<ICommandHandler<PingRequest, string>, PingHandler>();
         for (int i = 0; i < n; i++)
         {
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(NoOpBehavior<,>));

@@ -15,7 +15,7 @@ using SkathIO.Rogue;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Discovers every IRequestHandler / INotificationHandler in this compilation at build time.
+// Discovers every ICommandHandler / IEventHandler in this compilation at build time.
 builder.Services.AddRogue();
 
 var app = builder.Build();
@@ -30,13 +30,13 @@ app.MapGet("/greet/{name}", async (string name, ISender sender) =>
 app.Run();
 
 /// <summary>A request that asks for a greeting and expects a <see cref="GreetResponse"/> back.</summary>
-public sealed record GreetRequest(string Name) : IRequest<GreetResponse>;
+public sealed record GreetRequest(string Name) : ICommand<GreetResponse>;
 
 /// <summary>The response carrying the rendered greeting.</summary>
 public sealed record GreetResponse(string Greeting);
 
 /// <summary>Handles <see cref="GreetRequest"/>. Discovered and wired by the source generator.</summary>
-public sealed class GreetHandler : IRequestHandler<GreetRequest, GreetResponse>
+public sealed class GreetHandler : ICommandHandler<GreetRequest, GreetResponse>
 {
     public ValueTask<GreetResponse> Handle(GreetRequest request, CancellationToken cancellationToken)
         => new(new GreetResponse($"Hello, {request.Name}!"));

@@ -10,13 +10,13 @@ namespace SkathIO.Rogue.Sample.WebApi;
 /// registered <see cref="FaultingRequestExceptionHandler"/> marks the exception handled and supplies
 /// a fallback response, so a dispatch of this request returns the fallback instead of propagating.
 /// </summary>
-public sealed record FaultingRequest(string Value) : IRequest<FaultingResponse>;
+public sealed record FaultingRequest(string Value) : ICommand<FaultingResponse>;
 
 /// <summary>Response for <see cref="FaultingRequest"/>.</summary>
 public sealed record FaultingResponse(string Value);
 
 /// <summary>Handler for <see cref="FaultingRequest"/>; always throws (FR-26).</summary>
-public sealed class FaultingRequestHandler : IRequestHandler<FaultingRequest, FaultingResponse>
+public sealed class FaultingRequestHandler : ICommandHandler<FaultingRequest, FaultingResponse>
 {
     /// <summary>Message carried by the thrown exception.</summary>
     public const string ThrowMessage = "faulting-request:boom";

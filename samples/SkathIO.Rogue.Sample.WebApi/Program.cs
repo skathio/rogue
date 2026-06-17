@@ -40,11 +40,11 @@ app.Use(async (ctx, next) =>
     catch (ValidationException) { ctx.Response.StatusCode = StatusCodes.Status400BadRequest; }
 });
 
-// FR-1: IRequest<TResponse>
+// FR-1: ICommand<TResponse>
 app.MapPost("/ping", async (PingRequest req, ISender sender) =>
     Results.Ok(await sender.Send(req)));
 
-// FR-2: IRequest (no response)
+// FR-2: ICommand (no response)
 app.MapPost("/command", async (SilentCommand cmd, ISender sender) =>
 {
     await sender.Send(cmd);
@@ -55,14 +55,14 @@ app.MapPost("/command", async (SilentCommand cmd, ISender sender) =>
 app.MapGet("/query/{id:int}", async (int id, ISender sender) =>
     Results.Ok(await sender.Send(new GetItemQuery(id))));
 
-// FR-4: INotification fan-out (two handlers)
+// FR-4: IEvent fan-out (two handlers)
 app.MapPost("/notify", async (ItemCreatedNotification notification, IPublisher publisher) =>
 {
     await publisher.Publish(notification);
     return Results.Accepted();
 });
 
-// FR-5: IStreamRequest<T>
+// FR-5: IStreamQuery<T>
 app.MapGet("/stream", (ISender sender, CancellationToken ct) =>
     Results.Ok(sender.CreateStream(new NumberStreamRequest(10), ct)));
 

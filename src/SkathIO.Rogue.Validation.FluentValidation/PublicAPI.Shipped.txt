@@ -1,1 +1,4 @@
 #nullable enable
+SkathIO.Rogue.Validation.FluentValidation.ValidationBehavior<TRequest, TResponse>
+SkathIO.Rogue.Validation.FluentValidation.ValidationBehavior<TRequest, TResponse>.Handle(TRequest request, SkathIO.Rogue.RequestHandlerDelegate<TResponse>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
+SkathIO.Rogue.Validation.FluentValidation.ValidationBehavior<TRequest, TResponse>.ValidationBehavior(System.Collections.Generic.IEnumerable<FluentValidation.IValidator<TRequest>!>! validators) -> void

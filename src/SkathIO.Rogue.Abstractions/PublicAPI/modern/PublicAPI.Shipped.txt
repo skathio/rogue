@@ -1,0 +1,75 @@
+#nullable enable
+override SkathIO.Rogue.Unit.Equals(object? obj) -> bool
+override SkathIO.Rogue.Unit.GetHashCode() -> int
+override SkathIO.Rogue.Unit.ToString() -> string!
+SkathIO.Rogue.BehaviorInfo
+SkathIO.Rogue.BehaviorInfo.BehaviorInfo(System.Type! BehaviorType, int Order, string! Source) -> void
+SkathIO.Rogue.BehaviorInfo.BehaviorType.get -> System.Type!
+SkathIO.Rogue.BehaviorInfo.BehaviorType.init -> void
+SkathIO.Rogue.BehaviorInfo.Order.get -> int
+SkathIO.Rogue.BehaviorInfo.Order.init -> void
+SkathIO.Rogue.BehaviorInfo.Source.get -> string!
+SkathIO.Rogue.BehaviorInfo.Source.init -> void
+SkathIO.Rogue.BehaviorOrderAttribute
+SkathIO.Rogue.BehaviorOrderAttribute.BehaviorOrderAttribute(int order) -> void
+SkathIO.Rogue.BehaviorOrderAttribute.Order.get -> int
+SkathIO.Rogue.EventHandlerExecutor
+SkathIO.Rogue.EventHandlerExecutor.EventHandlerExecutor(object! handlerInstance, System.Func<SkathIO.Rogue.IEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> void
+SkathIO.Rogue.EventHandlerExecutor.ExecuteAsync(SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.EventHandlerExecutor.HandlerInstance.get -> object!
+SkathIO.Rogue.ICommand
+SkathIO.Rogue.ICommand<TResponse>
+SkathIO.Rogue.ICommandHandler<TCommand, TResponse>
+SkathIO.Rogue.ICommandHandler<TCommand, TResponse>.Handle(TCommand command, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
+SkathIO.Rogue.ICommandHandler<TCommand>
+SkathIO.Rogue.ICommandHandler<TCommand>.Handle(TCommand command, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IEvent
+SkathIO.Rogue.IEventHandler<TEvent>
+SkathIO.Rogue.IEventHandler<TEvent>.Handle(TEvent event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IEventPublisher
+SkathIO.Rogue.IEventPublisher.Publish(System.Collections.Generic.IEnumerable<SkathIO.Rogue.EventHandlerExecutor!>! handlerExecutors, SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IMediator
+SkathIO.Rogue.IPipelineBehavior<TRequest, TResponse>
+SkathIO.Rogue.IPipelineBehavior<TRequest, TResponse>.Handle(TRequest request, SkathIO.Rogue.RequestHandlerDelegate<TResponse>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
+SkathIO.Rogue.IPublisher
+SkathIO.Rogue.IPublisher.Publish(object! event, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IPublisher.Publish(SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IQuery<TResponse>
+SkathIO.Rogue.IQueryHandler<TQuery, TResponse>
+SkathIO.Rogue.IQueryHandler<TQuery, TResponse>.Handle(TQuery query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
+SkathIO.Rogue.IRequestExceptionAction<TRequest, TException>
+SkathIO.Rogue.IRequestExceptionAction<TRequest, TException>.Execute(TRequest request, TException! exception, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IRequestExceptionHandler<TRequest, TResponse, TException>
+SkathIO.Rogue.IRequestExceptionHandler<TRequest, TResponse, TException>.Handle(TRequest request, TException! exception, SkathIO.Rogue.RequestExceptionHandlerState<TResponse>! state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IRequestPostProcessor<TRequest, TResponse>
+SkathIO.Rogue.IRequestPostProcessor<TRequest, TResponse>.Process(TRequest request, TResponse response, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IRequestPreProcessor<TRequest>
+SkathIO.Rogue.IRequestPreProcessor<TRequest>.Process(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.IRoguePipelineInspector
+SkathIO.Rogue.IRoguePipelineInspector.GetPipeline(System.Type! requestType) -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.BehaviorInfo!>!
+SkathIO.Rogue.IRoguePipelineInspector.GetPipeline<TRequest>() -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.BehaviorInfo!>!
+SkathIO.Rogue.ISender
+SkathIO.Rogue.ISender.CreateStream<TItem>(SkathIO.Rogue.IStreamQuery<TItem>! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+SkathIO.Rogue.ISender.Send(object! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<object?>
+SkathIO.Rogue.ISender.Send(SkathIO.Rogue.ICommand! command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.ISender.Send<TResponse>(SkathIO.Rogue.ICommand<TResponse>! command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<TResponse>
+SkathIO.Rogue.ISender.Send<TResponse>(SkathIO.Rogue.IQuery<TResponse>! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<TResponse>
+SkathIO.Rogue.IStreamPipelineBehavior<TRequest, TResponse>
+SkathIO.Rogue.IStreamPipelineBehavior<TRequest, TResponse>.Handle(TRequest request, SkathIO.Rogue.StreamHandlerDelegate<TResponse>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TResponse>!
+SkathIO.Rogue.IStreamQuery<TItem>
+SkathIO.Rogue.IStreamQueryHandler<TQuery, TItem>
+SkathIO.Rogue.IStreamQueryHandler<TQuery, TItem>.Handle(TQuery query, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+SkathIO.Rogue.RequestExceptionHandlerState<TResponse>
+SkathIO.Rogue.RequestExceptionHandlerState<TResponse>.Handled.get -> bool
+SkathIO.Rogue.RequestExceptionHandlerState<TResponse>.RequestExceptionHandlerState() -> void
+SkathIO.Rogue.RequestExceptionHandlerState<TResponse>.Response.get -> TResponse?
+SkathIO.Rogue.RequestExceptionHandlerState<TResponse>.SetHandled(TResponse response) -> void
+SkathIO.Rogue.RequestHandlerDelegate<TResponse>
+SkathIO.Rogue.StreamHandlerDelegate<TResponse>
+SkathIO.Rogue.Unit
+SkathIO.Rogue.Unit.Equals(SkathIO.Rogue.Unit other) -> bool
+SkathIO.Rogue.Unit.Unit() -> void
+static readonly SkathIO.Rogue.Unit.Value -> SkathIO.Rogue.Unit
+static SkathIO.Rogue.Unit.operator !=(SkathIO.Rogue.Unit left, SkathIO.Rogue.Unit right) -> bool
+static SkathIO.Rogue.Unit.operator ==(SkathIO.Rogue.Unit left, SkathIO.Rogue.Unit right) -> bool
+static SkathIO.Rogue.Unit.Task.get -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>

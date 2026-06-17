@@ -41,13 +41,22 @@ internal static class DispatcherEmitter
         w.Line();
 
         // ── void-path async helper ────────────────────────────────────────────────────
-        // Used when IRequestHandler<TReq> returns bare ValueTask on net8+ and we need ValueTask<Unit>.
+        // Used when ICommandHandler<TCommand> returns bare ValueTask on net8+ and we need ValueTask<Unit>.
         w.Line("#if !NETSTANDARD2_0");
         w.Open("private static async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> AwaitVoidThenUnit(global::System.Threading.Tasks.ValueTask vt)");
         w.Line("await vt.ConfigureAwait(false);");
         w.Line("return global::SkathIO.Rogue.Unit.Value;");
         w.Close(); // AwaitVoidThenUnit
         w.Line("#endif");
+        w.Line();
+
+        // ── Unit-discarding helper for the void Send(ICommand) override ─────────────────
+        // The concrete Send_X methods return ValueTask<Unit> on every TFM; the ISender void-command
+        // overload returns bare ValueTask. Discard the Unit. (The void-command path is not the AC-C
+        // 0-alloc target — that is the typed Send command/query path, re-established in 11.3.)
+        w.Open("private static async global::System.Threading.Tasks.ValueTask IgnoreUnit(global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> vt)");
+        w.Line("await vt.ConfigureAwait(false);");
+        w.Close(); // IgnoreUnit
         w.Line();
 
         // ── BoxAsync helper for SendObject ────────────────────────────────────────────
@@ -63,8 +72,12 @@ internal static class DispatcherEmitter
             w.Line();
         }
 
-        // ── Send<TResponse> override (ISender dispatch switch) ────────────────────────
-        EmitSendOverride(w, models.Handlers);
+        // ── Send overrides (ISender dispatch switch, one per CQS overload — PD-40 clean break) ──
+        EmitSendCommandVoidOverride(w, models.Handlers);
+        w.Line();
+        EmitSendCommandOverride(w, models.Handlers);
+        w.Line();
+        EmitSendQueryOverride(w, models.Handlers);
         w.Line();
 
         // ── SendObject override ───────────────────────────────────────────────────────
@@ -82,27 +95,27 @@ internal static class DispatcherEmitter
         w.Line("#endif");
         w.Line();
 
-        // ── Per-notification Publish helper methods ───────────────────────────────────
-        // Build: notifFqn → list of handler FQNs
-        var handlersByNotif = new Dictionary<string, List<string>>();
-        foreach (var nh in models.NotificationHandlers)
+        // ── Per-event Publish helper methods ──────────────────────────────────────────
+        // Build: eventFqn → list of handler FQNs
+        var handlersByEvent = new Dictionary<string, List<string>>();
+        foreach (var eh in models.EventHandlers)
         {
-            if (!handlersByNotif.TryGetValue(nh.NotificationFqn, out var list))
+            if (!handlersByEvent.TryGetValue(eh.EventFqn, out var list))
             {
                 list = new List<string>();
-                handlersByNotif[nh.NotificationFqn] = list;
+                handlersByEvent[eh.EventFqn] = list;
             }
-            list.Add(nh.TypeFqn);
+            list.Add(eh.TypeFqn);
         }
 
-        foreach (var kvp in handlersByNotif)
+        foreach (var kvp in handlersByEvent)
         {
-            EmitPublishNotifMethod(w, kvp.Key, kvp.Value);
+            EmitPublishEventMethod(w, kvp.Key, kvp.Value);
             w.Line();
         }
 
         // ── Publish override ──────────────────────────────────────────────────────────
-        EmitPublishOverride(w, handlersByNotif);
+        EmitPublishOverride(w, handlersByEvent);
 
         w.Close(); // class RogueDispatcherImpl
 
@@ -122,9 +135,15 @@ internal static class DispatcherEmitter
         string responseFqn = isVoid ? "global::SkathIO.Rogue.Unit" : ToGlobalFqn(handler.ResponseFqn!);
         string requestFqn  = ToGlobalFqn(handler.RequestFqn);
 
-        string handlerIface = isVoid
-            ? "global::SkathIO.Rogue.IRequestHandler<" + requestFqn + ">"
-            : "global::SkathIO.Rogue.IRequestHandler<" + requestFqn + ", " + responseFqn + ">";
+        // Register/resolve lockstep (PD-43/PD-48): the handler-service interface resolved here must match
+        // the one RegistrationEmitter registered the handler under. For native CQS handlers that is
+        // ICommandHandler (incl. the void path) / IQueryHandler. For MediatR-adapter-mapped handlers
+        // (PD-48) the handler implements the adapter's OWN Compatibility.IRequestHandler<TReq,TResp> /
+        // IRequestHandler<TReq> — that is the interface application code implements and the one DI knows
+        // it by, so we resolve/register against it (NOT the core CQS interface the adapter does not
+        // implement). The F8 command-vs-query decision lives in handler.Kind and drives the dispatch
+        // entry point, not the resolved handler interface.
+        string handlerIface = AdapterHandlerIface(handler, requestFqn, responseFqn, isVoid);
 
         string behaviorIface    = "global::SkathIO.Rogue.IPipelineBehavior<" + requestFqn + ", " + responseFqn + ">";
         string behaviorListType = "global::System.Collections.Generic.IReadOnlyList<" + behaviorIface + ">";
@@ -181,7 +200,7 @@ internal static class DispatcherEmitter
             w.Open("if (__scope is null)");
 
             w.Open("if (behaviors.Count == 0)");
-            EmitDirectHandlerReturn(w, isVoid);
+            EmitDirectHandlerReturn(w, isVoid, handler.IsAdapterMapped);
             w.Close(); // if (behaviors.Count == 0)
             w.Line();
 
@@ -206,7 +225,7 @@ internal static class DispatcherEmitter
             // by the PD-31 fast-path bypass above). Every dispatch to a processor-bearing request goes
             // through this wrap regardless of behavior count, so there is no fast path here to protect
             // from the closure — the allocation is an intrinsic, by-design cost of FR-25/26/27.
-            EmitHandlerCallDelegate(w, isVoid, responseFqn);
+            EmitHandlerCallDelegate(w, isVoid, responseFqn, handler.IsAdapterMapped);
             EmitProcessorPath(w, requestFqn, responseFqn, "handlerCall", pre, post, exHandlers, exActions);
         }
 
@@ -215,10 +234,34 @@ internal static class DispatcherEmitter
         if (!hasProcessors)
         {
             w.Line();
-            EmitSendWithBehaviorsMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType, isVoid);
+            EmitSendWithBehaviorsMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType, isVoid, handler.IsAdapterMapped);
             w.Line();
             EmitSendWithTelemetryMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType);
         }
+    }
+
+    /// <summary>
+    /// PD-48: the handler-service interface the dispatcher resolves and (in lockstep) the registration
+    /// registers under. For native CQS handlers it is the core <c>ICommandHandler</c>/<c>IQueryHandler</c>
+    /// (the void path is always <c>ICommandHandler&lt;TReq&gt;</c>). For MediatR-adapter-mapped handlers
+    /// (<see cref="HandlerModel.IsAdapterMapped"/>) it is the adapter's own
+    /// <c>SkathIO.Rogue.Compatibility.IRequestHandler&lt;TReq,TResp&gt;</c> / <c>IRequestHandler&lt;TReq&gt;</c>
+    /// — the interface the application type actually implements and DI knows it by. The F8 command-vs-query
+    /// decision (in <see cref="HandlerModel.Kind"/>) does not change the resolved adapter interface.
+    /// </summary>
+    private static string AdapterHandlerIface(HandlerModel handler, string requestFqn, string responseFqn, bool isVoid)
+    {
+        if (handler.IsAdapterMapped)
+        {
+            return isVoid
+                ? "global::SkathIO.Rogue.Compatibility.IRequestHandler<" + requestFqn + ">"
+                : "global::SkathIO.Rogue.Compatibility.IRequestHandler<" + requestFqn + ", " + responseFqn + ">";
+        }
+
+        string handlerIfaceName = handler.Kind == HandlerKind.Query ? "IQueryHandler" : "ICommandHandler";
+        return isVoid
+            ? "global::SkathIO.Rogue.ICommandHandler<" + requestFqn + ">"
+            : "global::SkathIO.Rogue." + handlerIfaceName + "<" + requestFqn + ", " + responseFqn + ">";
     }
 
     /// <summary>
@@ -265,7 +308,7 @@ internal static class DispatcherEmitter
     /// </summary>
     private static void EmitSendWithBehaviorsMethod(
         CodeWriter w, string methodName, string handlerIface, string requestFqn, string responseFqn,
-        string behaviorListType, bool isVoid)
+        string behaviorListType, bool isVoid, bool isAdapter)
     {
         w.Open(
             "private static global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
@@ -273,7 +316,7 @@ internal static class DispatcherEmitter
             handlerIface + " handler, " + requestFqn + " request, " + behaviorListType + " behaviors, " +
             "global::System.Threading.CancellationToken cancellationToken)");
 
-        EmitHandlerCallDelegate(w, isVoid, responseFqn);
+        EmitHandlerCallDelegate(w, isVoid, responseFqn, isAdapter);
         w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
         w.Line("    request, behaviors, handlerCall, cancellationToken);");
 
@@ -289,11 +332,23 @@ internal static class DispatcherEmitter
     /// fast-completion check) — only the *shape* differs (an immediate <c>return</c> vs. a deferred
     /// delegate assignment).
     /// </summary>
-    private static void EmitDirectHandlerReturn(CodeWriter w, bool isVoid)
+    private static void EmitDirectHandlerReturn(CodeWriter w, bool isVoid, bool isAdapter)
     {
         if (isVoid)
         {
-            // IRequestHandler<TReq>.Handle returns ValueTask<Unit> on netstandard2.0 (no bare
+            if (isAdapter)
+            {
+                // PD-48: the adapter's Compatibility.IRequestHandler<TReq>.Handle returns BARE ValueTask
+                // on EVERY TFM (it declares its own `ValueTask Handle`, unlike the core void handler whose
+                // ns2.0 variant returns ValueTask<Unit>). So the ValueTask -> ValueTask<Unit> wrap is
+                // unconditional here — no #if split.
+                w.Line("var voidVt = handler.Handle(request, cancellationToken);");
+                w.Line("if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
+                w.Line("return AwaitVoidThenUnit(voidVt);");
+                return;
+            }
+
+            // ICommandHandler<TCommand>.Handle returns ValueTask<Unit> on netstandard2.0 (no bare
             // ValueTask-returning handler interface there) and bare ValueTask on net8+.
             w.Line("#if NETSTANDARD2_0");
             w.Line("return handler.Handle(request, cancellationToken);");
@@ -319,10 +374,23 @@ internal static class DispatcherEmitter
     /// no-behavior, no-processor fast path bypasses it entirely via
     /// <see cref="EmitDirectHandlerReturn"/>.
     /// </summary>
-    private static void EmitHandlerCallDelegate(CodeWriter w, bool isVoid, string responseFqn)
+    private static void EmitHandlerCallDelegate(CodeWriter w, bool isVoid, string responseFqn, bool isAdapter)
     {
         if (isVoid)
         {
+            if (isAdapter)
+            {
+                // PD-48: adapter void handler returns bare ValueTask on every TFM (see
+                // EmitDirectHandlerReturn) — the ValueTask -> ValueTask<Unit> wrap is unconditional.
+                w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () =>");
+                w.Line("{");
+                w.Line("    var voidVt = handler.Handle(request, cancellationToken);");
+                w.Line("    if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
+                w.Line("    return AwaitVoidThenUnit(voidVt);");
+                w.Line("};");
+                return;
+            }
+
             w.Line("#if NETSTANDARD2_0");
             w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () => handler.Handle(request, cancellationToken);");
             w.Line("#else");
@@ -583,39 +651,116 @@ internal static class DispatcherEmitter
     // Send<TResponse> override
     // ────────────────────────────────────────────────────────────────────────────────────
 
-    private static void EmitSendOverride(CodeWriter w, EquatableArray<HandlerModel> handlers)
+    // PD-40 clean break: the single Send<TResponse>(IRequest<TResponse>) override is replaced by three
+    // overrides — one per ISender overload — switching over the relevant handler family. No shared
+    // marker is reached; overload resolution at the call site picks the path from the argument's
+    // interface. (Behavioural end-to-end validation of all four dispatch shapes is 11.3; the override
+    // shapes are forced here by the reshaped RogueDispatcher base virtuals.)
+
+    /// <summary>Override for void commands: <c>Send(ICommand, CancellationToken)</c>.</summary>
+    private static void EmitSendCommandVoidOverride(CodeWriter w, EquatableArray<HandlerModel> handlers)
     {
         w.Open(
-            "public override global::System.Threading.Tasks.ValueTask<TResponse> Send<TResponse>(" +
-            "global::SkathIO.Rogue.IRequest<TResponse> request, " +
-            "global::System.Threading.CancellationToken cancellationToken = default)");
+            "public override global::System.Threading.Tasks.ValueTask Send(" +
+            "global::SkathIO.Rogue.ICommand command, " +
+            "global::System.Threading.CancellationToken cancellationToken)");
 
-        if (handlers.Count == 0)
+        // PD-48: adapter-mapped handlers are EXCLUDED from the typed-Send switches. Their adapter message
+        // type does not implement the core ICommand/ICommand<T>/IQuery<T> markers (it is self-contained),
+        // so a `case <AdapterType> r:` inside this `switch ((ICommand) command)` would be CS8121
+        // (unrelated-type pattern). Adapter messages dispatch only through SendObject (the object switch).
+        bool any = false;
+        foreach (var h in handlers)
+            if (h.Kind == HandlerKind.Command && h.ResponseFqn is null && !h.IsAdapterMapped) { any = true; break; }
+
+        if (!any)
         {
-            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(request.GetType());");
+            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(command.GetType());");
         }
         else
         {
-            w.Open("switch (request)");
-
+            w.Open("switch (command)");
             foreach (var handler in handlers)
             {
-                bool isVoid    = handler.ResponseFqn is null;
-                string reqFqn  = ToGlobalFqn(handler.RequestFqn);
-                string resFqn  = isVoid ? "global::SkathIO.Rogue.Unit" : ToGlobalFqn(handler.ResponseFqn!);
-                string method  = "Send_" + MakeSafeName(handler.RequestFqn);
-
+                if (handler.Kind != HandlerKind.Command || handler.ResponseFqn is not null || handler.IsAdapterMapped) continue;
+                string reqFqn = ToGlobalFqn(handler.RequestFqn);
+                string method = "Send_" + MakeSafeName(handler.RequestFqn);
                 w.Line("case " + reqFqn + " r:");
                 w.Indent();
+                // Send_X returns ValueTask<Unit>; the override returns bare ValueTask — discard the Unit.
+                w.Line("return IgnoreUnit(" + method + "(r, cancellationToken));");
+                w.Dedent();
+            }
+            w.Line("default:");
+            w.Indent();
+            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(command.GetType());");
+            w.Dedent();
+            w.Close(); // switch
+        }
+
+        w.Close(); // method
+    }
+
+    /// <summary>Override for typed commands: <c>Send&lt;TResponse&gt;(ICommand&lt;TResponse&gt;, CancellationToken)</c>.</summary>
+    private static void EmitSendCommandOverride(CodeWriter w, EquatableArray<HandlerModel> handlers)
+    {
+        EmitTypedSendOverride(w, handlers, HandlerKind.Command, "ICommand", "command");
+    }
+
+    /// <summary>Override for queries: <c>Send&lt;TResponse&gt;(IQuery&lt;TResponse&gt;, CancellationToken)</c>.</summary>
+    private static void EmitSendQueryOverride(CodeWriter w, EquatableArray<HandlerModel> handlers)
+    {
+        EmitTypedSendOverride(w, handlers, HandlerKind.Query, "IQuery", "query");
+    }
+
+    private static void EmitTypedSendOverride(
+        CodeWriter w, EquatableArray<HandlerModel> handlers, HandlerKind kind, string markerName, string paramName)
+    {
+        w.Open(
+            "public override global::System.Threading.Tasks.ValueTask<TResponse> Send<TResponse>(" +
+            "global::SkathIO.Rogue." + markerName + "<TResponse> " + paramName + ", " +
+            "global::System.Threading.CancellationToken cancellationToken)");
+
+        // Minor #1 (11.3) — void-command typed-dispatch. A void command implements `ICommand`, which
+        // derives from `ICommand<Unit>`, so it is a legal argument to this typed overload with
+        // TResponse == Unit. Its Send_X returns ValueTask<Unit>, so the same (ValueTask<TResponse>)(object)
+        // cast that the typed-command arms use is correct. Queries always have a response, so for the
+        // query override a void handler can never appear — Qualifies() reduces to ResponseFqn is not null.
+        //
+        // PD-48: adapter-mapped handlers are EXCLUDED. Their adapter message does not implement the core
+        // ICommand<T>/IQuery<T> markers (self-contained), so a `case <AdapterType> r:` inside this typed
+        // switch would be CS8121. Adapter messages dispatch only through SendObject.
+        bool Qualifies(HandlerModel h) =>
+            h.Kind == kind && !h.IsAdapterMapped && (h.ResponseFqn is not null || kind == HandlerKind.Command);
+
+        bool any = false;
+        foreach (var h in handlers)
+            if (Qualifies(h)) { any = true; break; }
+
+        if (!any)
+        {
+            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(" + paramName + ".GetType());");
+        }
+        else
+        {
+            w.Open("switch (" + paramName + ")");
+            foreach (var handler in handlers)
+            {
+                if (!Qualifies(handler)) continue;
+                string reqFqn = ToGlobalFqn(handler.RequestFqn);
+                string method = "Send_" + MakeSafeName(handler.RequestFqn);
+                w.Line("case " + reqFqn + " r:");
+                w.Indent();
+                // For a void command, Send_X returns ValueTask<Unit> and the call site bound TResponse
+                // to Unit; for a typed command/query it returns ValueTask<ResponseFqn> == ValueTask<TResponse>.
+                // Either way the (ValueTask<TResponse>)(object) cast is the correct erasure-bridging cast.
                 w.Line("return (global::System.Threading.Tasks.ValueTask<TResponse>)(object)" + method + "(r, cancellationToken);");
                 w.Dedent();
             }
-
             w.Line("default:");
             w.Indent();
-            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(request.GetType());");
+            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(" + paramName + ".GetType());");
             w.Dedent();
-
             w.Close(); // switch
         }
 
@@ -637,6 +782,12 @@ internal static class DispatcherEmitter
         // the switch is always present and unreferenced object types throw at dispatch time.
         // A runtime gate (trim/throw when EnableObjectDispatch is false) can be re-added in
         // Phase 8 packaging when the linker substitution is wired up. (Fix 2 / PD-3)
+        //
+        // PD-48: this switch includes EVERY handler — native CQS handlers AND MediatR-adapter-mapped ones.
+        // `request` is typed `object`, so a `case <AdapterMessageType> r:` is always a valid pattern
+        // regardless of which markers the adapter type implements. This is the ONLY dispatch entry point
+        // for adapter messages (they are excluded from the typed-Send switches — see EmitTypedSendOverride
+        // / EmitSendCommandVoidOverride), reached via IMediator.Send(object) / ISender object dispatch.
         if (handlers.Count == 0)
         {
             // No handlers in the compilation — nothing to dispatch to.
@@ -673,9 +824,12 @@ internal static class DispatcherEmitter
     // ────────────────────────────────────────────────────────────────────────────────────
     // Streaming dispatch (net8+ only — IAsyncEnumerable)
     //
-    // Fix 5 / FR-23: emits CreateStream<TResponse> as a switch over discovered
-    // IStreamRequestHandler<,> implementations, each delegating to a per-request helper that
-    // resolves the handler and folds any registered IStreamPipelineBehavior<,> around it.
+    // Fix 5 / FR-23: emits CreateStream<TItem> as a switch over discovered IStreamQueryHandler<,>
+    // implementations (PD-40 clean break — keyed on the core IStreamQuery<T> family), each delegating to
+    // a per-request helper that resolves the handler and folds any registered IStreamPipelineBehavior<,>
+    // around it. MediatR-adapter stream handlers are picked up here transitively: PD-48 declares
+    // Compatibility.IStreamRequestHandler<,> as an IS-A sub-interface of IStreamQueryHandler<,>, so the
+    // discovery below finds them with no adapter-specific branch.
     //
     // The fold is CLOSURE-based, not the struct-index pattern used by PipelineExecutor: a ref
     // struct cannot survive a `yield return` suspension point inside an async iterator, so the
@@ -693,7 +847,7 @@ internal static class DispatcherEmitter
     {
         string requestFqn  = ToGlobalFqn(sh.RequestFqn);
         string elementFqn  = ToGlobalFqn(sh.ResponseElementFqn);
-        string handlerIface = "global::SkathIO.Rogue.IStreamRequestHandler<" + requestFqn + ", " + elementFqn + ">";
+        string handlerIface = "global::SkathIO.Rogue.IStreamQueryHandler<" + requestFqn + ", " + elementFqn + ">";
         string behaviorIface = "global::SkathIO.Rogue.IStreamPipelineBehavior<" + requestFqn + ", " + elementFqn + ">";
         string behaviorListType = "global::System.Collections.Generic.IReadOnlyList<" + behaviorIface + ">";
         string nextDelegate = "global::SkathIO.Rogue.StreamHandlerDelegate<" + elementFqn + ">";
@@ -747,17 +901,17 @@ internal static class DispatcherEmitter
     private static void EmitCreateStreamOverride(CodeWriter w, EquatableArray<StreamHandlerModel> streamHandlers)
     {
         w.Open(
-            "public override global::System.Collections.Generic.IAsyncEnumerable<TResponse> CreateStream<TResponse>(" +
-            "global::SkathIO.Rogue.IStreamRequest<TResponse> request, " +
+            "public override global::System.Collections.Generic.IAsyncEnumerable<TItem> CreateStream<TItem>(" +
+            "global::SkathIO.Rogue.IStreamQuery<TItem> query, " +
             "global::System.Threading.CancellationToken cancellationToken)");
 
         if (streamHandlers.Count == 0)
         {
-            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(request.GetType());");
+            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(query.GetType());");
         }
         else
         {
-            w.Open("switch (request)");
+            w.Open("switch (query)");
 
             foreach (var sh in streamHandlers)
             {
@@ -766,13 +920,13 @@ internal static class DispatcherEmitter
 
                 w.Line("case " + reqFqn + " r:");
                 w.Indent();
-                w.Line("return (global::System.Collections.Generic.IAsyncEnumerable<TResponse>)(object)" + method + "(r, cancellationToken);");
+                w.Line("return (global::System.Collections.Generic.IAsyncEnumerable<TItem>)(object)" + method + "(r, cancellationToken);");
                 w.Dedent();
             }
 
             w.Line("default:");
             w.Indent();
-            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(request.GetType());");
+            w.Line("throw new global::SkathIO.Rogue.RogueUnregisteredRequestException(query.GetType());");
             w.Dedent();
 
             w.Close(); // switch
@@ -785,48 +939,48 @@ internal static class DispatcherEmitter
     // Per-notification-type Publish helper
     // ────────────────────────────────────────────────────────────────────────────────────
 
-    private static void EmitPublishNotifMethod(CodeWriter w, string notifFqn, List<string> handlerFqns)
+    private static void EmitPublishEventMethod(CodeWriter w, string eventFqn, List<string> handlerFqns)
     {
-        string notifType  = ToGlobalFqn(notifFqn);
-        string methodName = "Publish_" + MakeSafeName(notifFqn);
+        string eventType  = ToGlobalFqn(eventFqn);
+        string methodName = "Publish_" + MakeSafeName(eventFqn);
 
         // ns2.0: ValueTask<Unit>; net8+: ValueTask. async: FR-45/PD-30 telemetry wraps the dispatch
         // in a try/finally that observes the outcome.
         w.Line("#if NETSTANDARD2_0");
-        w.Open("private async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "(" + notifType + " notification, global::System.Threading.CancellationToken cancellationToken)");
-        EmitPublishNotifBody(w, notifType, handlerFqns, returnsUnit: true);
+        w.Open("private async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
+        EmitPublishEventBody(w, eventType, handlerFqns, returnsUnit: true);
         w.Close();
         w.Line("#else");
-        w.Open("private async global::System.Threading.Tasks.ValueTask " + methodName + "(" + notifType + " notification, global::System.Threading.CancellationToken cancellationToken)");
-        EmitPublishNotifBody(w, notifType, handlerFqns, returnsUnit: false);
+        w.Open("private async global::System.Threading.Tasks.ValueTask " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
+        EmitPublishEventBody(w, eventType, handlerFqns, returnsUnit: false);
         w.Close();
         w.Line("#endif");
     }
 
-    private static void EmitPublishNotifBody(CodeWriter w, string notifTypeFqn, List<string> handlerFqns, bool returnsUnit)
+    private static void EmitPublishEventBody(CodeWriter w, string eventTypeFqn, List<string> handlerFqns, bool returnsUnit)
     {
-        w.Line("var publisher = " + SP + ".GetRequiredService<global::SkathIO.Rogue.INotificationPublisher>(" + SVC + ");");
+        w.Line("var publisher = " + SP + ".GetRequiredService<global::SkathIO.Rogue.IEventPublisher>(" + SVC + ");");
 
-        // Resolve all handlers via the interface (they are registered as INotificationHandler<T>).
-        string handlerIface = "global::SkathIO.Rogue.INotificationHandler<" + notifTypeFqn + ">";
+        // Resolve all handlers via the interface (they are registered as IEventHandler<T>).
+        string handlerIface = "global::SkathIO.Rogue.IEventHandler<" + eventTypeFqn + ">";
         w.Line("var handlers = " + SP + ".GetServices<" + handlerIface + ">(" + SVC + ");");
-        w.Line("var executors = new global::System.Collections.Generic.List<global::SkathIO.Rogue.NotificationHandlerExecutor>();");
+        w.Line("var executors = new global::System.Collections.Generic.List<global::SkathIO.Rogue.EventHandlerExecutor>();");
         w.Open("foreach (var h in handlers)");
         w.Line("var hCopy = h;");
-        w.Line("executors.Add(new global::SkathIO.Rogue.NotificationHandlerExecutor(hCopy, (n, ct) => hCopy.Handle((" + notifTypeFqn + ")n, ct)));");
+        w.Line("executors.Add(new global::SkathIO.Rogue.EventHandlerExecutor(hCopy, (n, ct) => hCopy.Handle((" + eventTypeFqn + ")n, ct)));");
         w.Close();
 
         // FR-45 / PD-30: one dispatch scope per Publish call. The method is async; on the
         // disabled/unsubscribed path StartDispatch returns null and we await the publisher directly
         // (the async state machine is unavoidable here — Publish is already a ValueTask-returning
         // fan-out). On the enabled path the try/catch/finally observes the aggregate outcome.
-        w.Line("var __scope = " + RT + ".StartDispatch<" + notifTypeFqn + ">();");
+        w.Line("var __scope = " + RT + ".StartDispatch<" + eventTypeFqn + ">();");
         w.Open("if (__scope is null)");
         if (returnsUnit)
-            w.Line("return await publisher.Publish(executors, notification, cancellationToken).ConfigureAwait(false);");
+            w.Line("return await publisher.Publish(executors, ev, cancellationToken).ConfigureAwait(false);");
         else
         {
-            w.Line("await publisher.Publish(executors, notification, cancellationToken).ConfigureAwait(false);");
+            w.Line("await publisher.Publish(executors, ev, cancellationToken).ConfigureAwait(false);");
             w.Line("return;");
         }
         w.Close(); // if (__scope is null)
@@ -834,9 +988,9 @@ internal static class DispatcherEmitter
         w.Line("global::System.Exception? __exc = null;");
         w.Open("try");
         if (returnsUnit)
-            w.Line("return await publisher.Publish(executors, notification, cancellationToken).ConfigureAwait(false);");
+            w.Line("return await publisher.Publish(executors, ev, cancellationToken).ConfigureAwait(false);");
         else
-            w.Line("await publisher.Publish(executors, notification, cancellationToken).ConfigureAwait(false);");
+            w.Line("await publisher.Publish(executors, ev, cancellationToken).ConfigureAwait(false);");
         w.Close(); // try
         w.Open("catch (global::System.Exception __ex)");
         w.Line("__exc = __ex;");
@@ -851,26 +1005,26 @@ internal static class DispatcherEmitter
     // Publish override
     // ────────────────────────────────────────────────────────────────────────────────────
 
-    private static void EmitPublishOverride(CodeWriter w, Dictionary<string, List<string>> handlersByNotif)
+    private static void EmitPublishOverride(CodeWriter w, Dictionary<string, List<string>> handlersByEvent)
     {
         // ns2.0: returns ValueTask<Unit>
         w.Line("#if NETSTANDARD2_0");
-        w.Open("public override global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> Publish(global::SkathIO.Rogue.INotification notification, global::System.Threading.CancellationToken cancellationToken = default)");
-        EmitPublishSwitchBody(w, handlersByNotif, returnsUnit: true);
+        w.Open("public override global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> Publish(global::SkathIO.Rogue.IEvent ev, global::System.Threading.CancellationToken cancellationToken = default)");
+        EmitPublishSwitchBody(w, handlersByEvent, returnsUnit: true);
         w.Close();
 
         w.Line("#else");
-        w.Open("public override global::System.Threading.Tasks.ValueTask Publish(global::SkathIO.Rogue.INotification notification, global::System.Threading.CancellationToken cancellationToken = default)");
-        EmitPublishSwitchBody(w, handlersByNotif, returnsUnit: false);
+        w.Open("public override global::System.Threading.Tasks.ValueTask Publish(global::SkathIO.Rogue.IEvent ev, global::System.Threading.CancellationToken cancellationToken = default)");
+        EmitPublishSwitchBody(w, handlersByEvent, returnsUnit: false);
         w.Close();
         w.Line("#endif");
     }
 
-    private static void EmitPublishSwitchBody(CodeWriter w, Dictionary<string, List<string>> handlersByNotif, bool returnsUnit)
+    private static void EmitPublishSwitchBody(CodeWriter w, Dictionary<string, List<string>> handlersByEvent, bool returnsUnit)
     {
-        if (handlersByNotif.Count == 0)
+        if (handlersByEvent.Count == 0)
         {
-            // FR-13: notifications may have zero handlers — return completed task
+            // FR-13: events may have zero handlers — return completed task
             if (returnsUnit)
                 w.Line("return global::SkathIO.Rogue.Unit.Task;");
             else
@@ -878,20 +1032,20 @@ internal static class DispatcherEmitter
             return;
         }
 
-        w.Open("switch (notification)");
+        w.Open("switch (ev)");
 
-        foreach (var kvp in handlersByNotif)
+        foreach (var kvp in handlersByEvent)
         {
-            string notifFqn   = ToGlobalFqn(kvp.Key);
+            string eventFqn   = ToGlobalFqn(kvp.Key);
             string methodName = "Publish_" + MakeSafeName(kvp.Key);
 
-            w.Line("case " + notifFqn + " n:");
+            w.Line("case " + eventFqn + " n:");
             w.Indent();
             w.Line("return " + methodName + "(n, cancellationToken);");
             w.Dedent();
         }
 
-        // Default: no handlers for this notification type — return completed (FR-13)
+        // Default: no handlers for this event type — return completed (FR-13)
         w.Line("default:");
         w.Indent();
         if (returnsUnit)

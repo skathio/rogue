@@ -189,23 +189,46 @@ internal static class GeneratorTestHelper
 
     /// <summary>
     /// Builds a real DI container that wires the loaded assembly's generated registration through the
-    /// production path: forces the assembly's module initializer to run (which sets the public
-    /// <c>RogueRegistrationBridge.GeneratedRegistrar</c> — PD-15), then calls <c>AddRogue</c>, which
-    /// registers <c>ISender</c>/<c>IMediator</c> and invokes the bridge to register the generated
-    /// handlers/processors/dispatcher. This exercises the same wiring a consumer's app would.
+    /// production path: forces the assembly's module initializer to run (which appends the assembly's
+    /// registrar to the <c>RogueRegistrationBridge</c> registry via <c>Register</c> — PD-15/PD-33), then
+    /// calls <c>AddRogue</c>, which registers <c>ISender</c>/<c>IMediator</c> and invokes the bridge to
+    /// register the generated handlers/processors/dispatcher. This exercises the same wiring a consumer's
+    /// app would.
+    /// <para>
+    /// The bridge registry is process-global and append-only (PD-33), so registrars from every
+    /// previously-loaded generated assembly in this test run accumulate in it. Without isolation, this
+    /// call's <c>AddRogue</c> would invoke those stale registrars too — and PD-38's first-wins
+    /// <c>TryAddScoped&lt;RogueDispatcher,...&gt;</c> could let an earlier assembly's empty/foreign
+    /// <c>RogueDispatcherImpl</c> shadow this assembly's, so this request would not dispatch. We therefore
+    /// snapshot the registry, reset it to contain only this assembly's registrar, build the provider, then
+    /// restore the snapshot (so we neither see nor leak other cases' registrars).
+    /// </para>
     /// </summary>
     internal static System.IServiceProvider BuildProviderFromGenerated(Assembly assembly)
     {
-        // The [ModuleInitializer] in the generated RogueModuleInit runs when the module is first used.
-        // Force it deterministically so the bridge is set before AddRogue reads it.
-        var anyGeneratedType = assembly.GetType("SkathIO.Rogue.Generated.RogueGeneratedRegistration", throwOnError: true)!;
-        System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(anyGeneratedType.Module.ModuleHandle);
+        var saved = SkathIO.Rogue.RogueRegistrationBridge.SnapshotRegistrars();
+        try
+        {
+            // Reset to a known-empty baseline, then run THIS assembly's [ModuleInitializer] so the only
+            // registrar in the bridge is this assembly's (RunModuleConstructor is a one-shot no-op if
+            // already run, but each EmitAndLoadAssembly call produces a fresh, never-initialized module).
+            SkathIO.Rogue.RogueRegistrationBridge.RestoreRegistrars(
+                System.Array.Empty<System.Action<
+                    Microsoft.Extensions.DependencyInjection.IServiceCollection, SkathIO.Rogue.RogueOptions>>());
 
-        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
-        SkathIO.Rogue.RogueServiceCollectionExtensions.AddRogue(services);
+            var anyGeneratedType = assembly.GetType("SkathIO.Rogue.Generated.RogueGeneratedRegistration", throwOnError: true)!;
+            System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(anyGeneratedType.Module.ModuleHandle);
 
-        return Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions
-            .BuildServiceProvider(services);
+            var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+            SkathIO.Rogue.RogueServiceCollectionExtensions.AddRogue(services);
+
+            return Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions
+                .BuildServiceProvider(services);
+        }
+        finally
+        {
+            SkathIO.Rogue.RogueRegistrationBridge.RestoreRegistrars(saved);
+        }
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────────────
@@ -230,6 +253,10 @@ internal static class GeneratorTestHelper
             MetadataReference.CreateFromFile(Path.Combine(runtimeDir, "netstandard.dll")),
             // IServiceProvider is type-forwarded to System.ComponentModel on net10.
             MetadataReference.CreateFromFile(Path.Combine(runtimeDir, "System.ComponentModel.dll")),
+            // System.Diagnostics.DiagnosticSource: RogueTelemetry's DispatchScope/StartDispatch signatures
+            // surface Activity, so the generated dispatcher's telemetry call sites need this transitively
+            // at emit time (CS0012 otherwise — e.g. on the notification/Publish path).
+            MetadataReference.CreateFromFile(Path.Combine(runtimeDir, "System.Diagnostics.DiagnosticSource.dll")),
         };
 
         return refs.ToArray();
@@ -252,7 +279,7 @@ internal static class GeneratorTestHelper
             // System.Linq (used by test source snippets)
             MetadataReference.CreateFromFile(Path.Combine(runtimeDir, "System.Linq.dll")),
             // SkathIO.Rogue.Abstractions — the contracts the generator discovers
-            MetadataReference.CreateFromFile(typeof(SkathIO.Rogue.IRequest<>).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(SkathIO.Rogue.ICommand<>).Assembly.Location),
         };
     }
 }

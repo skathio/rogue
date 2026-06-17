@@ -14,9 +14,9 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 
-public class GetUserQuery : IRequest<string> { }
+public class GetUserQuery : ICommand<string> { }
 
-public class GetUserHandler : IRequestHandler<GetUserQuery, string>
+public class GetUserHandler : ICommandHandler<GetUserQuery, string>
 {
     public ValueTask<string> Handle(GetUserQuery request, CancellationToken cancellationToken)
         => new ValueTask<string>(string.Empty);
@@ -40,9 +40,9 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 
-public class DeleteUser : IRequest { }
+public class DeleteUser : ICommand { }
 
-public class DeleteUserHandler : IRequestHandler<DeleteUser>
+public class DeleteUserHandler : ICommandHandler<DeleteUser>
 {
     public ValueTask Handle(DeleteUser request, CancellationToken cancellationToken)
         => default;
@@ -68,7 +68,7 @@ public class PlainService
         DiscoveredModels models = GeneratorTestHelper.ExtractModels(source);
 
         Assert.Empty(models.Handlers);
-        Assert.Empty(models.NotificationHandlers);
+        Assert.Empty(models.EventHandlers);
         Assert.Empty(models.Behaviors);
         Assert.Empty(models.Processors);
         Assert.Empty(models.StreamHandlers);
@@ -93,9 +93,9 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 
-public class OrderPlaced : INotification { }
+public class OrderPlaced : IEvent { }
 
-public class OrderPlacedHandler : INotificationHandler<OrderPlaced>
+public class OrderPlacedHandler : IEventHandler<OrderPlaced>
 {
     public ValueTask Handle(OrderPlaced notification, CancellationToken cancellationToken)
         => default;
@@ -103,10 +103,10 @@ public class OrderPlacedHandler : INotificationHandler<OrderPlaced>
 ";
         DiscoveredModels models = GeneratorTestHelper.ExtractModels(source);
 
-        Assert.Single(models.NotificationHandlers);
-        NotificationHandlerModel handler = models.NotificationHandlers[0];
+        Assert.Single(models.EventHandlers);
+        EventHandlerModel handler = models.EventHandlers[0];
         Assert.Equal("OrderPlacedHandler", handler.TypeFqn.Split('.').Last());
-        Assert.Contains("OrderPlaced", handler.NotificationFqn);
+        Assert.Contains("OrderPlaced", handler.EventFqn);
     }
 
     [Fact]
@@ -117,9 +117,9 @@ using SkathIO.Rogue;
 using System.Collections.Generic;
 using System.Threading;
 
-public class Tail : IStreamRequest<string> { }
+public class Tail : IStreamQuery<string> { }
 
-public class TailHandler : IStreamRequestHandler<Tail, string>
+public class TailHandler : IStreamQueryHandler<Tail, string>
 {
     public IAsyncEnumerable<string> Handle(Tail request, CancellationToken cancellationToken)
         => throw new System.NotImplementedException();
@@ -142,15 +142,15 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 
-public class GetUser : IRequest<string> { }
-public class GetUserHandler : IRequestHandler<GetUser, string>
+public class GetUser : ICommand<string> { }
+public class GetUserHandler : ICommandHandler<GetUser, string>
 {
     public ValueTask<string> Handle(GetUser request, CancellationToken cancellationToken)
         => new ValueTask<string>(string.Empty);
 }
 
-public class UserCreated : INotification { }
-public class UserCreatedHandler : INotificationHandler<UserCreated>
+public class UserCreated : IEvent { }
+public class UserCreatedHandler : IEventHandler<UserCreated>
 {
     public ValueTask Handle(UserCreated notification, CancellationToken cancellationToken)
         => default;
@@ -159,7 +159,7 @@ public class UserCreatedHandler : INotificationHandler<UserCreated>
         DiscoveredModels models = GeneratorTestHelper.ExtractModels(source);
 
         Assert.Single(models.Handlers);
-        Assert.Single(models.NotificationHandlers);
+        Assert.Single(models.EventHandlers);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class Derived : Base { }
         DiscoveredModels models = GeneratorTestHelper.ExtractModels(source);
 
         Assert.Empty(models.Handlers);
-        Assert.Empty(models.NotificationHandlers);
+        Assert.Empty(models.EventHandlers);
         Assert.Empty(models.Behaviors);
     }
 
@@ -261,7 +261,7 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 
-public class Ping : IRequest<string> { }
+public class Ping : ICommand<string> { }
 
 // Closed (non-generic) behavior — implements IPipelineBehavior for one specific request type
 public class PingLoggingBehavior : IPipelineBehavior<Ping, string>
@@ -286,9 +286,9 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 
-public class Ping : IRequest<string> { }
+public class Ping : ICommand<string> { }
 
-public abstract class PingHandlerBase : IRequestHandler<Ping, string>
+public abstract class PingHandlerBase : ICommandHandler<Ping, string>
 {
     public abstract ValueTask<string> Handle(Ping request, CancellationToken cancellationToken);
 }

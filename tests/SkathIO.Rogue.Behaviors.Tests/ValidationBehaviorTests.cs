@@ -8,7 +8,7 @@ using Xunit;
 
 namespace SkathIO.Rogue.Behaviors.Tests;
 
-// Plain class (not IRequest<T>): exercises ValidationBehavior directly, so no handler is needed and
+// Plain class (not ICommand<T>): exercises ValidationBehavior directly, so no handler is needed and
 // ROGUE001 is avoided.
 internal sealed class CreateUser
 {

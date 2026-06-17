@@ -7,11 +7,11 @@ items below are post-v1 candidates.
 ## v1.0.0 (shipped)
 
 Source-generated, reflection-free CQRS/mediator. See the [CHANGELOG](../CHANGELOG.md) for the full
-feature set: requests/queries/commands, notifications with fan-out, streaming requests, pipeline +
+feature set: queries/commands (CQS-explicit core), events with fan-out, streaming queries, pipeline +
 stream behaviors with ordering, pre/post processors and exception handlers, compile-time diagnostics
-(ROGUE001–007), logging + FluentValidation integrations, a telemetry shim, MediatR compatibility +
-migration analyzer (ROGM001–004), AOT/trim support, and a benchmark suite against MediatR and
-martinothamar.
+(ROGUE001–006 + ROGUE010/011/012; ROGUE007 unused), logging + FluentValidation integrations, a
+telemetry shim, MediatR compatibility + migration analyzer (ROGM001–006), AOT/trim support, and a
+benchmark suite against MediatR and martinothamar.
 
 ## Post-v1 candidates
 

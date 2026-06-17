@@ -1,7 +1,13 @@
 namespace SkathIO.Rogue.Compatibility;
 
-// NOTE: the constraint is `INotification`, not MediatR's `notnull`. Rogue's base
-// INotificationHandler<in TNotification> constrains TNotification to INotification;
-// a weaker `notnull` constraint here would not satisfy the base interface (CS0314).
-public interface INotificationHandler<TNotification> : global::SkathIO.Rogue.INotificationHandler<TNotification>
-    where TNotification : global::SkathIO.Rogue.INotification { }
+// MediatR-shaped notification handler. PD-48: declared as a thin "is-a" sub-interface of the core
+// IEventHandler<TNotification>. The core Handle signature already matches MediatR's (ValueTask on
+// net8+, ValueTask<Unit> on netstandard2.0), so no Handle is redeclared here — an implementer
+// satisfies the inherited IEventHandler<>.Handle. Because the type IS-A core IEventHandler<>, the
+// generator's existing IEventHandler-keyed discovery loop registers it under IEventHandler<T> and
+// Publish fans out to it with no adapter-specific code.
+public interface INotificationHandler<in TNotification>
+    : global::SkathIO.Rogue.IEventHandler<TNotification>
+    where TNotification : INotification
+{
+}

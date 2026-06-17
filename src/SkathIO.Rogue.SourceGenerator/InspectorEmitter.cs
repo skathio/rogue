@@ -71,7 +71,9 @@ internal static class InspectorEmitter
         w.Line();
 
         // ── GetPipeline<TRequest>() ───────────────────────────────────────────────────
-        w.Open("public global::System.Collections.Generic.IReadOnlyList<global::SkathIO.Rogue.BehaviorInfo> GetPipeline<TRequest>() where TRequest : global::SkathIO.Rogue.IBaseRequest");
+        // Constraint matches the reshaped IRoguePipelineInspector (PD-40 clean break): notnull, not a
+        // shared message marker — there is no IBaseRequest under CQS.
+        w.Open("public global::System.Collections.Generic.IReadOnlyList<global::SkathIO.Rogue.BehaviorInfo> GetPipeline<TRequest>() where TRequest : notnull");
         w.Line("return GetPipeline(typeof(TRequest));");
         w.Close();
         w.Line();
@@ -114,8 +116,9 @@ internal static class InspectorEmitter
 
         // Apply the same PD-13a ordering used by RegistrationEmitter so the inspector reports the
         // pipeline in execution order (lower [BehaviorOrder] = outermost), then source-before-
-        // metadata, then FQN lexicographic. The inspector covers only non-stream behaviors (its
-        // GetPipeline is keyed on IBaseRequest, which stream requests do not implement).
+        // metadata, then FQN lexicographic. The inspector covers only non-stream behaviors — its
+        // GetPipeline<TRequest> (constrained on notnull post-PD-40) is keyed on command/query types,
+        // which IStreamQuery types are not (streams have no behavior-info lookup here).
         var orderedBehaviors = new List<BehaviorModel>(models.Behaviors.Count);
         orderedBehaviors.AddRange(models.Behaviors);
         orderedBehaviors.Sort(RegistrationEmitter.CompareBehaviorOrder);

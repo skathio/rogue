@@ -20,10 +20,10 @@ return result == "hello" ? 0 : 1;
 namespace SkathIO.Rogue
 {
     /// <summary>Sample request returning the echoed payload.</summary>
-    public sealed record PingRequest(string Payload) : IRequest<string>;
+    public sealed record PingRequest(string Payload) : ICommand<string>;
 
     /// <summary>Echoes the request payload back to the caller.</summary>
-    public sealed class PingHandler : IRequestHandler<PingRequest, string>
+    public sealed class PingHandler : ICommandHandler<PingRequest, string>
     {
         public ValueTask<string> Handle(PingRequest request, CancellationToken cancellationToken)
             => new(request.Payload);

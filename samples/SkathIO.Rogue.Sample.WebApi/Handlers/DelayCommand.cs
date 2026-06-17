@@ -8,13 +8,13 @@ namespace SkathIO.Rogue.Sample.WebApi;
 /// A request whose handler awaits a real delay so a cancelled <see cref="CancellationToken"/>
 /// surfaces an <see cref="System.OperationCanceledException"/> at the dispatch boundary (FR-14).
 /// </summary>
-public sealed record DelayRequest(int DelayMs) : IRequest<DelayResponse>;
+public sealed record DelayRequest(int DelayMs) : ICommand<DelayResponse>;
 
 /// <summary>Response for <see cref="DelayRequest"/>.</summary>
 public sealed record DelayResponse(bool Completed);
 
 /// <summary>Handles <see cref="DelayRequest"/> by awaiting a cancellable delay (FR-14).</summary>
-public sealed class DelayHandler : IRequestHandler<DelayRequest, DelayResponse>
+public sealed class DelayHandler : ICommandHandler<DelayRequest, DelayResponse>
 {
     /// <inheritdoc />
     public async ValueTask<DelayResponse> Handle(DelayRequest request, CancellationToken cancellationToken)

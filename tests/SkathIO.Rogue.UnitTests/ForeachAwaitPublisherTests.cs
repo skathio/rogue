@@ -8,7 +8,7 @@ namespace SkathIO.Rogue.Tests;
 
 public sealed class ForeachAwaitPublisherTests
 {
-    private sealed class TestNotification : INotification { }
+    private sealed class TestNotification : IEvent { }
 
     [Fact]
     public async Task Publish_CallsHandlersInOrder()
@@ -16,8 +16,8 @@ public sealed class ForeachAwaitPublisherTests
         var order = new List<int>();
         var executors = new[]
         {
-            new NotificationHandlerExecutor(new object(), (_, _) => { order.Add(1); return ValueTask.CompletedTask; }),
-            new NotificationHandlerExecutor(new object(), (_, _) => { order.Add(2); return ValueTask.CompletedTask; }),
+            new EventHandlerExecutor(new object(), (_, _) => { order.Add(1); return ValueTask.CompletedTask; }),
+            new EventHandlerExecutor(new object(), (_, _) => { order.Add(2); return ValueTask.CompletedTask; }),
         };
 
         await new ForeachAwaitPublisher().Publish(executors, new TestNotification(), CancellationToken.None);
@@ -31,8 +31,8 @@ public sealed class ForeachAwaitPublisherTests
         var called = false;
         var executors = new[]
         {
-            new NotificationHandlerExecutor(new object(), (_, _) => throw new InvalidOperationException("first")),
-            new NotificationHandlerExecutor(new object(), (_, _) => { called = true; return ValueTask.CompletedTask; }),
+            new EventHandlerExecutor(new object(), (_, _) => throw new InvalidOperationException("first")),
+            new EventHandlerExecutor(new object(), (_, _) => { called = true; return ValueTask.CompletedTask; }),
         };
 
         await Assert.ThrowsAsync<InvalidOperationException>(

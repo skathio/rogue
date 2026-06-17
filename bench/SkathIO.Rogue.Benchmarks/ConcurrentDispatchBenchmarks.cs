@@ -34,7 +34,7 @@ public class ConcurrentDispatchBenchmarks
     {
         var services = new ServiceCollection();
         services.AddRogue();
-        services.AddTransient<IRequestHandler<PingRequest, string>, PingHandler>();
+        services.AddTransient<ICommandHandler<PingRequest, string>, PingHandler>();
         _provider = services.BuildServiceProvider();
     }
 

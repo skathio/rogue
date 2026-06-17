@@ -10,6 +10,7 @@ namespace SkathIO.Rogue.Generator.Tests;
 /// that must appear, forbidden patterns that must not appear). The assertions cover structural
 /// correctness and the NFR-SEC-1 / NFR-PERF-3 code-shape gates from the plan.
 /// </summary>
+[Collection(RealDiDispatchCollection.Name)] // shares the process-global registration bridge — see RealDiDispatchCollection
 public sealed class EmissionTests
 {
     // ── Empty input ───────────────────────────────────────────────────────────────────
@@ -41,10 +42,20 @@ public sealed class EmissionTests
     [Fact]
     public void ModuleInit_WiresBridgeToGeneratedRegistration()
     {
-        // PD-15: the consumer-compilation module initializer assigns the public
-        // RogueRegistrationBridge.GeneratedRegistrar delegate so the DLL's AddRogue reaches the
-        // consumer's populated RogueGeneratedRegistration.Register. Emitted even with no handlers.
-        const string source = "// empty";
+        // PD-15/PD-33/PD-38: the consumer-compilation module initializer appends the consumer's
+        // populated RogueGeneratedRegistration.Register to the DLL's append-only bridge registry via
+        // the non-obsolete RogueRegistrationBridge.Register(...) entry point so the DLL's AddRogue
+        // reaches it. PD-45: emitted only when the compilation discovered something to register —
+        // this source has a handler, so the initializer is present.
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
+{
+    public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
+}";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var sources = result.Results.SelectMany(r => r.GeneratedSources).ToList();
 
@@ -56,9 +67,29 @@ public sealed class EmissionTests
         Assert.Contains("#endif", text);
         Assert.Contains("[global::System.Runtime.CompilerServices.ModuleInitializer]", text);
 
-        // Assigns the public bridge delegate to the generated Register method (PD-16: bridge is public)
-        Assert.Contains("global::SkathIO.Rogue.RogueRegistrationBridge.GeneratedRegistrar", text);
+        // Appends via the public, non-obsolete Register(...) entry point (PD-16: bridge is public;
+        // PD-38: not the [Obsolete] GeneratedRegistrar field assignment).
+        Assert.Contains("global::SkathIO.Rogue.RogueRegistrationBridge.Register(", text);
         Assert.Contains("global::SkathIO.Rogue.Generated.RogueGeneratedRegistration.Register(svc, opts)", text);
+        Assert.DoesNotContain("RogueRegistrationBridge.GeneratedRegistrar", text);
+    }
+
+    [Fact]
+    public void ModuleInit_SuppressedForCompilationWithNothingToRegister()
+    {
+        // PD-45: a handler-less compilation (e.g. SkathIO.Rogue.dll's own self-compilation, or a
+        // consumer with no handlers yet) must NOT append a registrar. Its registrar would register only
+        // the empty dispatcher/inspector/publisher, whose empty RogueDispatcherImpl could shadow a real
+        // consumer's populated dispatcher under TryAdd's first-wins. So no [ModuleInitializer] is emitted.
+        const string source = "// empty";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var moduleInit = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueModuleInit.g.cs");
+        var text = moduleInit.SourceText.ToString();
+
+        // The file is still emitted (stable HintName) but carries no initializer and no Register call.
+        Assert.DoesNotContain("[global::System.Runtime.CompilerServices.ModuleInitializer]", text);
+        Assert.DoesNotContain("RogueRegistrationBridge", text);
     }
 
     // ── Auto-generated header ─────────────────────────────────────────────────────────
@@ -87,8 +118,8 @@ public sealed class EmissionTests
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class Ping : IRequest<string> { }
-public class PingHandler : IRequestHandler<Ping, string>
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }";
@@ -125,8 +156,8 @@ public class PingHandler : IRequestHandler<Ping, string>
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class Ping : IRequest<string> { }
-public class PingHandler : IRequestHandler<Ping, string>
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }";
@@ -163,8 +194,8 @@ public class PingHandler : IRequestHandler<Ping, string>
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class Ping : IRequest<string> { }
-public class PingHandler : IRequestHandler<Ping, string>
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }";
@@ -212,6 +243,57 @@ public class DeleteUserHandler : ICommandHandler<DeleteUser>
         Assert.Contains("Unit.Task", text);
     }
 
+    // Minor #1 (11.3 regression): a void command (`ICommand`, which derives from `ICommand<Unit>`)
+    // is a legal argument to the typed `ISender.Send<TResponse>(ICommand<TResponse>, ct)` overload
+    // with TResponse == Unit. Before the 11.3 fix, EmitTypedSendOverride for HandlerKind.Command only
+    // emitted `case` arms for handlers with a non-null ResponseFqn, so a void command dispatched via the
+    // typed path fell through to `default: throw RogueUnregisteredRequestException` — even though the
+    // command IS registered and its `Send_X` (returning ValueTask<Unit>) exists. This test dispatches a
+    // registered void command through the typed overload at runtime and asserts it does NOT throw.
+    [Fact]
+    public async System.Threading.Tasks.Task VoidCommand_TypedSendOverride_DoesNotThrowUnregistered()
+    {
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class DeleteUser : ICommand { }
+public class DeleteUserHandler : ICommandHandler<DeleteUser>
+{
+#if NETSTANDARD2_0
+    public ValueTask<Unit> Handle(DeleteUser request, System.Threading.CancellationToken ct) => Unit.Task;
+#else
+    public ValueTask Handle(DeleteUser request, System.Threading.CancellationToken ct) => ValueTask.CompletedTask;
+#endif
+}";
+        var assembly = GeneratorTestHelper.EmitAndLoadAssembly(source);
+        var provider = GeneratorTestHelper.BuildProviderFromGenerated(assembly);
+
+        var sender = (SkathIO.Rogue.ISender)Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
+            .GetRequiredService(provider, typeof(SkathIO.Rogue.ISender));
+
+        var requestType = assembly.GetType("DeleteUser", throwOnError: true)!;
+        var request = System.Activator.CreateInstance(requestType)!;
+
+        // Select the typed COMMAND overload specifically: Send<TResponse>(ICommand<TResponse>, ct).
+        // (ISender also has Send<TResponse>(IQuery<TResponse>, ct) — disambiguate on the parameter's
+        // generic type definition.) Bind TResponse to Unit, matching the call site for a void command.
+        var sendCommand = typeof(SkathIO.Rogue.ISender).GetMethods()
+            .First(m => m.Name == "Send"
+                && m.IsGenericMethodDefinition
+                && m.GetParameters().Length == 2
+                && m.GetParameters()[0].ParameterType.IsGenericType
+                && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(SkathIO.Rogue.ICommand<>))
+            .MakeGenericMethod(typeof(SkathIO.Rogue.Unit));
+
+        // Invoke; the request upcasts to ICommand<Unit>. Must NOT throw RogueUnregisteredRequestException.
+        object valueTask = sendCommand.Invoke(sender, new object?[] { request, System.Threading.CancellationToken.None })!;
+        var asTask = (System.Threading.Tasks.Task<SkathIO.Rogue.Unit>)valueTask.GetType().GetMethod("AsTask")!.Invoke(valueTask, null)!;
+        var result = await asTask;
+
+        Assert.Equal(SkathIO.Rogue.Unit.Value, result);
+    }
+
     // ── Pipeline behaviors ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -222,8 +304,8 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
-public class GetUser : IRequest<string> { }
-public class GetUserHandler : IRequestHandler<GetUser, string>
+public class GetUser : ICommand<string> { }
+public class GetUserHandler : ICommandHandler<GetUser, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(GetUser request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""user"");
 }
@@ -252,8 +334,8 @@ public class LoggingBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> where T
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class UserCreated : INotification { }
-public class UserCreatedHandler : INotificationHandler<UserCreated>
+public class UserCreated : IEvent { }
+public class UserCreatedHandler : IEventHandler<UserCreated>
 {
 #if NETSTANDARD2_0
     public ValueTask<Unit> Handle(UserCreated n, System.Threading.CancellationToken ct) => Unit.Task;
@@ -272,8 +354,8 @@ public class UserCreatedHandler : INotificationHandler<UserCreated>
         // Per-notification dispatch method
         Assert.Contains("Publish_UserCreated", text);
 
-        // NotificationHandlerExecutor used
-        Assert.Contains("NotificationHandlerExecutor", text);
+        // EventHandlerExecutor used
+        Assert.Contains("EventHandlerExecutor", text);
     }
 
     // ── Pipeline inspector ────────────────────────────────────────────────────────────
@@ -317,8 +399,8 @@ public class CmdHandler : ICommandHandler<Cmd>
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class GetOrder : IRequest<string> { }
-public class GetOrderHandler : IRequestHandler<GetOrder, string>
+public class GetOrder : ICommand<string> { }
+public class GetOrderHandler : ICommandHandler<GetOrder, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(GetOrder request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""order"");
 }
@@ -346,8 +428,8 @@ public class TracingBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> where T
 using SkathIO.Rogue;
 using System.Collections.Generic;
 using System.Threading;
-public class Tick : IStreamRequest<int> { }
-public class TickHandler : IStreamRequestHandler<Tick, int>
+public class Tick : IStreamQuery<int> { }
+public class TickHandler : IStreamQueryHandler<Tick, int>
 {
     public async IAsyncEnumerable<int> Handle(Tick request, System.Threading.CancellationToken ct)
     {
@@ -381,8 +463,8 @@ public class StreamLogBehavior<TReq, TRes> : IStreamPipelineBehavior<TReq, TRes>
 using SkathIO.Rogue;
 using System.Collections.Generic;
 using System.Threading;
-public class Tick : IStreamRequest<int> { }
-public class TickHandler : IStreamRequestHandler<Tick, int>
+public class Tick : IStreamQuery<int> { }
+public class TickHandler : IStreamQueryHandler<Tick, int>
 {
     public async IAsyncEnumerable<int> Handle(Tick request, System.Threading.CancellationToken ct)
     {
@@ -418,8 +500,8 @@ public class StreamLogBehavior<TReq, TRes> : IStreamPipelineBehavior<TReq, TRes>
 using SkathIO.Rogue;
 using System.Collections.Generic;
 using System.Threading;
-public class Tail : IStreamRequest<string> { }
-public class TailHandler : IStreamRequestHandler<Tail, string>
+public class Tail : IStreamQuery<string> { }
+public class TailHandler : IStreamQueryHandler<Tail, string>
 {
     public async IAsyncEnumerable<string> Handle(Tail request, System.Threading.CancellationToken ct)
     {
@@ -449,8 +531,8 @@ public class TailHandler : IStreamRequestHandler<Tail, string>
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class GetUser : IRequest<string> { }
-public class GetUserHandler : IRequestHandler<GetUser, string>
+public class GetUser : ICommand<string> { }
+public class GetUserHandler : ICommandHandler<GetUser, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(GetUser request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""u"");
 }
@@ -487,8 +569,8 @@ public class OuterB<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : not
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class P : IRequest<string> { }
-public class PHandler : IRequestHandler<P, string>
+public class P : ICommand<string> { }
+public class PHandler : ICommandHandler<P, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(P request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""x"");
 }";
@@ -510,8 +592,8 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
-public class Q1 : IRequest<int> { }
-public class Q1Handler : IRequestHandler<Q1, int>
+public class Q1 : ICommand<int> { }
+public class Q1Handler : ICommandHandler<Q1, int>
 {
     public ValueTask<int> Handle(Q1 r, System.Threading.CancellationToken ct) => ValueTask.FromResult(1);
 }
@@ -540,8 +622,8 @@ public class LogB<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnu
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class Query : IRequest<string> { }
-public class QueryHandler : IRequestHandler<Query, string>
+public class Query : ICommand<string> { }
+public class QueryHandler : ICommandHandler<Query, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(Query request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""result"");
 }";
@@ -551,7 +633,7 @@ public class QueryHandler : IRequestHandler<Query, string>
         var text = dispatcher.SourceText.ToString();
 
         // The handler interface reference must use global:: prefix
-        Assert.Contains("global::SkathIO.Rogue.IRequestHandler<", text);
+        Assert.Contains("global::SkathIO.Rogue.ICommandHandler<", text);
         Assert.Contains("global::SkathIO.Rogue.PipelineExecutor", text);
         Assert.Contains("global::SkathIO.Rogue.Unit", text);
     }
@@ -572,8 +654,8 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 
-public class Ping : IRequest<string> { }
-public class PingHandler : IRequestHandler<Ping, string>
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }
@@ -605,8 +687,8 @@ using System;
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class Ping : IRequest<string> { }
-public class PingHandler : IRequestHandler<Ping, string>
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
 }
@@ -695,8 +777,8 @@ public class ExActionPing : IRequestExceptionAction<Ping, InvalidOperationExcept
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class Plain : IRequest<string> { }
-public class PlainHandler : IRequestHandler<Plain, string>
+public class Plain : ICommand<string> { }
+public class PlainHandler : ICommandHandler<Plain, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(Plain request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""x"");
 }";
@@ -729,7 +811,7 @@ public class PlainHandler : IRequestHandler<Plain, string>
 
         // The companion method must exist and be the one that actually drives PipelineExecutor.
         Assert.Contains("private static global::System.Threading.Tasks.ValueTask<global::System.String> Send_Plain_WithBehaviors(", text);
-        int companionStart = text.IndexOf("Send_Plain_WithBehaviors(global::SkathIO.Rogue.IRequestHandler", System.StringComparison.Ordinal);
+        int companionStart = text.IndexOf("Send_Plain_WithBehaviors(global::SkathIO.Rogue.ICommandHandler", System.StringComparison.Ordinal);
         Assert.True(companionStart >= 0);
         string companionBody = text.Substring(companionStart);
         Assert.Contains("global::SkathIO.Rogue.PipelineExecutor.Execute", companionBody);
@@ -754,8 +836,8 @@ using System;
 using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
-public class ActionOnly : IRequest<string> { }
-public class ActionOnlyHandler : IRequestHandler<ActionOnly, string>
+public class ActionOnly : ICommand<string> { }
+public class ActionOnlyHandler : ICommandHandler<ActionOnly, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(ActionOnly request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""r"");
 }
@@ -809,7 +891,7 @@ public class ActionOnlyExAction : IRequestExceptionAction<ActionOnly, InvalidOpe
         var requestType = assembly.GetType("Faulting", throwOnError: true)!;
         var request = System.Activator.CreateInstance(requestType)!;
 
-        // ISender.Send<TResponse>(IRequest<TResponse>, System.Threading.CancellationToken) — close over the request's response.
+        // ISender.Send<TResponse>(ICommand<TResponse>, System.Threading.CancellationToken) — close over the request's response.
         var sendMethod = senderType.GetMethods()
             .First(m => m.Name == "Send" && m.IsGenericMethodDefinition && m.GetParameters().Length == 2)
             .MakeGenericMethod(typeof(string));
@@ -865,9 +947,9 @@ public static class ActionCounter
     public static int CountB;
 }
 
-public class Faulting : IRequest<string> { }
+public class Faulting : ICommand<string> { }
 
-public class FaultingHandler : IRequestHandler<Faulting, string>
+public class FaultingHandler : ICommandHandler<Faulting, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(Faulting request, System.Threading.CancellationToken ct)
         => throw new InvalidOperationException(""boom"");
@@ -898,9 +980,9 @@ using SkathIO.Rogue;
 using System.Threading;
 using System.Threading.Tasks;
 
-public class PingRequest : IRequest<string> { }
+public class PingRequest : ICommand<string> { }
 
-public class PingHandler : IRequestHandler<PingRequest, string>
+public class PingHandler : ICommandHandler<PingRequest, string>
 {
     public System.Threading.Tasks.ValueTask<string> Handle(PingRequest request, System.Threading.CancellationToken ct) => new System.Threading.Tasks.ValueTask<string>(""pong"");
 }";
@@ -930,7 +1012,7 @@ public class PingHandler : IRequestHandler<PingRequest, string>
     ///
     /// Handler lifetime is pinned to Singleton (not <c>GeneratorTestHelper</c>'s/<c>RogueOptions</c>'s
     /// Transient default), which would allocate a fresh <c>PingHandler</c> on every
-    /// <c>GetRequiredService&lt;IRequestHandler&lt;...&gt;&gt;</c> resolution inside
+    /// <c>GetRequiredService&lt;ICommandHandler&lt;...&gt;&gt;</c> resolution inside
     /// <c>Send_PingRequest</c> — a real, expected, user-controlled cost of the *default* lifetime,
     /// orthogonal to the closure this fix eliminates.
     /// </summary>
@@ -965,6 +1047,114 @@ public class PingHandler : IRequestHandler<PingRequest, string>
         long delta = await task;
 
         Assert.Equal(0L, delta);
+    }
+
+    // ── PD-38: generated registration is idempotent (TryAdd*/TryAddEnumerable) ──────────
+
+    [Fact]
+    public void GeneratedRegister_InvokedTwice_DoesNotDoubleRegister()
+    {
+        // A compilation that exercises every registration kind PD-38/PD-45 touches:
+        //  - one request handler            → TryAdd (single-instance, ROGUE002 forbids duplicates)
+        //  - a pipeline behavior            → TryAdd self-reg + TryAdd IReadOnlyList<IPipelineBehavior<,>> factory
+        //  - TWO distinct notification      → TryAddEnumerable (dedup by impl type; both distinct
+        //    handlers for ONE notification    impls must survive, each exactly once)
+        //  - TWO distinct exception actions → TryAddEnumerable (PD-45: processors fan out via
+        //    for ONE (request, exception)     GetServices, so both must survive, each exactly once)
+        const string source = @"
+using System;
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
+{
+    public ValueTask<string> Handle(Ping request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+}
+public class Pinged : IEvent { }
+public class PingedHandlerA : IEventHandler<Pinged>
+{
+    public ValueTask Handle(Pinged notification, CancellationToken ct) => default;
+}
+public class PingedHandlerB : IEventHandler<Pinged>
+{
+    public ValueTask Handle(Pinged notification, CancellationToken ct) => default;
+}
+public class LogBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnull
+{
+    public ValueTask<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, CancellationToken ct) => next();
+}
+public class ActionA : IRequestExceptionAction<Ping, InvalidOperationException>
+{
+    public ValueTask Execute(Ping request, InvalidOperationException ex, CancellationToken ct) => default;
+}
+public class ActionB : IRequestExceptionAction<Ping, InvalidOperationException>
+{
+    public ValueTask Execute(Ping request, InvalidOperationException ex, CancellationToken ct) => default;
+}";
+
+        var assembly = GeneratorTestHelper.EmitAndLoadAssembly(source);
+
+        // Reflect the generated registration entry point and invoke it TWICE against one collection —
+        // simulating a double-AddRogue() / duplicate-registrar invocation through the generated path.
+        var regType = assembly.GetType("SkathIO.Rogue.Generated.RogueGeneratedRegistration", throwOnError: true)!;
+        var register = regType.GetMethod(
+            "Register",
+            BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
+        Assert.NotNull(register);
+
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        var options = new SkathIO.Rogue.RogueOptions();
+        register.Invoke(null, new object[] { services, options });
+        register.Invoke(null, new object[] { services, options });
+
+        var descriptors = services.ToList();
+
+        // Single-instance services: exactly one descriptor each, even after two invocations.
+        AssertExactlyOne(descriptors, typeof(SkathIO.Rogue.RogueDispatcher));
+        AssertExactlyOne(descriptors, typeof(SkathIO.Rogue.IRoguePipelineInspector));
+        AssertExactlyOne(descriptors, typeof(SkathIO.Rogue.IEventPublisher));
+
+        var pingedType = assembly.GetType("Pinged", throwOnError: true)!;
+        var handlerAType = assembly.GetType("PingedHandlerA", throwOnError: true)!;
+        var handlerBType = assembly.GetType("PingedHandlerB", throwOnError: true)!;
+        var notifIface = typeof(SkathIO.Rogue.IEventHandler<>).MakeGenericType(pingedType);
+
+        // Notification handlers (TryAddEnumerable): BOTH distinct impls survive, each exactly once —
+        // not collapsed to one (that would be a wrong plain-TryAdd), not duplicated to four.
+        var notifDescriptors = descriptors
+            .Where(d => d.ServiceType == notifIface)
+            .ToList();
+        Assert.Equal(2, notifDescriptors.Count);
+        Assert.Single(notifDescriptors, d => d.ImplementationType == handlerAType);
+        Assert.Single(notifDescriptors, d => d.ImplementationType == handlerBType);
+
+        // The IReadOnlyList<IPipelineBehavior<Ping,string>> factory descriptor: exactly one.
+        var pingType = assembly.GetType("Ping", throwOnError: true)!;
+        var behaviorListIface = typeof(System.Collections.Generic.IReadOnlyList<>)
+            .MakeGenericType(typeof(SkathIO.Rogue.IPipelineBehavior<,>)
+                .MakeGenericType(pingType, typeof(string)));
+        AssertExactlyOne(descriptors, behaviorListIface);
+
+        // Exception actions (TryAddEnumerable, PD-45): both distinct impls survive, each exactly once.
+        // Plain TryAdd would have collapsed these to one (the bug that made
+        // Runtime_TwoExceptionActions_... fire only one action).
+        var actionAType = assembly.GetType("ActionA", throwOnError: true)!;
+        var actionBType = assembly.GetType("ActionB", throwOnError: true)!;
+        var actionIface = typeof(SkathIO.Rogue.IRequestExceptionAction<,>)
+            .MakeGenericType(pingType, typeof(System.InvalidOperationException));
+        var actionDescriptors = descriptors.Where(d => d.ServiceType == actionIface).ToList();
+        Assert.Equal(2, actionDescriptors.Count);
+        Assert.Single(actionDescriptors, d => d.ImplementationType == actionAType);
+        Assert.Single(actionDescriptors, d => d.ImplementationType == actionBType);
+    }
+
+    private static void AssertExactlyOne(
+        System.Collections.Generic.List<Microsoft.Extensions.DependencyInjection.ServiceDescriptor> descriptors,
+        System.Type serviceType)
+    {
+        int count = descriptors.Count(d => d.ServiceType == serviceType);
+        Assert.True(count == 1, $"expected exactly one descriptor for {serviceType}, found {count}");
     }
 
     /// <summary>

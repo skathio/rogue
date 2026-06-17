@@ -29,7 +29,13 @@ internal static class RegistrationEmitter
         // The generated file carries no `using` directives (ImplicitUsings is disabled and there
         // are no global usings), so every extension-method call is fully qualified through its
         // declaring static class, matching the style used in the dispatcher emitter.
-        const string SCE = "global::Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions";
+        //
+        // PD-38: registration is idempotent. Single-instance services use TryAdd{Scoped,Singleton,Transient}
+        // (the generic helpers live on ServiceCollectionDescriptorExtensions in
+        // Microsoft.Extensions.DependencyInjection.Extensions, available on every TFM via M.E.DI.Abstractions),
+        // and ServiceDescriptor-based registrations use TryAdd / TryAddEnumerable (see EmitDescriptor).
+        // Invoking a registrar's Register(...) any number of times therefore has the same effect as once.
+        const string SCDE = "global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions";
 
         // ── RogueDispatcher ────────────────────────────────────────────────────────────
         // Scoped: the dispatcher captures the IServiceProvider it is constructed with and resolves
@@ -41,17 +47,20 @@ internal static class RegistrationEmitter
         // scope, the dispatcher it resolves is bound to that same scope, so scoped handler
         // dependencies resolve correctly (required by FR-24 configured lifetimes / FR-35 scoped
         // handlers). The dispatcher itself is otherwise stateless; one instance per scope is cheap.
-        w.Line(SCE + ".AddScoped<global::SkathIO.Rogue.RogueDispatcher, global::SkathIO.Rogue.Generated.RogueDispatcherImpl>(services);");
+        // TryAddScoped preserves PD-14's scoped lifetime while making the registration idempotent.
+        w.Line(SCDE + ".TryAddScoped<global::SkathIO.Rogue.RogueDispatcher, global::SkathIO.Rogue.Generated.RogueDispatcherImpl>(services);");
         w.Line();
 
         // ── IRoguePipelineInspector ────────────────────────────────────────────────────
         // Singleton: the inspector holds a static dictionary built at generator time.
-        w.Line(SCE + ".AddSingleton<global::SkathIO.Rogue.IRoguePipelineInspector, global::SkathIO.Rogue.Generated.RoguePipelineInspector>(services);");
+        w.Line(SCDE + ".TryAddSingleton<global::SkathIO.Rogue.IRoguePipelineInspector, global::SkathIO.Rogue.Generated.RoguePipelineInspector>(services);");
         w.Line();
 
-        // ── INotificationPublisher ─────────────────────────────────────────────────────
-        // The publisher strategy comes from RogueOptions (set at runtime).
-        w.Line(SCE + ".AddSingleton<global::SkathIO.Rogue.INotificationPublisher>(services, options.NotificationPublisher);");
+        // ── IEventPublisher ────────────────────────────────────────────────────────────
+        // The publisher strategy comes from RogueOptions (set at runtime). TryAdd of the instance
+        // overload: the first registrar to run wins the publisher (consistent across registrars in a
+        // single process, where RogueOptions is the same instance via AddRogue).
+        w.Line(SCDE + ".TryAddSingleton<global::SkathIO.Rogue.IEventPublisher>(services, options.EventPublisher);");
         w.Line();
 
         // ── Request handlers ───────────────────────────────────────────────────────────
@@ -70,18 +79,19 @@ internal static class RegistrationEmitter
         // 3. Also register each behavior type itself so DI can resolve it (for factory pattern).
         EmitBehaviorRegistrations(w, models);
 
-        // ── Notification handlers ──────────────────────────────────────────────────────
-        foreach (var nh in models.NotificationHandlers)
+        // ── Event handlers ─────────────────────────────────────────────────────────────
+        foreach (var eh in models.EventHandlers)
         {
-            string notifFqn   = DispatcherEmitter.ToGlobalFqn(nh.NotificationFqn);
-            string handlerFqn = DispatcherEmitter.ToGlobalFqn(nh.TypeFqn);
-            string iface      = "global::SkathIO.Rogue.INotificationHandler<" + notifFqn + ">";
-            EmitDescriptor(w, iface, handlerFqn);
+            string eventFqn   = DispatcherEmitter.ToGlobalFqn(eh.EventFqn);
+            string handlerFqn = DispatcherEmitter.ToGlobalFqn(eh.TypeFqn);
+            string iface      = "global::SkathIO.Rogue.IEventHandler<" + eventFqn + ">";
+            // Multi-registration: Publish fans out to all handlers; dedup by impl type (PD-38).
+            EmitEnumerableDescriptor(w, iface, handlerFqn);
         }
 
-        if (models.NotificationHandlers.Count > 0) w.Line();
+        if (models.EventHandlers.Count > 0) w.Line();
 
-        // ── Stream handlers (net8+ only — IStreamRequestHandler exists only off ns2.0) ──
+        // ── Stream query handlers (net8+ only — IStreamQueryHandler exists only off ns2.0) ──
         if (models.StreamHandlers.Count > 0)
         {
             w.Line("#if !NETSTANDARD2_0");
@@ -90,7 +100,7 @@ internal static class RegistrationEmitter
                 string requestFqn = DispatcherEmitter.ToGlobalFqn(sh.RequestFqn);
                 string elementFqn = DispatcherEmitter.ToGlobalFqn(sh.ResponseElementFqn);
                 string handlerFqn = DispatcherEmitter.ToGlobalFqn(sh.TypeFqn);
-                string iface      = "global::SkathIO.Rogue.IStreamRequestHandler<" + requestFqn + ", " + elementFqn + ">";
+                string iface      = "global::SkathIO.Rogue.IStreamQueryHandler<" + requestFqn + ", " + elementFqn + ">";
                 EmitDescriptor(w, iface, handlerFqn);
             }
             w.Line("#endif");
@@ -114,25 +124,63 @@ internal static class RegistrationEmitter
     }
 
     /// <summary>
-    /// Emits a module initializer (net5+) that wires the DLL's <c>RogueRegistrationBridge.GeneratedRegistrar</c>
-    /// delegate to the consumer-compilation's <c>RogueGeneratedRegistration.Register</c>. This is how the
-    /// runtime <c>AddRogue</c> in <c>SkathIO.Rogue.dll</c> reaches the registration generated in the
-    /// consumer's compilation without a hard cross-assembly type reference (PD-15). On ns2.0 (no
-    /// <c>ModuleInitializer</c>), the consumer calls <c>RogueGeneratedRegistration.Register</c> explicitly.
-    /// Output: <c>RogueModuleInit.g.cs</c>.
+    /// Returns <c>true</c> when the compilation discovered nothing Rogue-registrable — no request
+    /// handlers, notification handlers, stream handlers, processors or behaviors. Such a compilation's
+    /// <c>RogueGeneratedRegistration.Register</c> would register only the empty dispatcher / inspector /
+    /// publisher, contributing nothing useful while actively conflicting with a populated registrar (its
+    /// empty <c>RogueDispatcherImpl</c> would shadow the real one under <c>TryAdd</c>'s first-wins — see
+    /// <see cref="EmitModuleInit"/>).
     /// </summary>
-    internal static string EmitModuleInit()
+    private static bool HasNothingToRegister(DiscoveredModels models)
+        => models.Handlers.Count == 0
+        && models.EventHandlers.Count == 0
+        && models.StreamHandlers.Count == 0
+        && models.Processors.Count == 0
+        && models.Behaviors.Count == 0;
+
+    /// <summary>
+    /// Emits a module initializer (net5+) that appends the consumer-compilation's
+    /// <c>RogueGeneratedRegistration.Register</c> to the DLL's append-only
+    /// <c>RogueRegistrationBridge</c> registry via <c>RogueRegistrationBridge.Register(...)</c>
+    /// (PD-33/PD-38 — the non-obsolete entry point, so freshly-generated consumers never trip the
+    /// <c>[Obsolete]</c> <c>GeneratedRegistrar</c> warning under <c>TreatWarningsAsErrors</c>). This is
+    /// how the runtime <c>AddRogue</c> in <c>SkathIO.Rogue.dll</c> reaches the registration generated in
+    /// the consumer's compilation without a hard cross-assembly type reference (PD-15). On ns2.0 (no
+    /// <c>ModuleInitializer</c>), the consumer calls <c>RogueGeneratedRegistration.Register</c> explicitly.
+    /// <para>
+    /// PD-38 amendment (see decisions.md PD-45): the module initializer is suppressed for a compilation
+    /// that discovered nothing to register. Under PD-33's append-only registry <em>every</em> registrar
+    /// runs, and under PD-38's idempotent <c>TryAddScoped&lt;RogueDispatcher, RogueDispatcherImpl&gt;</c>
+    /// the <em>first</em> dispatcher registration wins. <c>SkathIO.Rogue.dll</c> itself runs the generator
+    /// over its own (handler-less) source and would otherwise emit a module initializer that appends an
+    /// <em>empty</em> registrar — present in <em>every</em> real consumer's process — whose empty
+    /// <c>RogueDispatcherImpl</c> could win the race and shadow the consumer's populated dispatcher
+    /// ("no handler registered" at dispatch). Suppressing the empty registrar removes that conflict; a
+    /// genuinely handler-less consumer still gets a working <c>RogueDispatcher</c> from
+    /// <c>AddRogue</c>'s fallback registration. Output: <c>RogueModuleInit.g.cs</c> (empty when suppressed).
+    /// </para>
+    /// </summary>
+    internal static string EmitModuleInit(DiscoveredModels models)
     {
         var w = new CodeWriter();
         w.Line("#if !NETSTANDARD2_0");
+
+        if (HasNothingToRegister(models))
+        {
+            // Nothing to contribute: do not append an empty registrar (it would only register the empty
+            // dispatcher/inspector/publisher and could shadow a populated registrar — PD-45).
+            w.Line("#endif");
+            return w.ToString();
+        }
+
         w.Line("namespace SkathIO.Rogue.Generated");
         w.Line("{");
         w.Indent();
         w.Open("internal static class RogueModuleInit");
         w.Line("[global::System.Runtime.CompilerServices.ModuleInitializer]");
         w.Open("internal static void Init()");
-        w.Line("global::SkathIO.Rogue.RogueRegistrationBridge.GeneratedRegistrar =");
-        w.Line("    (svc, opts) => global::SkathIO.Rogue.Generated.RogueGeneratedRegistration.Register(svc, opts);");
+        w.Line("global::SkathIO.Rogue.RogueRegistrationBridge.Register(");
+        w.Line("    (svc, opts) => global::SkathIO.Rogue.Generated.RogueGeneratedRegistration.Register(svc, opts));");
         w.Close(); // Init
         w.Close(); // RogueModuleInit
         w.Dedent();
@@ -145,22 +193,48 @@ internal static class RegistrationEmitter
     // Lifetime-aware registration helper
     // ────────────────────────────────────────────────────────────────────────────────────
 
+    private const string SCDE_FQN =
+        "global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions";
+
     /// <summary>
-    /// Emits a <c>services.Add(new ServiceDescriptor(serviceType, implType, options.Lifetime))</c>
-    /// line so the consumer's <see cref="RogueOptions.Lifetime"/> is honoured for handlers,
-    /// behaviors, notification handlers and processors (Fix 3 / FR — RogueOptions.Lifetime).
-    /// The dispatcher, inspector and publisher are registered as singletons separately and are
-    /// not lifetime-controlled.
+    /// Emits an idempotent single-registration (PD-38): <c>ServiceCollectionDescriptorExtensions.TryAdd(
+    /// services, new ServiceDescriptor(serviceType, implType, options.Lifetime))</c>. <c>TryAdd</c>
+    /// no-ops if the <em>service type</em> is already registered, so re-invoking the registrar (a
+    /// double-<c>AddRogue()</c> or a duplicate append) does not double-register. The consumer's
+    /// <see cref="RogueOptions.Lifetime"/> is honoured (Fix 3 / FR — RogueOptions.Lifetime). Used for
+    /// kinds the dispatcher resolves via singular <c>GetService&lt;&gt;</c> — exactly one implementation
+    /// per service type is correct: request handlers (ROGUE002 forbids duplicates), stream handlers,
+    /// behavior self-registration, and the <c>IReadOnlyList&lt;IPipelineBehavior&lt;,&gt;&gt;</c> factory.
+    /// Multi-registration kinds the dispatcher resolves via <c>GetServices&lt;&gt;</c> (notification
+    /// handlers and all four processor kinds) use <see cref="EmitEnumerableDescriptor"/> instead (PD-45).
     /// </summary>
     private static void EmitDescriptor(CodeWriter w, string serviceTypeFqn, string implTypeFqn)
     {
         w.Line(
-            "services.Add(new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(" +
+            SCDE_FQN + ".TryAdd(services, new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(" +
             "typeof(" + serviceTypeFqn + "), typeof(" + implTypeFqn + "), options.Lifetime));");
     }
 
     /// <summary>Emits a self-registration (service type == implementation type) honouring lifetime.</summary>
     private static void EmitDescriptor(CodeWriter w, string typeFqn) => EmitDescriptor(w, typeFqn, typeFqn);
+
+    /// <summary>
+    /// Emits an idempotent multi-registration (PD-38/PD-45): <c>ServiceCollectionDescriptorExtensions.TryAddEnumerable(
+    /// services, ServiceDescriptor.Describe(serviceType, implType, options.Lifetime))</c>. Used for every
+    /// kind the dispatcher resolves via <c>GetServices&lt;&gt;</c> and fans out across: notification
+    /// handlers (<c>Publish</c> calls all <c>INotificationHandler&lt;T&gt;</c>) and all four processor
+    /// kinds (pre/post processors and exception handlers/actions — each runs every registered impl).
+    /// Plain <c>TryAdd</c> would be wrong here (it keeps only the first and silently drops the rest).
+    /// <c>TryAddEnumerable</c> dedups by <em>implementation type</em>, so re-invoking the registrar does
+    /// not add the same impl twice, while two <em>distinct</em> impls for the same closed interface both
+    /// survive.
+    /// </summary>
+    private static void EmitEnumerableDescriptor(CodeWriter w, string serviceTypeFqn, string implTypeFqn)
+    {
+        w.Line(
+            SCDE_FQN + ".TryAddEnumerable(services, global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Describe(" +
+            "typeof(" + serviceTypeFqn + "), typeof(" + implTypeFqn + "), options.Lifetime));");
+    }
 
     // ────────────────────────────────────────────────────────────────────────────────────
     // Handler registration
@@ -172,16 +246,31 @@ internal static class RegistrationEmitter
         string requestFqn = DispatcherEmitter.ToGlobalFqn(handler.RequestFqn);
         string handlerFqn = DispatcherEmitter.ToGlobalFqn(handler.TypeFqn);
 
+        // Register/resolve lockstep (PD-43/PD-48): the service interface here must match the one the
+        // dispatcher resolves with GetRequiredService (DispatcherEmitter.EmitSendMethod /
+        // AdapterHandlerIface). For MediatR-adapter-mapped handlers (PD-48) that is the adapter's OWN
+        // Compatibility.IRequestHandler<TReq,TResp> / IRequestHandler<TReq> — the interface the type
+        // implements — NOT the core ICommandHandler/IQueryHandler (the adapter does not implement those).
+        if (handler.IsAdapterMapped)
+        {
+            string iface = isVoid
+                ? "global::SkathIO.Rogue.Compatibility.IRequestHandler<" + requestFqn + ">"
+                : "global::SkathIO.Rogue.Compatibility.IRequestHandler<" + requestFqn + ", " + DispatcherEmitter.ToGlobalFqn(handler.ResponseFqn!) + ">";
+            EmitDescriptor(w, iface, handlerFqn);
+            return;
+        }
+
         if (isVoid)
         {
-            // IRequestHandler<TReq> (no-response path)
-            string iface = "global::SkathIO.Rogue.IRequestHandler<" + requestFqn + ">";
+            // Void command (ICommandHandler<TCommand>) — only a command can be void.
+            string iface = "global::SkathIO.Rogue.ICommandHandler<" + requestFqn + ">";
             EmitDescriptor(w, iface, handlerFqn);
         }
         else
         {
             string responseFqn = DispatcherEmitter.ToGlobalFqn(handler.ResponseFqn!);
-            string iface       = "global::SkathIO.Rogue.IRequestHandler<" + requestFqn + ", " + responseFqn + ">";
+            string ifaceName   = handler.Kind == HandlerKind.Query ? "IQueryHandler" : "ICommandHandler";
+            string iface       = "global::SkathIO.Rogue." + ifaceName + "<" + requestFqn + ", " + responseFqn + ">";
             EmitDescriptor(w, iface, handlerFqn);
         }
     }
@@ -316,8 +405,10 @@ internal static class RegistrationEmitter
 
         // Register IReadOnlyList<TBehaviorIface> via an expression-bodied factory. The list itself
         // follows the consumer's configured lifetime (options.Lifetime); its elements are resolved
-        // from the container so they keep their own registered lifetime.
-        w.Line("services.Add(new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
+        // from the container so they keep their own registered lifetime. TryAdd (PD-38) makes the
+        // factory registration idempotent — re-invoking the registrar does not add a second factory
+        // for the same IReadOnlyList<TBehaviorIface> service type (which would duplicate the pipeline).
+        w.Line(SCDE_FQN + ".TryAdd(services, new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
         w.Indent();
         w.Line("typeof(" + behaviorListType + "),");
         w.Line("sp => new " + behaviorIface + "[]");
@@ -332,6 +423,7 @@ internal static class RegistrationEmitter
         }
         w.Dedent();
         w.Line("},");
+        // Closes: ServiceDescriptor(...) ')', then TryAdd(services, ...) ')', plus the trailing ';'.
         w.Line("options.Lifetime));");
         w.Dedent();
         w.Line();
@@ -343,6 +435,13 @@ internal static class RegistrationEmitter
 
     private static void EmitProcessorRegistration(CodeWriter w, ProcessorModel p)
     {
+        // PD-45: ALL four processor kinds are multi-registration (fan-out). The dispatcher resolves
+        // each via GetServices<...> (DispatcherEmitter lines ~364/366/491/513) and runs EVERY registered
+        // implementation — multiple pre/post processors, and multiple exception handlers/actions for the
+        // same (request[, response], exception) are all expected to fire. So they route through
+        // TryAddEnumerable (dedup by impl type) — NOT plain TryAdd, which would keep only the first and
+        // silently drop the rest. (PD-38 mis-grouped exception-handler/-action under single-TryAdd; the
+        // GetServices resolution makes them enumerable, same category as notification handlers.)
         string implFqn    = DispatcherEmitter.ToGlobalFqn(p.TypeFqn);
         string requestFqn = DispatcherEmitter.ToGlobalFqn(p.RequestFqn);
 
@@ -351,7 +450,7 @@ internal static class RegistrationEmitter
             case ProcessorKind.Pre:
             {
                 string iface = "global::SkathIO.Rogue.IRequestPreProcessor<" + requestFqn + ">";
-                EmitDescriptor(w, iface, implFqn);
+                EmitEnumerableDescriptor(w, iface, implFqn);
                 break;
             }
             case ProcessorKind.Post:
@@ -362,7 +461,7 @@ internal static class RegistrationEmitter
                 // pass-2 compile-verification tests (review 2026-06-07).
                 string responseFqn = DispatcherEmitter.ToGlobalFqn(p.ResponseFqn ?? "SkathIO.Rogue.Unit");
                 string iface       = "global::SkathIO.Rogue.IRequestPostProcessor<" + requestFqn + ", " + responseFqn + ">";
-                EmitDescriptor(w, iface, implFqn);
+                EmitEnumerableDescriptor(w, iface, implFqn);
                 break;
             }
             case ProcessorKind.ExceptionHandler:
@@ -370,14 +469,14 @@ internal static class RegistrationEmitter
                 string responseFqn  = DispatcherEmitter.ToGlobalFqn(p.ResponseFqn ?? "SkathIO.Rogue.Unit");
                 string exFqn        = DispatcherEmitter.ToGlobalFqn(p.ExceptionFqn ?? "System.Exception");
                 string iface        = "global::SkathIO.Rogue.IRequestExceptionHandler<" + requestFqn + ", " + responseFqn + ", " + exFqn + ">";
-                EmitDescriptor(w, iface, implFqn);
+                EmitEnumerableDescriptor(w, iface, implFqn);
                 break;
             }
             case ProcessorKind.ExceptionAction:
             {
                 string exFqn  = DispatcherEmitter.ToGlobalFqn(p.ExceptionFqn ?? "System.Exception");
                 string iface  = "global::SkathIO.Rogue.IRequestExceptionAction<" + requestFqn + ", " + exFqn + ">";
-                EmitDescriptor(w, iface, implFqn);
+                EmitEnumerableDescriptor(w, iface, implFqn);
                 break;
             }
         }

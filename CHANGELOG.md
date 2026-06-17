@@ -24,9 +24,11 @@ and wired at compile time, with no runtime reflection or assembly scanning.
 - **Source-generated dispatch.** Compile-time discovery of handlers; generated dispatcher routes
   requests via a `switch`, not reflection. `AddRogue()` one-call registration wired through a
   module-initializer bridge so the generator runs in the consumer's compilation.
-- **Message shapes.** `IRequest<T>` / `IRequest`, CQRS aliases `IQuery<T>` / `ICommand<T>` /
-  `ICommand`, `INotification` with handler fan-out, and `IStreamRequest<T>` streaming
-  (`IAsyncEnumerable<T>`, net8.0+).
+- **Message shapes.** A CQS-explicit core: `IQuery<T>` (read), `ICommand<T>` / `ICommand`
+  (write, with/without response), `IEvent` with handler fan-out, and `IStreamQuery<T>` streaming
+  (`IAsyncEnumerable<T>`, net8.0+) — each an independent contract. The MediatR-shaped
+  `IRequest<T>` / `IRequest` / `INotification` / `IStreamRequest<T>` surface lives in the
+  `SkathIO.Rogue.MediatR` compatibility adapter for drop-in migration.
 - **Dispatch entry points.** `ISender`, `IPublisher`, `IMediator`; opt-in untyped `Send(object)` /
   `Publish(object)` via `RogueOptions.EnableObjectDispatch`.
 - **Pipeline behaviors.** `IPipelineBehavior<,>` and `IStreamPipelineBehavior<,>`, woven at compile
@@ -39,9 +41,12 @@ and wired at compile time, with no runtime reflection or assembly scanning.
   path for processor-free requests and reflection-free exception type matching.
 - **Notification publishers.** `ForeachAwaitPublisher` (default) and `WhenAllPublisher`, selectable
   via `RogueOptions.NotificationPublisher`.
-- **Compile-time diagnostics.** `ROGUE001`–`ROGUE007` surface wiring mistakes (missing/duplicate
-  handler, response-type mismatch, non-constructable handler, unsupported open-generic request, and an
-  `IMediator` injection suggestion) as build diagnostics.
+- **Compile-time diagnostics.** The generator surfaces wiring mistakes as build diagnostics:
+  `ROGUE001`–`ROGUE006` (no handler / multiple handlers / response-type mismatch / non-constructable
+  handler / abstract-or-no-public-ctor / unsupported open-generic request), `ROGUE010` (an `IMediator`
+  injection suggestion), `ROGUE011` (a type implements multiple CQS contracts — the clean-break
+  ambiguity), and `ROGUE012` (a MediatR-adapter command-vs-query mapping conflict). `ROGUE007` is
+  intentionally unused (a removed-from-scope id, never reissued).
 - **Logging integration.** `LoggingBehavior` with request/timing logs; payload logging **off by
   default** for safety, opt-in per request via `[LogPayload]` or globally via `LoggingOptions`.
 - **Validation integration.** `ValidationBehavior` aggregates all `IValidator<TRequest>` and throws
@@ -50,7 +55,9 @@ and wired at compile time, with no runtime reflection or assembly scanning.
   `"SkathIO.Rogue"`, gated by `RogueOptions.EnableTelemetry` (zero overhead when off).
 - **MediatR migration tooling.** Runtime compatibility shim and a Roslyn analyzer with code-fixes
   (`ROGM001` MediatR using directive, `ROGM002` `Task`→`ValueTask` return type, `ROGM003` open-generic
-  request manual-migration, `ROGM004` `AddMediatR`→`AddRogue` forwarding) plus a
+  request manual-migration, `ROGM004` `AddMediatR`→`AddRogue` forwarding, `ROGM005` ambiguous
+  command-vs-query intent — migrated to `ICommand`, flagged for manual review, and `ROGM006`
+  MediatR marker/handler interface → CQS contract rewrite) plus a
   [migration guide](docs/migration-guide.md) and before/after sample.
 - **AOT + trimming.** AOT sample publishes with no IL trim or AOT warnings.
 - **Benchmarks.** BenchmarkDotNet suite comparing against MediatR 12.4.1 and martinothamar/Mediator

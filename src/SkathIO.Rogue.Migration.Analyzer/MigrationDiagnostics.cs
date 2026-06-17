@@ -41,4 +41,22 @@ internal static class MigrationDiagnostics
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         helpLinkUri: HelpLinkBase + "ROGM004");
+
+    public static readonly DiagnosticDescriptor AmbiguousCommandOrQuery = new(
+        id: "ROGM005",
+        title: "Ambiguous command-vs-query intent — migrated to ICommand, review manually",
+        messageFormat: "'{0}' is a response-bearing MediatR request whose command-vs-query intent could not be inferred from its name. It was migrated to the safe default ICommand<T>. If it only reads state, change it to IQuery<T> (and its handler to IQueryHandler<,>) — never silently mis-mapped.",
+        category: "Migration",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGM005");
+
+    public static readonly DiagnosticDescriptor MediatRMarkerType = new(
+        id: "ROGM006",
+        title: "Migrate MediatR marker/handler interface to the CQS contract",
+        messageFormat: "'{0}' implements the MediatR-shaped '{1}' — migrate it to the SkathIO.Rogue CQS contract (ICommand/IQuery/IEvent + handler)",
+        category: "Migration",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGM006");
 }

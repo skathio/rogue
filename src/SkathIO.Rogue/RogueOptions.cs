@@ -10,8 +10,8 @@ public sealed class RogueOptions
     /// <summary>Default handler/behavior lifetime. Default: <see cref="ServiceLifetime.Transient"/>.</summary>
     public ServiceLifetime Lifetime { get; set; } = ServiceLifetime.Transient;
 
-    /// <summary>Notification publish strategy. Default: <see cref="ForeachAwaitPublisher"/>.</summary>
-    public INotificationPublisher NotificationPublisher { get; set; } = new ForeachAwaitPublisher();
+    /// <summary>Event publish strategy. Default: <see cref="ForeachAwaitPublisher"/>.</summary>
+    public IEventPublisher EventPublisher { get; set; } = new ForeachAwaitPublisher();
 
     /// <summary>Whether to enable the <c>object</c>-typed dispatch path. Default: false.</summary>
     public bool EnableObjectDispatch { get; set; }

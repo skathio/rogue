@@ -99,7 +99,11 @@ runtime exceptions:
 | `ROGUE004` | Handler may not be constructable from DI. |
 | `ROGUE005` | Handler or behavior is abstract or has no public constructor. |
 | `ROGUE006` | Open-generic request type is not supported by the generator. |
-| `ROGUE007` | Suggestion: inject `ISender`/`IPublisher` instead of `IMediator`. |
+| `ROGUE010` | Suggestion: inject `ISender`/`IPublisher` instead of `IMediator`. |
+| `ROGUE011` | A type implements multiple CQS contracts (ambiguous under the CQS-explicit core). |
+| `ROGUE012` | A MediatR-adapter request has a command-vs-query mapping conflict. |
+
+(`ROGUE007` is intentionally unused — a removed-from-scope id, never reissued.)
 
 If a dispatch throws `RogueUnregisteredRequestException` at runtime, the generator did not run in the
 dispatching project's compilation. With the NuGet package this is automatic; with a **project

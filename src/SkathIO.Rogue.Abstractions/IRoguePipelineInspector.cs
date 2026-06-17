@@ -7,7 +7,13 @@ namespace SkathIO.Rogue;
 public interface IRoguePipelineInspector
 {
     /// <summary>Returns the ordered list of behaviors for <typeparamref name="TRequest"/>.</summary>
-    IReadOnlyList<BehaviorInfo> GetPipeline<TRequest>() where TRequest : IBaseRequest;
+    /// <remarks>
+    /// Constrained on <c>notnull</c> rather than a shared message marker: under the CQS clean break
+    /// (PD-40) there is no common <c>IRequest</c>/<c>IBaseRequest</c> base shared by
+    /// <see cref="ICommand{TResponse}"/> / <see cref="IQuery{TResponse}"/>, so the type parameter is
+    /// the command/query type directly. Lookups for an unknown type return an empty list.
+    /// </remarks>
+    IReadOnlyList<BehaviorInfo> GetPipeline<TRequest>() where TRequest : notnull;
 
     /// <summary>Returns the ordered list of behaviors for the given request type.</summary>
     IReadOnlyList<BehaviorInfo> GetPipeline(Type requestType);

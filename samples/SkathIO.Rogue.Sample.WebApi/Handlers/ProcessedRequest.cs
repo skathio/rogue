@@ -9,13 +9,13 @@ namespace SkathIO.Rogue.Sample.WebApi;
 /// pre/post processors each record into the scoped <see cref="IHandlerCallTracker"/> so a test can
 /// assert that all three ran, in deterministic order, through the generated dispatch loop.
 /// </summary>
-public sealed record ProcessedRequest(string Value) : IRequest<ProcessedResponse>;
+public sealed record ProcessedRequest(string Value) : ICommand<ProcessedResponse>;
 
 /// <summary>Response for <see cref="ProcessedRequest"/>.</summary>
 public sealed record ProcessedResponse(string Value);
 
 /// <summary>Handler for <see cref="ProcessedRequest"/>; records its own invocation (FR-25).</summary>
-public sealed class ProcessedRequestHandler : IRequestHandler<ProcessedRequest, ProcessedResponse>
+public sealed class ProcessedRequestHandler : ICommandHandler<ProcessedRequest, ProcessedResponse>
 {
     /// <summary>Marker recorded when the handler runs.</summary>
     public const string Marker = "processed:handler";

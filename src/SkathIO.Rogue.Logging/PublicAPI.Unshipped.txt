@@ -1,10 +1,1 @@
 #nullable enable
-SkathIO.Rogue.Logging.LoggingBehavior<TRequest, TResponse>
-SkathIO.Rogue.Logging.LoggingBehavior<TRequest, TResponse>.Handle(TRequest request, SkathIO.Rogue.RequestHandlerDelegate<TResponse>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
-SkathIO.Rogue.Logging.LoggingBehavior<TRequest, TResponse>.LoggingBehavior(Microsoft.Extensions.Logging.ILogger<SkathIO.Rogue.Logging.LoggingBehavior<TRequest, TResponse>!>! logger, SkathIO.Rogue.Logging.LoggingOptions? options = null) -> void
-SkathIO.Rogue.Logging.LoggingOptions
-SkathIO.Rogue.Logging.LoggingOptions.LoggingOptions() -> void
-SkathIO.Rogue.Logging.LoggingOptions.LogPayload.get -> bool
-SkathIO.Rogue.Logging.LoggingOptions.LogPayload.set -> void
-SkathIO.Rogue.Logging.LogPayloadAttribute
-SkathIO.Rogue.Logging.LogPayloadAttribute.LogPayloadAttribute() -> void

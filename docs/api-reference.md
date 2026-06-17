@@ -13,7 +13,7 @@ the streaming types are net8.0+ only) are noted inline.
 | `SkathIO.Rogue.Abstractions` | Contracts only: the message/handler/behavior interfaces, `Unit`, marker types. Depend on this from layers that define messages but should not pull the runtime. |
 | `SkathIO.Rogue.Logging` | `LoggingBehavior`, `LoggingOptions`, `[LogPayload]`. |
 | `SkathIO.Rogue.Validation.FluentValidation` | `ValidationBehavior` over FluentValidation. |
-| `SkathIO.Rogue.MediatR` | MediatR compatibility shim + migration analyzer (ROGM001–004) bundled as an analyzer asset. |
+| `SkathIO.Rogue.MediatR` | MediatR compatibility shim + migration analyzer (ROGM001–006) bundled as an analyzer asset. |
 
 ## Abstractions (`SkathIO.Rogue.Abstractions`)
 
@@ -100,6 +100,7 @@ the streaming types are net8.0+ only) are noted inline.
 
 ## Diagnostics
 
-Compile-time generator diagnostics: `ROGUE001`–`ROGUE007` (see
-[getting-started](getting-started.md#troubleshooting)). Migration analyzer diagnostics:
-`ROGM001`–`ROGM004` (see [migration-guide](migration-guide.md)).
+Compile-time generator diagnostics: `ROGUE001`–`ROGUE006` + `ROGUE010`/`ROGUE011`/`ROGUE012`
+(`ROGUE007` is intentionally unused) — see
+[getting-started](getting-started.md#troubleshooting). Migration analyzer diagnostics:
+`ROGM001`–`ROGM006` (see [migration-guide](migration-guide.md)).

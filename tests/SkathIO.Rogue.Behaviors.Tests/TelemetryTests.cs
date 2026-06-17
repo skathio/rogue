@@ -10,16 +10,16 @@ namespace SkathIO.Rogue.Behaviors.Tests;
 
 // A handled request so the dispatch path can run end-to-end. The generator auto-weaves the
 // referenced open behaviors (Logging/Validation) onto it, so the dispatch test registers logging.
-public sealed class Ping : IRequest<string> { }
-public sealed class PingHandler : IRequestHandler<Ping, string>
+public sealed class Ping : ICommand<string> { }
+public sealed class PingHandler : ICommandHandler<Ping, string>
 {
     public ValueTask<string> Handle(Ping request, CancellationToken ct) => new ValueTask<string>("pong");
 }
 
 // A request whose handler throws with a payload-bearing message, used to prove the dispatch path
 // tags the span status with the exception *type name* — never the message (NFR-SEC-2 / D6 leak fix).
-public sealed class Boom : IRequest<string> { }
-public sealed class BoomHandler : IRequestHandler<Boom, string>
+public sealed class Boom : ICommand<string> { }
+public sealed class BoomHandler : ICommandHandler<Boom, string>
 {
     public const string SecretMessage = "secret-payload-fragment user@evil.example";
     public ValueTask<string> Handle(Boom request, CancellationToken ct) =>
@@ -51,6 +51,40 @@ public sealed class TelemetryTests : IDisposable
 
         // No activity started anywhere on the dispatch path when telemetry is off.
         Assert.Null(Activity.Current);
+    }
+
+    // FR-14 stability gate (11.6): the ActivitySource and Meter names are a published export contract
+    // — dashboards/collectors key off them, so they must not drift. Both are the single documented
+    // value "SkathIO.Rogue" exposed via RogueTelemetry.Name. A subscribed ActivityListener confirms the
+    // live ActivitySource reports exactly that name (the Meter shares the same Name constant by
+    // construction — see RogueTelemetry.cs).
+    [Fact]
+    public void ActivitySourceAndMeter_UseStableDocumentedName()
+    {
+        Assert.Equal("SkathIO.Rogue", RogueTelemetry.Name);
+
+        RogueTelemetry.Enabled = true;
+        string? observedSourceName = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source =>
+            {
+                if (source.Name == RogueTelemetry.Name)
+                {
+                    observedSourceName = source.Name;
+                    return true;
+                }
+                return false;
+            },
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStarted = _ => { },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var scope = RogueTelemetry.StartDispatch<Ping>();
+        RogueTelemetry.StopDispatch(scope);
+
+        Assert.Equal("SkathIO.Rogue", observedSourceName);
     }
 
     [Fact]
@@ -138,6 +172,47 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal("rogue.dispatch", activity.OperationName);
         Assert.Equal(nameof(Ping), activity.GetTagItem("request.type"));
         Assert.Equal("success", activity.GetTagItem("outcome"));
+    }
+
+    // FR-14 / NFR-12 (11.6 re-verify): the no-op telemetry path the D5-reshaped Send_X invokes —
+    // `RogueTelemetry.StartDispatch<TRequest>()` + `StopDispatch(scope)` — allocates ZERO heap bytes
+    // when no ITelemetryListener is subscribed, on BOTH no-op gates:
+    //   (1) Enabled == false → master gate short-circuits, returns null;
+    //   (2) Enabled == true but no ActivityListener / MeterListener subscribed → HasListeners() is
+    //       false and the meter instruments are disabled, so the scope is still null.
+    // Either way the generated dispatcher takes its 0-alloc fast path (no Activity started, no
+    // DispatchScope materialized). This is the telemetry half of AC-C/PD-31's 0-byte guarantee,
+    // re-confirmed on the CQS-keyed reshaped dispatch (typed against the Ping command). Mirrors
+    // Phase 9.2's Send_PingRequest_NoBehaviorsSyncCompletingPath_AllocatesZeroBytes measurement
+    // style (warm the JIT, then measure a tight loop with GC.GetAllocatedBytesForCurrentThread).
+    [Theory]
+    [InlineData(false)] // master gate off (typical production no-op default)
+    [InlineData(true)]  // master gate on but no listener subscribed (the HasListeners()==false branch)
+    public void StartStopDispatch_NoListenerSubscribed_AllocatesZeroBytes(bool enabled)
+    {
+        RogueTelemetry.Enabled = enabled;
+
+        // No ActivityListener and no MeterListener are registered in this test, so the cheap
+        // subscriber check returns null and the shim is fully inert.
+        const int iterations = 1000;
+
+        // Warm up: settle tiered JIT before measuring (matches the Phase 9.2 0-alloc harness).
+        for (int i = 0; i < iterations; i++)
+        {
+            var warm = RogueTelemetry.StartDispatch<Ping>();
+            Assert.Null(warm);
+            RogueTelemetry.StopDispatch(warm);
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+        {
+            DispatchScope? scope = RogueTelemetry.StartDispatch<Ping>();
+            RogueTelemetry.StopDispatch(scope);
+        }
+        long delta = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(0L, delta);
     }
 
     // D6 leak fix, end-to-end: when a handler throws, the generated dispatch path stops the scope

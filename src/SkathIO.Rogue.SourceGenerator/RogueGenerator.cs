@@ -74,7 +74,7 @@ public sealed class RogueGenerator : IIncrementalGenerator
                 SourceText.From(fileHeader + InspectorEmitter.Emit(models, emitOpts), Encoding.UTF8));
 
             spc.AddSource("RogueModuleInit.g.cs",
-                SourceText.From(fileHeader + RegistrationEmitter.EmitModuleInit(), Encoding.UTF8));
+                SourceText.From(fileHeader + RegistrationEmitter.EmitModuleInit(models), Encoding.UTF8));
         });
     }
 
@@ -116,51 +116,103 @@ public sealed class RogueGenerator : IIncrementalGenerator
             // Build the fully-qualified metadata name: "Namespace.TypeName`arity"
             string ifaceName = GetMetadataFqn(iface.OriginalDefinition);
 
-            // ── Request handlers ──────────────────────────────────────────────────
-            if (ifaceName is WellKnownTypeNames.IRequestHandler2
-                          or WellKnownTypeNames.ICommandHandler2
-                          or WellKnownTypeNames.IQueryHandler2)
+            // ── CQS handlers (PD-40 clean break — primary, discovered independently) ──
+            // ICommandHandler<TCommand, TResponse> and IQueryHandler<TQuery, TResponse> are distinct
+            // contracts with no shared base; the kind is recorded so the dispatcher emits the matching
+            // ICommand<T>/IQuery<T> typed reference.
+            if (ifaceName == WellKnownTypeNames.ICommandHandler2 && iface.TypeArguments.Length == 2)
             {
-                if (iface.TypeArguments.Length == 2)
-                {
-                    return new DiscoveredItem.Handler(new HandlerModel(
-                        TypeFqn: GetFqn(typeSymbol),
-                        RequestFqn: GetFqn(iface.TypeArguments[0]),
-                        ResponseFqn: GetFqn(iface.TypeArguments[1]),
-                        Accessibility: GetAccessibility(typeSymbol),
-                        CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
-                        IsAbstract: typeSymbol.IsAbstract,
-                        HasPublicCtor: HasPublicConstructor(typeSymbol)));
-                }
+                return new DiscoveredItem.Handler(new HandlerModel(
+                    TypeFqn: GetFqn(typeSymbol),
+                    RequestFqn: GetFqn(iface.TypeArguments[0]),
+                    ResponseFqn: GetFqn(iface.TypeArguments[1]),
+                    Kind: HandlerKind.Command,
+                    Accessibility: GetAccessibility(typeSymbol),
+                    CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
+                    IsAbstract: typeSymbol.IsAbstract,
+                    HasPublicCtor: HasPublicConstructor(typeSymbol)));
             }
-            else if (ifaceName is WellKnownTypeNames.IRequestHandler1
-                               or WellKnownTypeNames.ICommandHandler1)
+            else if (ifaceName == WellKnownTypeNames.IQueryHandler2 && iface.TypeArguments.Length == 2)
+            {
+                return new DiscoveredItem.Handler(new HandlerModel(
+                    TypeFqn: GetFqn(typeSymbol),
+                    RequestFqn: GetFqn(iface.TypeArguments[0]),
+                    ResponseFqn: GetFqn(iface.TypeArguments[1]),
+                    Kind: HandlerKind.Query,
+                    Accessibility: GetAccessibility(typeSymbol),
+                    CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
+                    IsAbstract: typeSymbol.IsAbstract,
+                    HasPublicCtor: HasPublicConstructor(typeSymbol)));
+            }
+            else if (ifaceName == WellKnownTypeNames.ICommandHandler1 && iface.TypeArguments.Length == 1)
+            {
+                // Void command (ICommandHandler<TCommand>): no response type.
+                return new DiscoveredItem.Handler(new HandlerModel(
+                    TypeFqn: GetFqn(typeSymbol),
+                    RequestFqn: GetFqn(iface.TypeArguments[0]),
+                    ResponseFqn: null,
+                    Kind: HandlerKind.Command,
+                    Accessibility: GetAccessibility(typeSymbol),
+                    CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
+                    IsAbstract: typeSymbol.IsAbstract,
+                    HasPublicCtor: HasPublicConstructor(typeSymbol)));
+            }
+            // ── MediatR-adapter request handlers (PD-43 amendment / PD-48 adapter-mapping rule) ──
+            // A class implementing the adapter's Compatibility.IRequestHandler<TReq,TResp> /
+            // IRequestHandler<TReq> is mapped onto the CQS dispatch path by the F8 convention. The
+            // adapter surface is SELF-CONTAINED (it does NOT extend the core ICommandHandler/IQueryHandler
+            // — see Compatibility/IRequest.cs / IRequestHandler.cs), so these branches are the ONLY way an
+            // adapter handler is discovered; there is no double-count with the core CQS branches above.
+            //
+            // F8 mapping: an IRequestHandler<TReq,TResp> (has response) defaults to ICommand<TResp>; if
+            // TReq carries [MapAsQuery] it maps to IQuery<TResp>. An IRequestHandler<TReq> (no response)
+            // maps to a void ICommand; [MapAsQuery] there is a conflict surfaced as ROGUE012 (recorded
+            // separately, below) — the handler is still mapped (to a void command) so it is not dropped.
+            else if (ifaceName == WellKnownTypeNames.AdapterIRequestHandler2 && iface.TypeArguments.Length == 2)
+            {
+                bool mapAsQuery = HasMapAsQueryAttribute(iface.TypeArguments[0]);
+                return new DiscoveredItem.Handler(new HandlerModel(
+                    TypeFqn: GetFqn(typeSymbol),
+                    RequestFqn: GetFqn(iface.TypeArguments[0]),
+                    ResponseFqn: GetFqn(iface.TypeArguments[1]),
+                    Kind: mapAsQuery ? HandlerKind.Query : HandlerKind.Command,
+                    Accessibility: GetAccessibility(typeSymbol),
+                    CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
+                    IsAbstract: typeSymbol.IsAbstract,
+                    HasPublicCtor: HasPublicConstructor(typeSymbol),
+                    IsAdapterMapped: true));
+            }
+            else if (ifaceName == WellKnownTypeNames.AdapterIRequestHandler1 && iface.TypeArguments.Length == 1)
+            {
+                // No-response adapter request → void ICommand. [MapAsQuery] on a no-response request is a
+                // conflict (a query must return a value); we still emit the void-command mapping so the
+                // handler dispatches, and EmitDiagnostics raises ROGUE012 from the recorded conflict flag.
+                bool mapAsQueryConflict = HasMapAsQueryAttribute(iface.TypeArguments[0]);
+                return new DiscoveredItem.Handler(new HandlerModel(
+                    TypeFqn: GetFqn(typeSymbol),
+                    RequestFqn: GetFqn(iface.TypeArguments[0]),
+                    ResponseFqn: null,
+                    Kind: HandlerKind.Command,
+                    Accessibility: GetAccessibility(typeSymbol),
+                    CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
+                    IsAbstract: typeSymbol.IsAbstract,
+                    HasPublicCtor: HasPublicConstructor(typeSymbol),
+                    IsAdapterMapped: true,
+                    MapAsQueryConflict: mapAsQueryConflict));
+            }
+            // ── Event handler (PD-42 — renamed from notification handler) ─────────
+            else if (ifaceName == WellKnownTypeNames.IEventHandler1)
             {
                 if (iface.TypeArguments.Length == 1)
                 {
-                    return new DiscoveredItem.Handler(new HandlerModel(
+                    return new DiscoveredItem.EventHandler(new EventHandlerModel(
                         TypeFqn: GetFqn(typeSymbol),
-                        RequestFqn: GetFqn(iface.TypeArguments[0]),
-                        ResponseFqn: null,
-                        Accessibility: GetAccessibility(typeSymbol),
-                        CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
-                        IsAbstract: typeSymbol.IsAbstract,
-                        HasPublicCtor: HasPublicConstructor(typeSymbol)));
-                }
-            }
-            // ── Notification handler ──────────────────────────────────────────────
-            else if (ifaceName == WellKnownTypeNames.INotificationHandler1)
-            {
-                if (iface.TypeArguments.Length == 1)
-                {
-                    return new DiscoveredItem.NotificationHandler(new NotificationHandlerModel(
-                        TypeFqn: GetFqn(typeSymbol),
-                        NotificationFqn: GetFqn(iface.TypeArguments[0]),
+                        EventFqn: GetFqn(iface.TypeArguments[0]),
                         Accessibility: GetAccessibility(typeSymbol)));
                 }
             }
-            // ── Streaming handler ─────────────────────────────────────────────────
-            else if (ifaceName == WellKnownTypeNames.IStreamRequestHandler2)
+            // ── Streaming query handler (PD-40 streaming clean break) ──────────────
+            else if (ifaceName == WellKnownTypeNames.IStreamQueryHandler2)
             {
                 if (iface.TypeArguments.Length == 2)
                 {
@@ -258,18 +310,21 @@ public sealed class RogueGenerator : IIncrementalGenerator
             }
         }
 
-        // ── Request message types (for ROGUE001 / ROGUE006 cross-check) ──────────────
-        // If none of the handler/behavior/processor branches matched, check whether this
-        // type IS a request message. Handler types implement IRequestHandler<TReq,TRes>,
-        // not IBaseRequest — so this check does not double-count handlers.
+        // ── CQS message types (for ROGUE001 / ROGUE006 / ROGUE011 cross-check) ───────
+        // If none of the handler/behavior/processor branches matched, check whether this type IS a CQS
+        // message. Handler types implement ICommandHandler/IQueryHandler/IEventHandler, not the message
+        // markers, so this check does not double-count handlers.
         //
-        // Scan all interfaces first to identify the most-specific match:
-        // IRequest<T> (with response) > IBaseRequest (no response) > INotification.
-        // A single pass over AllInterfaces collects all flags, then we decide at the end.
-        bool isNotification = false;
-        bool isBaseRequest = false;
-        bool isBaseStreamRequest = false;
-        string? msgResponseFqn = null;
+        // Clean break (PD-40): there is NO shared message marker to anchor on. We walk the three
+        // independent marker families (ICommand<T>/ICommand, IQuery<T>, IEvent) plus IStreamQuery<T>.
+        // A type implementing more than one CQS family (e.g. both ICommand and IQuery) is ambiguous —
+        // recorded as MultipleCqsContracts so EmitDiagnostics can fire ROGUE011.
+        bool isCommand = false;
+        bool isQuery = false;
+        bool isEvent = false;
+        bool isStreamQuery = false;
+        string? commandResponseFqn = null;
+        string? queryResponseFqn = null;
         string? streamResponseFqn = null;
 
         foreach (INamedTypeSymbol msgIface in typeSymbol.AllInterfaces)
@@ -277,47 +332,83 @@ public sealed class RogueGenerator : IIncrementalGenerator
             ct.ThrowIfCancellationRequested();
             string msgName = GetMetadataFqn(msgIface.OriginalDefinition);
 
-            if (msgName == WellKnownTypeNames.IRequest2 && msgIface.TypeArguments.Length == 1)
+            // ICommand<TResponse> — a typed command. ICommand : ICommand<Unit>, so a void command also
+            // surfaces ICommand<Unit> here; the bare-ICommand check below resolves the no-response case.
+            if (msgName == WellKnownTypeNames.ICommand1 && msgIface.TypeArguments.Length == 1)
             {
-                // IRequest<TResponse> — most specific; capture and stop scanning for request ifaces
-                msgResponseFqn = GetFqn(msgIface.TypeArguments[0]);
-                isBaseRequest = true;
-                break;
+                isCommand = true;
+                commandResponseFqn = GetFqn(msgIface.TypeArguments[0]);
             }
-
-            if (msgName == WellKnownTypeNames.IBaseRequest)
-                isBaseRequest = true;
-
-            if (msgName == WellKnownTypeNames.INotification)
-                isNotification = true;
-
-            // IStreamRequest<T> — most specific streaming form; prefer over IBaseStreamRequest
-            if (msgName == WellKnownTypeNames.IStreamRequest1 && msgIface.TypeArguments.Length == 1)
+            else if (msgName == WellKnownTypeNames.ICommand)
+            {
+                isCommand = true;
+            }
+            else if (msgName == WellKnownTypeNames.IQuery1 && msgIface.TypeArguments.Length == 1)
+            {
+                isQuery = true;
+                queryResponseFqn = GetFqn(msgIface.TypeArguments[0]);
+            }
+            else if (msgName == WellKnownTypeNames.IEvent)
+            {
+                isEvent = true;
+            }
+            else if (msgName == WellKnownTypeNames.IStreamQuery1 && msgIface.TypeArguments.Length == 1)
+            {
+                isStreamQuery = true;
                 streamResponseFqn = GetFqn(msgIface.TypeArguments[0]);
-
-            if (msgName == WellKnownTypeNames.IBaseStreamRequest)
-                isBaseStreamRequest = true;
+            }
         }
 
-        // Streaming request — return early before the IBaseRequest/INotification path
-        if (isBaseStreamRequest || streamResponseFqn is not null)
+        // ROGUE011 (F5): a type implementing more than one CQS family is ambiguous under the clean break
+        // (no shared marker disambiguates). Count distinct families; ICommand : ICommand<Unit> means a
+        // void command reports both ICommand and ICommand<Unit> — that is the SAME family, not two.
+        int cqsFamilies = (isCommand ? 1 : 0) + (isQuery ? 1 : 0) + (isEvent ? 1 : 0) + (isStreamQuery ? 1 : 0);
+        if (cqsFamilies > 1)
         {
             return new DiscoveredItem.RequestMessage(new RequestMessageModel(
                 TypeFqn: GetFqn(typeSymbol),
-                ResponseFqn: streamResponseFqn,       // null for bare IBaseStreamRequest
+                ResponseFqn: null,
                 IsOpenGeneric: typeSymbol.TypeParameters.Length > 0,
-                IsNotification: false,
-                IsStream: true));
+                Kind: MessageKind.MultipleCqsContracts));
         }
 
-        if (isBaseRequest || isNotification)
+        // Streaming query — return early; a stream message is never also command/query/event here.
+        if (isStreamQuery)
         {
             return new DiscoveredItem.RequestMessage(new RequestMessageModel(
                 TypeFqn: GetFqn(typeSymbol),
-                ResponseFqn: msgResponseFqn,
+                ResponseFqn: streamResponseFqn,
                 IsOpenGeneric: typeSymbol.TypeParameters.Length > 0,
-                IsNotification: isNotification,
-                IsStream: false));
+                Kind: MessageKind.StreamQuery));
+        }
+
+        if (isQuery)
+        {
+            return new DiscoveredItem.RequestMessage(new RequestMessageModel(
+                TypeFqn: GetFqn(typeSymbol),
+                ResponseFqn: queryResponseFqn,
+                IsOpenGeneric: typeSymbol.TypeParameters.Length > 0,
+                Kind: MessageKind.Query));
+        }
+
+        if (isCommand)
+        {
+            return new DiscoveredItem.RequestMessage(new RequestMessageModel(
+                TypeFqn: GetFqn(typeSymbol),
+                // A bare ICommand (void) reports ICommand<Unit>; treat a Unit response as no response so
+                // ROGUE003/ROGUE001 behave like the void-handler path.
+                ResponseFqn: commandResponseFqn == "SkathIO.Rogue.Unit" ? null : commandResponseFqn,
+                IsOpenGeneric: typeSymbol.TypeParameters.Length > 0,
+                Kind: MessageKind.Command));
+        }
+
+        if (isEvent)
+        {
+            return new DiscoveredItem.RequestMessage(new RequestMessageModel(
+                TypeFqn: GetFqn(typeSymbol),
+                ResponseFqn: null,
+                IsOpenGeneric: typeSymbol.TypeParameters.Length > 0,
+                Kind: MessageKind.Event));
         }
 
         return null;
@@ -413,8 +504,8 @@ public sealed class RogueGenerator : IIncrementalGenerator
         ImmutableArray<BehaviorModel>.Builder behaviors =
             ImmutableArray.CreateBuilder<BehaviorModel>();
         HashSet<string> seenBehaviorFqns = new HashSet<string>(System.StringComparer.Ordinal);
-        ImmutableArray<NotificationHandlerModel>.Builder notificationHandlers =
-            ImmutableArray.CreateBuilder<NotificationHandlerModel>();
+        ImmutableArray<EventHandlerModel>.Builder eventHandlers =
+            ImmutableArray.CreateBuilder<EventHandlerModel>();
         ImmutableArray<ProcessorModel>.Builder processors =
             ImmutableArray.CreateBuilder<ProcessorModel>();
         ImmutableArray<StreamHandlerModel>.Builder streamHandlers =
@@ -430,7 +521,7 @@ public sealed class RogueGenerator : IIncrementalGenerator
                 case DiscoveredItem.Behavior b:
                     if (seenBehaviorFqns.Add(b.Model.TypeFqn)) behaviors.Add(b.Model);
                     break;
-                case DiscoveredItem.NotificationHandler n: notificationHandlers.Add(n.Model); break;
+                case DiscoveredItem.EventHandler e:        eventHandlers.Add(e.Model);        break;
                 case DiscoveredItem.Processor p:           processors.Add(p.Model);           break;
                 case DiscoveredItem.StreamHandler s:       streamHandlers.Add(s.Model);       break;
                 case DiscoveredItem.RequestMessage r:      requestMessages.Add(r.Model);      break;
@@ -447,7 +538,7 @@ public sealed class RogueGenerator : IIncrementalGenerator
         return new DiscoveredModels(
             EquatableArray<HandlerModel>.From(handlers.ToImmutable()),
             EquatableArray<BehaviorModel>.From(behaviors.ToImmutable()),
-            EquatableArray<NotificationHandlerModel>.From(notificationHandlers.ToImmutable()),
+            EquatableArray<EventHandlerModel>.From(eventHandlers.ToImmutable()),
             EquatableArray<ProcessorModel>.From(processors.ToImmutable()),
             EquatableArray<StreamHandlerModel>.From(streamHandlers.ToImmutable()),
             EquatableArray<RequestMessageModel>.From(requestMessages.ToImmutable()));
@@ -608,6 +699,27 @@ public sealed class RogueGenerator : IIncrementalGenerator
         return 0;
     }
 
+    /// <summary>
+    /// Returns true when the given type carries <c>[SkathIO.Rogue.MediatR.MapAsQuery]</c> (PD-43
+    /// amendment / PD-48 — the F8 query-override marker on an adapter request type). Uses the same
+    /// <see cref="ISymbol.GetAttributes"/> presence scan as <see cref="GetBehaviorOrder"/>. The argument
+    /// is the request type from the adapter handler interface (<c>iface.TypeArguments[0]</c>); only a
+    /// named type can carry the class-targeted attribute, so a non-named type symbol returns false.
+    /// </summary>
+    private static bool HasMapAsQueryAttribute(ITypeSymbol requestType)
+    {
+        if (requestType is not INamedTypeSymbol named)
+            return false;
+
+        foreach (AttributeData attr in named.GetAttributes())
+        {
+            if (attr.AttributeClass is null) continue;
+            if (GetMetadataFqn(attr.AttributeClass) == WellKnownTypeNames.MapAsQueryAttribute)
+                return true;
+        }
+        return false;
+    }
+
     // ─── Diagnostic emission (Phase 3.2) ────────────────────────────────────────────
 
     private static void EmitDiagnostics(SourceProductionContext spc, DiscoveredModels models)
@@ -674,7 +786,9 @@ public sealed class RogueGenerator : IIncrementalGenerator
 
         foreach (RequestMessageModel msg in models.RequestMessages)
         {
-            if (msg.IsNotification) continue;   // FR-13: notifications may have zero handlers
+            // FR-13: events may have zero handlers. ROGUE011 (ambiguous multi-contract) types are not
+            // dispatchable and are reported separately below — they do not also get a "no handler".
+            if (msg.Kind is MessageKind.Event or MessageKind.MultipleCqsContracts) continue;
             if (msg.IsOpenGeneric) continue;     // ROGUE006 handles open-generic requests
             if (!handledRequestFqns.Contains(msg.TypeFqn))
             {
@@ -685,12 +799,44 @@ public sealed class RogueGenerator : IIncrementalGenerator
             }
         }
 
+        // ROGUE011 (F5) — a type implementing more than one CQS contract is ambiguous under the clean
+        // break (no shared marker disambiguates command vs query). Error: the generator cannot pick a
+        // dispatch path.
+        foreach (RequestMessageModel msg in models.RequestMessages)
+        {
+            if (msg.Kind == MessageKind.MultipleCqsContracts)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.MultipleCqsContracts,
+                    Location.None,
+                    ShortName(msg.TypeFqn)));
+            }
+        }
+
+        // ROGUE012 (PD-43 amendment / PD-48) — adapter command-vs-query conflict. Fires when [MapAsQuery]
+        // is applied to a no-response adapter IRequest: a query must return a value, so the requested
+        // query mapping cannot be honoured. Warning (manual-review): the handler is still mapped to a void
+        // ICommand during discovery, so dispatch is not silently dropped — the diagnostic surfaces the
+        // conflict so the author can either give the request a response or drop [MapAsQuery].
+        foreach (HandlerModel handler in models.Handlers)
+        {
+            if (handler.MapAsQueryConflict)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.AdapterMappingConflict,
+                    Location.None,
+                    ShortName(handler.RequestFqn)));
+            }
+        }
+
         // ROGUE003 — handler response type mismatch
         // Build a lookup: RequestFqn → ResponseFqn declared by the message type
         Dictionary<string, string?> requestResponseByFqn = new Dictionary<string, string?>();
         foreach (RequestMessageModel msg in models.RequestMessages)
         {
-            if (!msg.IsNotification && !requestResponseByFqn.ContainsKey(msg.TypeFqn))
+            // Only command/query messages declare a dispatched response to cross-check against handlers.
+            if (msg.Kind is MessageKind.Command or MessageKind.Query
+                && !requestResponseByFqn.ContainsKey(msg.TypeFqn))
                 requestResponseByFqn[msg.TypeFqn] = msg.ResponseFqn;
         }
 
@@ -721,7 +867,7 @@ public sealed class RogueGenerator : IIncrementalGenerator
         HashSet<string> registeredTypeFqns = new HashSet<string>(System.StringComparer.Ordinal);
         foreach (HandlerModel h in models.Handlers) registeredTypeFqns.Add(h.TypeFqn);
         foreach (BehaviorModel b in models.Behaviors) registeredTypeFqns.Add(b.TypeFqn);
-        foreach (NotificationHandlerModel n in models.NotificationHandlers) registeredTypeFqns.Add(n.TypeFqn);
+        foreach (EventHandlerModel e in models.EventHandlers) registeredTypeFqns.Add(e.TypeFqn);
         foreach (ProcessorModel p in models.Processors) registeredTypeFqns.Add(p.TypeFqn);
         foreach (StreamHandlerModel s in models.StreamHandlers) registeredTypeFqns.Add(s.TypeFqn);
 

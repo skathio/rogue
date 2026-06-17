@@ -3,15 +3,42 @@ namespace SkathIO.Rogue.SourceGenerator;
 /// <summary>Accessibility of the discovered type.</summary>
 internal enum TypeAccessibility { Public, Internal, Other }
 
-/// <summary>Handler for a request (IRequestHandler&lt;,&gt; or semantic aliases).</summary>
+/// <summary>
+/// Whether a discovered request handler handles a command or a query. Under the CQS clean break
+/// (PD-40) command and query are independent contracts (<c>ICommandHandler&lt;,&gt;</c> /
+/// <c>IQueryHandler&lt;,&gt;</c>) with no shared marker; the kind is recorded so the dispatcher can
+/// switch the typed reference (<c>ICommand&lt;T&gt;</c> vs <c>IQuery&lt;T&gt;</c>) it emits per handler.
+/// </summary>
+internal enum HandlerKind { Command, Query }
+
+/// <summary>Handler for a command or query (ICommandHandler&lt;,&gt; / ICommandHandler&lt;&gt; / IQueryHandler&lt;,&gt;).</summary>
 internal sealed record HandlerModel(
     string TypeFqn,
     string RequestFqn,
-    string? ResponseFqn,        // null for void-path handlers (IRequestHandler<T>)
+    string? ResponseFqn,        // null for void-path handlers (ICommandHandler<TCommand>)
+    HandlerKind Kind,           // command vs query — drives the emitted typed reference (PD-40)
     TypeAccessibility Accessibility,
     EquatableArray<string> CtorArgTypeFqns,
     bool IsAbstract,            // true if the type is abstract (ROGUE005)
-    bool HasPublicCtor          // false if no usable public constructor exists (ROGUE005)
+    bool HasPublicCtor,         // false if no usable public constructor exists (ROGUE005)
+    /// <summary>
+    /// True when this handler was discovered through the MediatR-adapter mapping rule (PD-48): it
+    /// implements the adapter's <c>SkathIO.Rogue.Compatibility.IRequestHandler&lt;,&gt;</c> /
+    /// <c>IRequestHandler&lt;&gt;</c> rather than a core <c>ICommandHandler</c>/<c>IQueryHandler</c>.
+    /// The F8 convention has already been applied to set <see cref="Kind"/> (default → Command,
+    /// <c>[MapAsQuery]</c> → Query). Adapter-mapped handlers register/resolve against the adapter
+    /// handler interface (not the core CQS one) and dispatch ONLY through the object-dispatch path —
+    /// the adapter message does not implement the core <c>ICommand&lt;T&gt;</c>/<c>IQuery&lt;T&gt;</c>
+    /// markers, so a typed-<c>Send</c> switch <c>case</c> for it would not compile.
+    /// </summary>
+    bool IsAdapterMapped = false,
+    /// <summary>
+    /// True only for a no-response adapter handler (<c>IRequestHandler&lt;TReq&gt;</c>) whose request
+    /// type carries <c>[MapAsQuery]</c> — the ROGUE012 conflict (a query must return a value, PD-43
+    /// amendment / PD-48). The handler is still mapped to a void <c>ICommand</c> (not silently dropped);
+    /// <c>EmitDiagnostics</c> reads this flag to raise ROGUE012 for manual review.
+    /// </summary>
+    bool MapAsQueryConflict = false
 );
 
 /// <summary>Pipeline behavior (IPipelineBehavior&lt;,&gt; or IStreamPipelineBehavior&lt;,&gt;).</summary>
@@ -43,10 +70,10 @@ internal sealed record BehaviorModel(
     bool IsMetadata = false
 );
 
-/// <summary>Notification handler (INotificationHandler&lt;T&gt;).</summary>
-internal sealed record NotificationHandlerModel(
+/// <summary>Event handler (IEventHandler&lt;T&gt;).</summary>
+internal sealed record EventHandlerModel(
     string TypeFqn,
-    string NotificationFqn,
+    string EventFqn,
     TypeAccessibility Accessibility
 );
 
@@ -63,7 +90,7 @@ internal sealed record ProcessorModel(
     TypeAccessibility Accessibility
 );
 
-/// <summary>Streaming request handler (IStreamRequestHandler&lt;,&gt;).</summary>
+/// <summary>Streaming query handler (IStreamQueryHandler&lt;,&gt;).</summary>
 internal sealed record StreamHandlerModel(
     string TypeFqn,
     string RequestFqn,
@@ -72,22 +99,30 @@ internal sealed record StreamHandlerModel(
 );
 
 /// <summary>
-/// A request message type (implements IRequest&lt;T&gt;, INotification, IStreamRequest, etc.).
-/// Discovered so the generator can cross-check against handlers (ROGUE001).
+/// The CQS family a discovered message type belongs to (PD-40 clean break — independent marker
+/// families, no shared root). A message is a command (write), a query (read), an event (zero-or-more
+/// handlers), or a streaming query (read, yields a sequence). <see cref="MultipleCqsContracts"/> marks
+/// a type that implements more than one CQS family — ambiguous under the clean break (ROGUE011).
+/// </summary>
+internal enum MessageKind { Command, Query, Event, StreamQuery, MultipleCqsContracts }
+
+/// <summary>
+/// A message type (implements ICommand/ICommand&lt;T&gt;, IQuery&lt;T&gt;, IEvent, or
+/// IStreamQuery&lt;T&gt;). Discovered so the generator can cross-check against handlers (ROGUE001) and
+/// detect a type implementing multiple CQS contracts (ROGUE011).
 /// </summary>
 internal sealed record RequestMessageModel(
     string TypeFqn,
-    string? ResponseFqn,    // null for INotification and IRequest (no-response)
+    string? ResponseFqn,    // null for IEvent and ICommand (no-response)
     bool IsOpenGeneric,     // true if the type itself has type parameters (ROGUE006)
-    bool IsNotification,
-    bool IsStream
+    MessageKind Kind
 );
 
 /// <summary>All discovered models from one compilation run.</summary>
 internal sealed record DiscoveredModels(
     EquatableArray<HandlerModel> Handlers,
     EquatableArray<BehaviorModel> Behaviors,
-    EquatableArray<NotificationHandlerModel> NotificationHandlers,
+    EquatableArray<EventHandlerModel> EventHandlers,
     EquatableArray<ProcessorModel> Processors,
     EquatableArray<StreamHandlerModel> StreamHandlers,
     EquatableArray<RequestMessageModel> RequestMessages
@@ -104,7 +139,7 @@ internal abstract record DiscoveredItem
 
     internal sealed record Handler(HandlerModel Model) : DiscoveredItem;
     internal sealed record Behavior(BehaviorModel Model) : DiscoveredItem;
-    internal sealed record NotificationHandler(NotificationHandlerModel Model) : DiscoveredItem;
+    internal sealed record EventHandler(EventHandlerModel Model) : DiscoveredItem;
     internal sealed record Processor(ProcessorModel Model) : DiscoveredItem;
     internal sealed record StreamHandler(StreamHandlerModel Model) : DiscoveredItem;
     internal sealed record RequestMessage(RequestMessageModel Model) : DiscoveredItem;
