@@ -38,7 +38,23 @@ internal sealed record HandlerModel(
     /// amendment / PD-48). The handler is still mapped to a void <c>ICommand</c> (not silently dropped);
     /// <c>EmitDiagnostics</c> reads this flag to raise ROGUE012 for manual review.
     /// </summary>
-    bool MapAsQueryConflict = false
+    bool MapAsQueryConflict = false,
+    /// <summary>
+    /// Accessibility of the REQUEST type (not the handler). Drives the visibility of the generated
+    /// public-concrete-dispatch extension method (D3): a <c>public</c> extension method cannot expose a
+    /// less-accessible request parameter (CS0051), so the method is emitted <c>internal</c> unless the
+    /// request type is <c>public</c>. Defaults to <see cref="TypeAccessibility.Public"/> for models
+    /// built without this information (the dispatch path itself is unaffected — it lives on the
+    /// <c>internal</c> impl).
+    /// </summary>
+    TypeAccessibility RequestAccessibility = TypeAccessibility.Public,
+    /// <summary>
+    /// Accessibility of the RESPONSE type, or <see cref="TypeAccessibility.Public"/> for void handlers
+    /// (the response is <c>Unit</c>, which is public). Like <see cref="RequestAccessibility"/>, it
+    /// constrains the generated D3 extension method's visibility: the method's <c>ValueTask&lt;TResponse&gt;</c>
+    /// return type cannot be more accessible than <c>TResponse</c>.
+    /// </summary>
+    TypeAccessibility ResponseAccessibility = TypeAccessibility.Public
 );
 
 /// <summary>Pipeline behavior (IPipelineBehavior&lt;,&gt; or IStreamPipelineBehavior&lt;,&gt;).</summary>

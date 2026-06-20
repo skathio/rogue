@@ -165,6 +165,12 @@ public sealed class DispatchTests
     public async Task Behavior_ShortCircuit_HandlerNotCalled()
     {
         // ShortCircuitBehavior returns without calling next, so the handler must never run.
+        //
+        // D5 double-duty (rogue-perf pass 2): ShortCircuited has a CLOSED behavior and this compilation's
+        // only open behavior is RecordingStreamBehavior<,> (a STREAM behavior). After the stream-filtered
+        // HasUsableOpenBehavior fix, ShortCircuited now gets a static chain (Send_..._ShortCircuited_Chain_1)
+        // instead of falling back to PipelineExecutor — so this test exercises the generated chain's
+        // short-circuit path (b0 returns without invoking next), through the real DI ISender.Send route.
         ShortCircuitedHandler.WasCalled = false;
         await using var sp = Build();
         var sender = sp.GetRequiredService<ISender>();

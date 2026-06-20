@@ -79,6 +79,36 @@ the streaming types are net8.0+ only) are noted inline.
   `Send`/`Publish`/`CreateStream`/`SendObject`.
 - `Mediator` — `IMediator` implementation.
 
+**Concrete fast path (0-alloc) — `RogueExtensions`**
+
+For the hottest send paths the generator emits `SkathIO.Rogue.Generated.RogueExtensions`, a static
+class with one typed extension method **per command/query handler** on `RogueDispatcher`. It bypasses
+the `ISender` interface dispatch (which boxes one `ValueTask<T>` by design) and is **0 B allocated**
+for a synchronously-completing, behavior-free handler.
+
+- **Inject `RogueDispatcher`**, not `ISender` — the fast path downcasts to the generated impl, and
+  `ISender` resolves to `Mediator` (the cast would fail). `RogueDispatcher` is registered `Scoped`.
+- **Naming**: `Send{RequestSimpleName}` — e.g. a `PingRequest` handler yields `SendPingRequest`. Two
+  request types sharing a simple name across namespaces produce valid overloads (resolved by the
+  request parameter type).
+- **`using SkathIO.Rogue.Generated;`** must be in scope to call the extension methods.
+- **Void commands** return `ValueTask<Unit>` (discard the `Unit`) to keep the path allocation-free.
+- The method is emitted `internal` (still callable in-assembly) when the request or response type is
+  not `public`, to respect accessibility.
+
+```csharp
+using SkathIO.Rogue.Generated;
+
+public sealed class Endpoint(RogueDispatcher dispatcher)   // inject the dispatcher, not ISender
+{
+    public ValueTask<string> Ping() => dispatcher.SendPingRequest(new PingRequest("ping"));
+}
+```
+
+**Trade-off**: `ISender.Send(...)` stays the portable, decoupled default (one box). Use the
+`RogueDispatcher` fast path only where the allocation matters and a direct dependency on the concrete
+dispatcher is acceptable.
+
 **Publishers**
 
 - `ForeachAwaitPublisher` (default), `WhenAllPublisher`.

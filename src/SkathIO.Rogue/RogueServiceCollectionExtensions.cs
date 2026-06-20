@@ -21,10 +21,18 @@ public static class RogueServiceCollectionExtensions
         // so a later AddRogue(...EnableTelemetry = false) can turn it back off within the same process.
         RogueTelemetry.Enabled = options.EnableTelemetry;
 
-        // Register the mediator and entry-point interfaces
-        services.TryAddTransient<IMediator, Mediator>();
-        services.TryAddTransient<ISender>(sp => sp.GetRequiredService<IMediator>());
-        services.TryAddTransient<IPublisher>(sp => sp.GetRequiredService<IMediator>());
+        // Register the mediator and entry-point interfaces.
+        // D2 (rogue-perf): Scoped, not Transient. The Mediator now constructor-injects RogueDispatcher
+        // (caching it instead of resolving GetRequiredService<RogueDispatcher>() per dispatch). The
+        // dispatcher is registered Scoped (it binds to the resolving scope so scoped handler
+        // dependencies resolve — see the RogueDispatcher registration below / in the generated
+        // registrar). A Transient mediator capturing the Scoped dispatcher would be a captive-dependency
+        // lifetime mismatch (and throws under DI scope validation), so the mediator and its entry-point
+        // interfaces share the dispatcher's Scoped lifetime — one Mediator per scope (typically one per
+        // HTTP request), the standard mediator-pattern lifetime.
+        services.TryAddScoped<IMediator, Mediator>();
+        services.TryAddScoped<ISender>(sp => sp.GetRequiredService<IMediator>());
+        services.TryAddScoped<IPublisher>(sp => sp.GetRequiredService<IMediator>());
 
         // Invoke every generator-wired registrar (PD-33/PD-38). The bridge is an append-only,
         // order-preserving registry rather than a single last-writer-wins slot: each consumer

@@ -86,7 +86,20 @@ internal static class RegistrationEmitter
             string handlerFqn = DispatcherEmitter.ToGlobalFqn(eh.TypeFqn);
             string iface      = "global::SkathIO.Rogue.IEventHandler<" + eventFqn + ">";
             // Multi-registration: Publish fans out to all handlers; dedup by impl type (PD-38).
+            // This interface registration is retained for the MediatR-compat path (adapter
+            // INotificationHandler<T> is-a IEventHandler<T>) and any GetServices<IEventHandler<T>>
+            // consumer.
             EmitEnumerableDescriptor(w, iface, handlerFqn);
+
+            // D1 register/resolve lockstep: the generated dispatcher caches per-event
+            // Func<IEventHandler<T>>[] factory delegates whose bodies are
+            // GetRequiredService<TConcreteHandler>() (DispatcherEmitter.EmitConstructor), eliminating
+            // the per-Publish GetServices<IEventHandler<T>>() enumeration. That resolution needs the
+            // concrete handler type to be a registered service key — the interface registration above
+            // is keyed by the interface, not the concrete type — so register the handler under its own
+            // type too, honouring options.Lifetime (TryAdd is idempotent by the concrete service type,
+            // preserving PD-38).
+            EmitDescriptor(w, handlerFqn);
         }
 
         if (models.EventHandlers.Count > 0) w.Line();
@@ -351,6 +364,52 @@ internal static class RegistrationEmitter
         if (bySource != 0) return bySource;
 
         return string.CompareOrdinal(a.TypeFqn, b.TypeFqn);
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when <paramref name="models"/> contains at least one usable open generic
+    /// behavior whose stream-ness matches <paramref name="stream"/> (e.g. an open
+    /// <c>LoggingBehavior&lt;TReq,TRes&gt;</c> registered as <c>IPipelineBehavior&lt;,&gt;</c> for
+    /// <c>stream: false</c>, or an open <c>IStreamPipelineBehavior&lt;,&gt;</c> for <c>stream: true</c>).
+    /// An open behavior is closed for — and therefore applies to — EVERY request <em>of its own
+    /// stream/non-stream family</em>, so its presence is a compile-time fact that vetoes the D4
+    /// behavior-list bypass and the D5 static chain in <see cref="DispatcherEmitter"/>: when such a
+    /// behavior exists, no <c>Send_X</c> of that family may skip the per-dispatch
+    /// <c>GetService&lt;IReadOnlyList&lt;...&gt;&gt;</c> lookup, because that list is the only place the
+    /// open behavior gets woven in. The stream filter is essential: a non-stream <c>Send_X</c> can never
+    /// see an open <c>IStreamPipelineBehavior&lt;,&gt;</c> (and vice versa), so cross-family open
+    /// behaviors must NOT veto the optimization — doing so over-conservatively disables D5 chains for
+    /// every closed-behavior command/query whenever an unrelated open stream behavior exists. Abstract /
+    /// no-public-ctor entries are excluded for the same reason <see cref="CollectApplicableBehaviors"/>
+    /// skips them — they are never instantiated, so they never apply.
+    /// </summary>
+    internal static bool HasUsableOpenBehavior(DiscoveredModels models, bool stream)
+    {
+        foreach (var behavior in models.Behaviors)
+        {
+            if (behavior.IsAbstract || !behavior.HasPublicCtor) continue;
+            if (behavior.IsOpen && behavior.IsStream == stream) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Orders <paramref name="models"/>' behaviors (PD-13a) and projects them onto a single
+    /// request/response pair, returning the closed behavior FQNs that apply. This is the
+    /// emitter-facing entry point that <see cref="DispatcherEmitter"/> uses to decide the D4 bypass:
+    /// it performs the SAME ordering + matching <see cref="EmitBehaviorRegistrations"/> performs, so
+    /// the dispatcher's "are there zero applicable behaviors?" decision and the registration's
+    /// "should I emit an IReadOnlyList factory?" decision are computed from one shared implementation
+    /// (a divergence would silently skip behaviors or emit a dead lookup). Re-ordering per call is
+    /// cheap relative to codegen and avoids leaking the sorted-list lifetime across the two emitters.
+    /// </summary>
+    internal static List<string> CollectApplicableBehaviorsFor(
+        DiscoveredModels models, string requestFqn, string responseFqn, bool stream)
+    {
+        var ordered = new List<BehaviorModel>(models.Behaviors.Count);
+        ordered.AddRange(models.Behaviors);
+        ordered.Sort(CompareBehaviorOrder);
+        return CollectApplicableBehaviors(ordered, requestFqn, responseFqn, stream);
     }
 
     /// <summary>

@@ -198,7 +198,11 @@ class Peer
 
         Assert.Contains("switch (command)", dispatcher);
         Assert.Contains("case global::InternalPing r:", dispatcher);
-        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor", dispatcher);
+        // Dispatch is a static type switch, not a reflective lookup. (PipelineExecutor is no longer a
+        // proxy for "static, not reflection": a behavior-free request takes the D4 bypass and never
+        // references PipelineExecutor. The no-reflection claim is asserted directly here.)
+        Assert.DoesNotContain("MakeGenericMethod", dispatcher);
+        Assert.DoesNotContain("Activator.CreateInstance", dispatcher);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────

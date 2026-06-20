@@ -21,6 +21,12 @@ internal static class DispatcherEmitter
     // is disabled or unsubscribed — the zero-overhead path that preserves PD-31's 0-alloc guarantee).
     private const string RT = "global::SkathIO.Rogue.RogueTelemetry";
 
+    // D5 (PD-2): the maximum behavior depth for which the generator emits a statically-typed per-request
+    // chain method (Send_X_Chain_1 .. Send_X_Chain_8). Beyond this depth the dispatcher falls back to
+    // PipelineExecutor.Execute (the runtime struct-index fold). 8 covers the overwhelming majority of
+    // real pipelines while bounding generated code size at M requests × 8 chain methods.
+    private const int MAX_STATIC_CHAIN_DEPTH = 8;
+
     internal static string Emit(DiscoveredModels models, RogueEmitOptions opts)
     {
         var w = new CodeWriter();
@@ -33,11 +39,31 @@ internal static class DispatcherEmitter
 
         w.Open("internal sealed class RogueDispatcherImpl : global::SkathIO.Rogue.RogueDispatcher");
 
+        // ── Event → handler-FQN map (built once, used by the constructor fields and the
+        //    per-event Publish helpers) ────────────────────────────────────────────────
+        // D1: each event type gets a per-instance `Func<IEventHandler<TEvent>>[]` field populated
+        // in the constructor, so Publish_X iterates cached factory delegates instead of calling
+        // serviceProvider.GetServices<IEventHandler<TEvent>>() on every dispatch.
+        var handlersByEvent = new Dictionary<string, List<string>>();
+        foreach (var eh in models.EventHandlers)
+        {
+            if (!handlersByEvent.TryGetValue(eh.EventFqn, out var list))
+            {
+                list = new List<string>();
+                handlersByEvent[eh.EventFqn] = list;
+            }
+            list.Add(eh.TypeFqn);
+        }
+
+        // ── D1: per-event factory-delegate array fields ───────────────────────────────
+        EmitHandlerFactoryFields(w, handlersByEvent);
+
         // ── Constructor ───────────────────────────────────────────────────────────────
         // Passes the service provider to the base, which stores it in the protected
-        // _serviceProvider field that the override methods below read.
-        w.Line("public RogueDispatcherImpl(global::System.IServiceProvider serviceProvider)");
-        w.Line("    : base(serviceProvider) { }");
+        // _serviceProvider field that the override methods below read, then (D1) populates the
+        // per-event factory-delegate arrays so handler resolution per Publish is a delegate call,
+        // not a DI service enumeration.
+        EmitConstructor(w, handlersByEvent);
         w.Line();
 
         // ── void-path async helper ────────────────────────────────────────────────────
@@ -66,9 +92,16 @@ internal static class DispatcherEmitter
         w.Line();
 
         // ── Per-request Send methods ──────────────────────────────────────────────────
+        // D4/D5: an open NON-STREAM generic behavior applies to ALL non-stream requests, so its presence
+        // anywhere in the compilation vetoes both the per-request behavior-list bypass (D4) and the static
+        // behavior chain (D5) for every Send_X. Computed once here and threaded into EmitSendMethod. The
+        // veto is stream-filtered (`stream: false`): Send_X handles only non-stream requests, which can
+        // never see an open IStreamPipelineBehavior<,>, so an unrelated open STREAM behavior must NOT
+        // disable the optimization for closed-behavior commands/queries.
+        bool hasOpenBehavior = RegistrationEmitter.HasUsableOpenBehavior(models, stream: false);
         foreach (var handler in models.Handlers)
         {
-            EmitSendMethod(w, handler, models.Processors);
+            EmitSendMethod(w, handler, models, hasOpenBehavior);
             w.Line();
         }
 
@@ -96,18 +129,8 @@ internal static class DispatcherEmitter
         w.Line();
 
         // ── Per-event Publish helper methods ──────────────────────────────────────────
-        // Build: eventFqn → list of handler FQNs
-        var handlersByEvent = new Dictionary<string, List<string>>();
-        foreach (var eh in models.EventHandlers)
-        {
-            if (!handlersByEvent.TryGetValue(eh.EventFqn, out var list))
-            {
-                list = new List<string>();
-                handlersByEvent[eh.EventFqn] = list;
-            }
-            list.Add(eh.TypeFqn);
-        }
-
+        // handlersByEvent was built at the top of the class so the constructor could emit the
+        // matching factory-delegate fields (D1). Each Publish_X iterates the cached array.
         foreach (var kvp in handlersByEvent)
         {
             EmitPublishEventMethod(w, kvp.Key, kvp.Value);
@@ -126,11 +149,92 @@ internal static class DispatcherEmitter
     }
 
     // ────────────────────────────────────────────────────────────────────────────────────
+    // D1: per-event handler factory-delegate fields + constructor population
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// D1: the field name for an event type's factory-delegate array. Shares
+    /// <see cref="MakeSafeName"/> with the Send-method naming so two emitters never disagree.
+    /// </summary>
+    private static string HandlerFieldName(string eventFqn) => "_handlers_" + MakeSafeName(eventFqn);
+
+    /// <summary>
+    /// D1: emits one <c>private readonly Func&lt;IEventHandler&lt;TEvent&gt;&gt;[]</c> field per event
+    /// type that has at least one registered handler. The array caches the factory delegates so
+    /// <c>Publish_X</c> never calls <c>GetServices&lt;IEventHandler&lt;TEvent&gt;&gt;()</c> on the hot
+    /// path. Event types with zero handlers never enter <paramref name="handlersByEvent"/>, so no
+    /// field is emitted for them (their Publish falls through the switch default).
+    /// </summary>
+    private static void EmitHandlerFactoryFields(CodeWriter w, Dictionary<string, List<string>> handlersByEvent)
+    {
+        if (handlersByEvent.Count == 0) return;
+
+        foreach (var kvp in handlersByEvent)
+        {
+            string eventType   = ToGlobalFqn(kvp.Key);
+            string handlerIface = "global::SkathIO.Rogue.IEventHandler<" + eventType + ">";
+            w.Line(
+                "private readonly global::System.Func<" + handlerIface + ">[] " +
+                HandlerFieldName(kvp.Key) + ";");
+        }
+
+        w.Line();
+    }
+
+    /// <summary>
+    /// Emits the constructor. Always chains <c>: base(serviceProvider)</c> (the base stores the
+    /// provider in the protected <c>_serviceProvider</c> field the overrides read). When there are
+    /// event handlers (D1), the body initializes each per-event factory-delegate array; each element
+    /// is a closure over <c>serviceProvider</c> that resolves a fresh handler instance via
+    /// <c>GetRequiredService&lt;THandler&gt;()</c> on every call — preserving transient/scoped
+    /// lifetimes (a fresh instance per factory call per Publish). With no event handlers the
+    /// constructor is body-less.
+    /// </summary>
+    private static void EmitConstructor(CodeWriter w, Dictionary<string, List<string>> handlersByEvent)
+    {
+        if (handlersByEvent.Count == 0)
+        {
+            w.Line("public RogueDispatcherImpl(global::System.IServiceProvider serviceProvider)");
+            w.Line("    : base(serviceProvider) { }");
+            return;
+        }
+
+        w.Line("public RogueDispatcherImpl(global::System.IServiceProvider serviceProvider)");
+        w.Line("    : base(serviceProvider)");
+        w.Line("{");
+        w.Indent();
+
+        foreach (var kvp in handlersByEvent)
+        {
+            string eventType    = ToGlobalFqn(kvp.Key);
+            string handlerIface = "global::SkathIO.Rogue.IEventHandler<" + eventType + ">";
+
+            w.Line(HandlerFieldName(kvp.Key) + " = new global::System.Func<" + handlerIface + ">[]");
+            w.Line("{");
+            w.Indent();
+            // Resolve fresh per call (closes over the constructor's `serviceProvider` parameter, which
+            // is the same provider the base stored): GetRequiredService<THandler>() respects the
+            // handler's DI lifetime — transient/scoped yield a new instance per Publish, singleton the same.
+            foreach (var handlerFqn in kvp.Value)
+            {
+                string handlerType = ToGlobalFqn(handlerFqn);
+                w.Line("() => " + SP + ".GetRequiredService<" + handlerType + ">(serviceProvider),");
+            }
+            w.Dedent();
+            w.Line("};");
+        }
+
+        w.Dedent();
+        w.Line("}"); // constructor body
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────────────
     // Per-request Send_XXX method
     // ────────────────────────────────────────────────────────────────────────────────────
 
-    private static void EmitSendMethod(CodeWriter w, HandlerModel handler, EquatableArray<ProcessorModel> processors)
+    private static void EmitSendMethod(CodeWriter w, HandlerModel handler, DiscoveredModels models, bool hasOpenBehavior)
     {
+        var processors = models.Processors;
         bool isVoid = handler.ResponseFqn is null;
         string responseFqn = isVoid ? "global::SkathIO.Rogue.Unit" : ToGlobalFqn(handler.ResponseFqn!);
         string requestFqn  = ToGlobalFqn(handler.RequestFqn);
@@ -159,12 +263,74 @@ internal static class DispatcherEmitter
 
         bool hasProcessors = pre.Count > 0 || post.Count > 0 || exHandlers.Count > 0 || exActions.Count > 0;
 
+        // D4 behavior-list bypass: when the generator already knows at COMPILE time that this request
+        // has zero applicable behaviors, the per-dispatch GetService<IReadOnlyList<IPipelineBehavior<,>>>
+        // lookup + runtime `behaviors.Count == 0` branch are pure overhead — there is no IReadOnlyList
+        // factory registered for it (RegistrationEmitter.EmitBehaviorRegistrations skips the registration
+        // for a request with no applicable behaviors), so GetService would return null every time and the
+        // count check would always take the direct-handler branch anyway. We compute applicability with
+        // the SAME helper RegistrationEmitter uses (CollectApplicableBehaviorsFor → CollectApplicableBehaviors),
+        // so the two emitters can never disagree about which behaviors apply.
+        //
+        // CRITICAL guard: an OPEN generic behavior (e.g. LoggingBehavior<TReq,TRes> registered as
+        // IPipelineBehavior<,>) closes for — and therefore applies to — EVERY request, so its
+        // per-request applicable list is non-empty and RegistrationEmitter DOES register an IReadOnlyList
+        // factory for it. `hasOpenBehavior` (computed once over the whole compilation) vetoes the bypass
+        // for every request: if it is set we must keep the runtime lookup so the open behavior is woven in.
+        var applicableBehaviors = RegistrationEmitter.CollectApplicableBehaviorsFor(
+            models, requestFqn, responseFqn, stream: false);
+        bool bypassBehaviorList = !hasProcessors && !hasOpenBehavior && applicableBehaviors.Count == 0;
+
+        // D5 (PD-2) static behavior chain: when this request has at least one COMPILE-TIME-known closed
+        // behavior and NO open behavior in the compilation and NO processors, the behavior list passed to
+        // _WithBehaviors is statically bounded (every applicable behavior is a closed, per-request match —
+        // open behaviors, whose runtime list length is not statically known, veto this path via
+        // hasOpenBehavior). That lets _WithBehaviors switch on behaviors.Count into per-request chain
+        // methods (Send_X_Chain_1..MAX_STATIC_CHAIN_DEPTH) that take each behavior as a typed parameter,
+        // eliminating PipelineState's per-link struct-boxing closure. Depth > MAX_STATIC_CHAIN_DEPTH falls
+        // back to PipelineExecutor.Execute. Processor-bearing and open-behavior requests keep the existing
+        // PipelineExecutor.Execute body unchanged.
+        bool useStaticChain = !hasProcessors && !hasOpenBehavior && applicableBehaviors.Count > 0;
+
+        // D3: the per-request entry point is emitted `internal` (not `private`) so the generated
+        // public RogueExtensions class (same consumer assembly) can downcast RogueDispatcher to this
+        // impl and call it directly — the 0-alloc concrete fast path. The static _Direct/_WithBehaviors/
+        // _WithTelemetry companions below stay `private static`: they are call-shape factoring only and
+        // are never reached except through this entry point.
         w.Open(
-            "private global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
+            "internal global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
             methodName + "(" + requestFqn + " request, global::System.Threading.CancellationToken cancellationToken)");
 
         // Resolve handler
         w.Line("var handler = " + SP + ".GetRequiredService<" + handlerIface + ">(" + SVC + ");");
+
+        if (bypassBehaviorList)
+        {
+            // D4 BYPASS PATH — compile-time-known zero behaviors, no processors. No
+            // GetService<IReadOnlyList<...>>() call and no `behaviors.Count == 0` runtime branch: call
+            // the handler directly via the {methodName}_Direct companion. The telemetry path is still
+            // emitted (FR-45 / PD-30), but its _WithTelemetry companion invokes _Direct rather than
+            // threading an empty behavior list through PipelineExecutor.Execute.
+            //
+            // The direct call is factored into {methodName}_Direct (one source of truth for the
+            // handler-call shape, shared by the telemetry-off return below and the telemetry-on
+            // companion) so EmitDirectHandlerReturn — with its #if TFM split and void/adapter wrapping —
+            // is emitted exactly once. _Direct has no captured locals, so it allocates no closure.
+            w.Line("var __scope = " + RT + ".StartDispatch<" + requestFqn + ">();");
+            w.Open("if (__scope is null)");
+            w.Line("return " + methodName + "_Direct(handler, request, cancellationToken);");
+            w.Close(); // if (__scope is null)
+            w.Line();
+            w.Line("return " + methodName + "_DirectWithTelemetry(handler, request, cancellationToken, __scope.Value);");
+
+            w.Close(); // method
+
+            w.Line();
+            EmitSendDirectMethod(w, methodName, handlerIface, requestFqn, responseFqn, isVoid, handler.IsAdapterMapped);
+            w.Line();
+            EmitSendDirectWithTelemetryMethod(w, methodName, handlerIface, requestFqn, responseFqn);
+            return;
+        }
 
         // Resolve behavior list (IReadOnlyList registered by RegistrationEmitter, or Array.Empty)
         w.Line("var behaviors = " + SP + ".GetService<" + behaviorListType + ">(" + SVC + ")");
@@ -190,9 +356,13 @@ internal static class DispatcherEmitter
             // as parameters) confines the lambda's captured-variable scope to that method, so the
             // closure allocates only when behaviors are actually present — never on the fast path.
             //
-            // Behavior presence is a RUNTIME fact (open behaviors discovered by the PD-17 metadata scan
-            // apply to all requests and are resolved from DI), so the bypass is a runtime branch on
-            // `behaviors.Count == 0`.
+            // This path is emitted only when the generator found at least one applicable behavior at
+            // compile time (a matched closed behavior) OR any open behavior exists in the compilation
+            // (D4 guard). For the open-behavior case the resolved list's length is a RUNTIME fact (the
+            // open behavior is closed-and-registered per request, but DI ultimately decides what the
+            // IReadOnlyList contains), so the empty-list check is retained as a runtime branch on
+            // `behaviors.Count == 0`. Requests with provably zero applicable behaviors took the D4
+            // bypass above and never reach here.
             // FR-45 / PD-30: begin a dispatch scope. When telemetry is disabled or unsubscribed,
             // StartDispatch returns null and we take the existing fast path verbatim — no Activity,
             // no allocation, PD-31's 0-byte guarantee fully preserved.
@@ -234,9 +404,19 @@ internal static class DispatcherEmitter
         if (!hasProcessors)
         {
             w.Line();
-            EmitSendWithBehaviorsMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType, isVoid, handler.IsAdapterMapped);
+            EmitSendWithBehaviorsMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType, isVoid, handler.IsAdapterMapped, useStaticChain);
             w.Line();
             EmitSendWithTelemetryMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType);
+
+            // D5 (PD-2): emit the per-request static chain methods that _WithBehaviors switches into.
+            // Only the closed-behavior path (useStaticChain) routes through them; the telemetry path
+            // reaches them transitively via _WithBehaviors. C# does not require declaration order within
+            // a class, so emitting these after the companions above is fine.
+            if (useStaticChain)
+            {
+                w.Line();
+                EmitChainMethods(w, methodName, handlerIface, behaviorIface, requestFqn, responseFqn, isVoid, handler.IsAdapterMapped);
+            }
         }
     }
 
@@ -299,6 +479,63 @@ internal static class DispatcherEmitter
     }
 
     /// <summary>
+    /// D4 behavior-list bypass: the direct handler call for a request the generator knows has zero
+    /// applicable behaviors and no processors. No <c>RequestHandlerDelegate</c> is built and no
+    /// <c>PipelineExecutor.Execute</c> is reached — this is just <see cref="EmitDirectHandlerReturn"/>
+    /// (the same shape the no-behavior fast path already used) lifted into a parameterless-capture
+    /// <c>private static</c> method so its body is the single source of truth for the call, shared by
+    /// the telemetry-off return and the <c>_DirectWithTelemetry</c> companion. Being <c>static</c> with
+    /// no captured locals, it allocates no closure.
+    /// </summary>
+    private static void EmitSendDirectMethod(
+        CodeWriter w, string methodName, string handlerIface, string requestFqn, string responseFqn,
+        bool isVoid, bool isAdapter)
+    {
+        w.Open(
+            "private static global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
+            methodName + "_Direct(" +
+            handlerIface + " handler, " + requestFqn + " request, " +
+            "global::System.Threading.CancellationToken cancellationToken)");
+
+        EmitDirectHandlerReturn(w, isVoid, isAdapter);
+
+        w.Close(); // method
+    }
+
+    /// <summary>
+    /// FR-45 / PD-30: the telemetry-on continuation of the D4 bypass path. Reached only when
+    /// <c>StartDispatch</c> returned a non-null scope (telemetry enabled AND subscribed), so this path
+    /// is already allocating an async state machine. Unlike <see cref="EmitSendWithTelemetryMethod"/>
+    /// it does NOT thread a behavior list through <c>PipelineExecutor.Execute</c> — there are provably
+    /// zero applicable behaviors — it awaits the direct handler call (<c>_Direct</c>) inside the
+    /// try/catch/finally that observes the outcome and stops the scope.
+    /// </summary>
+    private static void EmitSendDirectWithTelemetryMethod(
+        CodeWriter w, string methodName, string handlerIface, string requestFqn, string responseFqn)
+    {
+        w.Open(
+            "private static async global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
+            methodName + "_DirectWithTelemetry(" +
+            handlerIface + " handler, " + requestFqn + " request, " +
+            "global::System.Threading.CancellationToken cancellationToken, " +
+            "global::SkathIO.Rogue.DispatchScope scope)");
+
+        w.Line("global::System.Exception? __exc = null;");
+        w.Open("try");
+        w.Line("return await " + methodName + "_Direct(handler, request, cancellationToken).ConfigureAwait(false);");
+        w.Close(); // try
+        w.Open("catch (global::System.Exception __ex)");
+        w.Line("__exc = __ex;");
+        w.Line("throw;");
+        w.Close(); // catch
+        w.Open("finally");
+        w.Line(RT + ".StopDispatch(scope, __exc);");
+        w.Close(); // finally
+
+        w.Close(); // method
+    }
+
+    /// <summary>
     /// PD-31 (AC-C / NFR-PERF-1 closure elimination): the has-behaviors continuation of the
     /// no-processor fast path, factored into its own <c>private static</c> method so that the
     /// <c>() =&gt; handler.Handle(...)</c> closure's captured variables (<c>handler</c>,
@@ -308,7 +545,7 @@ internal static class DispatcherEmitter
     /// </summary>
     private static void EmitSendWithBehaviorsMethod(
         CodeWriter w, string methodName, string handlerIface, string requestFqn, string responseFqn,
-        string behaviorListType, bool isVoid, bool isAdapter)
+        string behaviorListType, bool isVoid, bool isAdapter, bool useStaticChain)
     {
         w.Open(
             "private static global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
@@ -316,11 +553,160 @@ internal static class DispatcherEmitter
             handlerIface + " handler, " + requestFqn + " request, " + behaviorListType + " behaviors, " +
             "global::System.Threading.CancellationToken cancellationToken)");
 
-        EmitHandlerCallDelegate(w, isVoid, responseFqn, isAdapter);
-        w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
-        w.Line("    request, behaviors, handlerCall, cancellationToken);");
+        if (useStaticChain)
+        {
+            // D5 (PD-2): switch on the (statically bounded) behavior count into the per-request chain
+            // methods. Each Send_X_Chain_N takes the N behaviors as typed parameters, so no PipelineState
+            // struct is captured/boxed per link. Depth 0 is unreachable here (the no-behavior branch in the
+            // entry point returns before _WithBehaviors is called) but is emitted as a defensive arm — for
+            // an open-behavior-free, closed-behavior request DI could still theoretically resolve an empty
+            // list, in which case the handler is called directly. Depth > MAX_STATIC_CHAIN_DEPTH falls back
+            // to PipelineExecutor.Execute (the deferred RequestHandlerDelegate is needed there).
+            w.Open("switch (behaviors.Count)");
+            w.Line("case 0:");
+            w.Indent();
+            EmitDirectHandlerReturn(w, isVoid, isAdapter);
+            w.Dedent();
+            for (int n = 1; n <= MAX_STATIC_CHAIN_DEPTH; n++)
+            {
+                w.Line("case " + n + ":");
+                w.Indent();
+                w.Line("return " + methodName + "_Chain_" + n + "(request, " +
+                    ChainBehaviorArgs(n) + "handler, cancellationToken);");
+                w.Dedent();
+            }
+            w.Line("default:");
+            w.Indent();
+            EmitHandlerCallDelegate(w, isVoid, responseFqn, isAdapter);
+            w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
+            w.Line("    request, behaviors, handlerCall, cancellationToken);");
+            w.Dedent();
+            w.Close(); // switch
+        }
+        else
+        {
+            EmitHandlerCallDelegate(w, isVoid, responseFqn, isAdapter);
+            w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
+            w.Line("    request, behaviors, handlerCall, cancellationToken);");
+        }
 
         w.Close(); // method
+    }
+
+    /// <summary>
+    /// Emits the comma-terminated <c>behaviors[0], behaviors[1], …, behaviors[N-1], </c> argument fragment
+    /// used by the <c>_WithBehaviors</c> switch when dispatching into <c>Send_X_Chain_N</c>.
+    /// </summary>
+    private static string ChainBehaviorArgs(int n)
+    {
+        var sb = new StringBuilder();
+        for (int i = 0; i < n; i++)
+        {
+            sb.Append("behaviors[").Append(i).Append("], ");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// D5 (PD-2): emits the per-request statically-typed behavior chain methods
+    /// <c>Send_X_Chain_1 .. Send_X_Chain_{MAX_STATIC_CHAIN_DEPTH}</c>. Each method takes its N behaviors as
+    /// explicit, strongly-typed parameters and recursively delegates the <c>next</c> step to
+    /// <c>Send_X_Chain_{N-1}</c>. Because the chain threads <c>request</c>/<c>handler</c>/<c>ct</c> as
+    /// parameters rather than capturing a <c>PipelineState</c> struct, the per-link struct-boxing the
+    /// runtime <see cref="global::SkathIO.Rogue.PipelineExecutor"/> incurs is gone.
+    ///
+    /// The innermost step (<c>Chain_1</c>'s <c>next</c>) is still a <c>RequestHandlerDelegate&lt;TResponse&gt;</c>
+    /// closure over <c>handler</c>/<c>request</c>/<c>ct</c> (the same shape <see cref="EmitHandlerCallDelegate"/>
+    /// builds), and each <c>Chain_N</c> link allocates one <c>() =&gt;</c> delegate — so this reduces, but does
+    /// not eliminate, allocation. The aspirational "0 B" AC is governed by the Phase 5 benchmark, not asserted
+    /// here (NFR-PERF-5 honesty).
+    /// </summary>
+    private static void EmitChainMethods(
+        CodeWriter w, string methodName, string handlerIface, string behaviorIface,
+        string requestFqn, string responseFqn, bool isVoid, bool isAdapter)
+    {
+        for (int n = 1; n <= MAX_STATIC_CHAIN_DEPTH; n++)
+        {
+            if (n > 1) w.Line();
+
+            // Signature: (request, b0, b1, …, b{n-1}, handler, ct)
+            var sig = new StringBuilder();
+            sig.Append(requestFqn).Append(" request, ");
+            for (int i = 0; i < n; i++)
+            {
+                sig.Append(behaviorIface).Append(" b").Append(i).Append(", ");
+            }
+            sig.Append(handlerIface).Append(" handler, ");
+            sig.Append("global::System.Threading.CancellationToken ct");
+
+            w.Open(
+                "private static global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
+                methodName + "_Chain_" + n + "(" + sig + ")");
+
+            if (n == 1)
+            {
+                // Innermost link: next() invokes the handler directly. Build it as the same
+                // RequestHandlerDelegate<TResponse> EmitHandlerCallDelegate emits (handles the void/adapter
+                // TFM split), then hand it to b0.Handle as `next`.
+                EmitChainInnermostNext(w, isVoid, responseFqn, isAdapter);
+                w.Line("return b0.Handle(request, next, ct);");
+            }
+            else
+            {
+                // next() delegates to the next-shorter chain, forwarding b1..b{n-1}. The lambda captures
+                // request/b1../handler/ct — one delegate per link, but no PipelineState struct box.
+                var forward = new StringBuilder();
+                for (int i = 1; i < n; i++)
+                {
+                    forward.Append("b").Append(i).Append(", ");
+                }
+                w.Line(
+                    "return b0.Handle(request, () => " + methodName + "_Chain_" + (n - 1) +
+                    "(request, " + forward + "handler, ct), ct);");
+            }
+
+            w.Close(); // Chain_n method
+        }
+    }
+
+    /// <summary>
+    /// D5 (PD-2): emits the innermost <c>next</c> delegate for <c>Send_X_Chain_1</c> — a
+    /// <c>RequestHandlerDelegate&lt;TResponse&gt; next = () =&gt; handler.Handle(request, ct)</c> with the
+    /// SAME void/adapter/TFM wrapping <see cref="EmitHandlerCallDelegate"/> produces (the chain's handler
+    /// parameter is named <c>handler</c> and its cancellation token <c>ct</c>, matching this body). The
+    /// delegate is named <c>next</c> so the caller can pass it straight to <c>b0.Handle(request, next, ct)</c>.
+    /// </summary>
+    private static void EmitChainInnermostNext(CodeWriter w, bool isVoid, string responseFqn, bool isAdapter)
+    {
+        if (isVoid)
+        {
+            if (isAdapter)
+            {
+                // PD-48: adapter void handler returns bare ValueTask on every TFM — wrap to ValueTask<Unit>.
+                w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> next = () =>");
+                w.Line("{");
+                w.Line("    var voidVt = handler.Handle(request, ct);");
+                w.Line("    if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
+                w.Line("    return AwaitVoidThenUnit(voidVt);");
+                w.Line("};");
+                return;
+            }
+
+            w.Line("#if NETSTANDARD2_0");
+            w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> next = () => handler.Handle(request, ct);");
+            w.Line("#else");
+            w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> next = () =>");
+            w.Line("{");
+            w.Line("    var voidVt = handler.Handle(request, ct);");
+            w.Line("    if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
+            w.Line("    return AwaitVoidThenUnit(voidVt);");
+            w.Line("};");
+            w.Line("#endif");
+        }
+        else
+        {
+            w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> next = () => handler.Handle(request, ct);");
+        }
     }
 
     /// <summary>
@@ -943,31 +1329,36 @@ internal static class DispatcherEmitter
     {
         string eventType  = ToGlobalFqn(eventFqn);
         string methodName = "Publish_" + MakeSafeName(eventFqn);
+        // D1: the factory-delegate array field emitted by EmitConstructor for this event type.
+        string fieldName  = HandlerFieldName(eventFqn);
 
         // ns2.0: ValueTask<Unit>; net8+: ValueTask. async: FR-45/PD-30 telemetry wraps the dispatch
         // in a try/finally that observes the outcome.
         w.Line("#if NETSTANDARD2_0");
         w.Open("private async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
-        EmitPublishEventBody(w, eventType, handlerFqns, returnsUnit: true);
+        EmitPublishEventBody(w, eventType, fieldName, returnsUnit: true);
         w.Close();
         w.Line("#else");
         w.Open("private async global::System.Threading.Tasks.ValueTask " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
-        EmitPublishEventBody(w, eventType, handlerFqns, returnsUnit: false);
+        EmitPublishEventBody(w, eventType, fieldName, returnsUnit: false);
         w.Close();
         w.Line("#endif");
     }
 
-    private static void EmitPublishEventBody(CodeWriter w, string eventTypeFqn, List<string> handlerFqns, bool returnsUnit)
+    private static void EmitPublishEventBody(CodeWriter w, string eventTypeFqn, string fieldName, bool returnsUnit)
     {
         w.Line("var publisher = " + SP + ".GetRequiredService<global::SkathIO.Rogue.IEventPublisher>(" + SVC + ");");
 
-        // Resolve all handlers via the interface (they are registered as IEventHandler<T>).
-        string handlerIface = "global::SkathIO.Rogue.IEventHandler<" + eventTypeFqn + ">";
-        w.Line("var handlers = " + SP + ".GetServices<" + handlerIface + ">(" + SVC + ");");
-        w.Line("var executors = new global::System.Collections.Generic.List<global::SkathIO.Rogue.EventHandlerExecutor>();");
-        w.Open("foreach (var h in handlers)");
-        w.Line("var hCopy = h;");
-        w.Line("executors.Add(new global::SkathIO.Rogue.EventHandlerExecutor(hCopy, (n, ct) => hCopy.Handle((" + eventTypeFqn + ")n, ct)));");
+        // D1: iterate the constructor-cached factory delegates instead of calling
+        // GetServices<IEventHandler<TEvent>>() per Publish. Each factory resolves a fresh handler
+        // instance (transient/scoped lifetimes preserved). The executors array is built once per
+        // Publish; arrays implement IEnumerable<EventHandlerExecutor> natively, so it passes to
+        // IEventPublisher.Publish with no boxing and no signature change.
+        w.Line("var __factories = " + fieldName + ";");
+        w.Line("var executors = new global::SkathIO.Rogue.EventHandlerExecutor[__factories.Length];");
+        w.Open("for (int __i = 0; __i < __factories.Length; __i++)");
+        w.Line("var __h = __factories[__i]();");
+        w.Line("executors[__i] = new global::SkathIO.Rogue.EventHandlerExecutor(__h, (__ev, __ct) => __h.Handle((" + eventTypeFqn + ")__ev, __ct));");
         w.Close();
 
         // FR-45 / PD-30: one dispatch scope per Publish call. The method is async; on the
@@ -1058,6 +1449,131 @@ internal static class DispatcherEmitter
     }
 
     // ────────────────────────────────────────────────────────────────────────────────────
+    // D3: public concrete-dispatch extension methods (RogueExtensions.g.cs)
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// D3: emits the public <c>RogueExtensions</c> class — one typed extension method per
+    /// <c>ICommand&lt;T&gt;</c> / <c>IQuery&lt;T&gt;</c> / void <c>ICommand</c> handler — into a SEPARATE
+    /// top-level file (<c>RogueExtensions.g.cs</c>). Each method receives the public
+    /// <c>RogueDispatcher</c> base, downcasts it to the generated <c>RogueDispatcherImpl</c> (a static,
+    /// AOT-safe cast — no reflection), and calls the matching <c>internal Send_X</c> directly. This is
+    /// the 0-alloc concrete fast path (AC-6): it bypasses the <c>ISender</c> interface dispatch, which
+    /// boxes one <c>ValueTask&lt;T&gt;</c> by design.
+    ///
+    /// The downcast is safe because the registration emitter wires <c>RogueDispatcher</c> to
+    /// <c>RogueDispatcherImpl</c> as its only concrete implementation; consumers MUST inject
+    /// <c>RogueDispatcher</c> (not <c>ISender</c>, which resolves to <c>Mediator</c> and would fail the
+    /// cast). Stream handlers are excluded: they live in <c>models.StreamHandlers</c> (a separate
+    /// collection, never in <c>models.Handlers</c>) and return <c>IAsyncEnumerable&lt;T&gt;</c> — a
+    /// different signature outside this fast-path's scope. Adapter-mapped handlers are also excluded:
+    /// their request type does not implement the core CQS markers and dispatches only via SendObject.
+    /// </summary>
+    internal static string EmitExtensionsClass(EquatableArray<HandlerModel> handlers)
+    {
+        var w = new CodeWriter();
+
+        // Collect the handlers that get a typed concrete entry point (PD-48: adapter-mapped handlers
+        // dispatch only through SendObject — their request type does not implement ICommand<T>/IQuery<T>,
+        // so there is no typed Send_X to expose; stream handlers live in a separate model collection and
+        // never reach here).
+        var emitted = new List<HandlerModel>();
+        foreach (var handler in handlers)
+            if (!handler.IsAdapterMapped) emitted.Add(handler);
+
+        // Suppress the public type entirely when there are no applicable handlers (mirrors PD-45's
+        // module-init suppression). The library's OWN self-compilation ships no handlers, so emitting a
+        // `public static class RogueExtensions` there would add an empty, useless public type to the
+        // SkathIO.Rogue package surface (and trip the PublicApiAnalyzers RS0016 surface gate). Consumer
+        // compilations with handlers emit the real per-handler methods below. The file is still produced
+        // (stable hint name) — it just carries no public symbol.
+        if (emitted.Count == 0)
+        {
+            w.Line("// No ICommand<T>/IQuery<T>/void-command handlers in this compilation — no public");
+            w.Line("// concrete-dispatch extensions are emitted (see DispatcherEmitter.EmitExtensionsClass).");
+            return w.ToString();
+        }
+
+        w.Line("namespace SkathIO.Rogue.Generated");
+        w.Line("{");
+        w.Indent();
+
+        w.Open("public static class RogueExtensions");
+
+        for (int i = 0; i < emitted.Count; i++)
+        {
+            if (i > 0) w.Line();
+            EmitExtensionMethod(w, emitted[i]);
+        }
+
+        w.Close(); // class RogueExtensions
+
+        w.Dedent();
+        w.Line("}"); // namespace
+
+        return w.ToString();
+    }
+
+    private static void EmitExtensionMethod(CodeWriter w, HandlerModel handler)
+    {
+        bool isVoid        = handler.ResponseFqn is null;
+        string requestFqn  = ToGlobalFqn(handler.RequestFqn);
+        string sendMethod  = "Send_" + MakeSafeName(handler.RequestFqn);
+        // Method name uses the request type's SIMPLE name (e.g. "PingRequest" → "SendPingRequest"),
+        // NOT the namespace-mangled MakeSafeName(RequestFqn) the impl's Send_X uses. The public
+        // extension is overload-resolved by its parameter type, so two requests sharing a simple name in
+        // different namespaces produce valid OVERLOADS (distinct parameter types) — no collision — while
+        // giving callers a clean, predictable name. MakeSafeName is still applied to the simple name to
+        // sanitise any generic/nested arity decoration into an identifier.
+        string extMethod   = "Send" + MakeSafeName(SimpleName(handler.RequestFqn));
+
+        // Void commands: Send_X returns ValueTask<Unit> on every TFM. We expose it AS ValueTask<Unit>
+        // (Unit is already public API) rather than unwrapping to ValueTask, because unwrapping the
+        // generic value task to a non-generic one cannot be done without either an allocation (AsTask)
+        // or access to the impl's private IgnoreUnit helper — and this is the 0-alloc fast path, so we
+        // keep it zero-alloc and let the caller discard the Unit. Typed commands/queries expose the
+        // natural ValueTask<TResponse>.
+        string returnType = isVoid
+            ? "global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit>"
+            : "global::System.Threading.Tasks.ValueTask<" + ToGlobalFqn(handler.ResponseFqn!) + ">";
+
+        // CS0051 guard: a `public` method cannot expose a less-accessible parameter (request) or return
+        // (response) type. When either is not public, emit the extension `internal` — still valid on the
+        // public RogueDispatcher and still callable from within the consumer assembly (where fast-path
+        // callers and the benchmark live). The dispatch path itself (Send_X on the internal impl) is
+        // unaffected; this only constrains the public-surface entry point.
+        bool isPublic =
+            handler.RequestAccessibility == TypeAccessibility.Public &&
+            handler.ResponseAccessibility == TypeAccessibility.Public;
+        string visibility = isPublic ? "public" : "internal";
+
+        if (isVoid)
+        {
+            w.Line("/// <summary>");
+            w.Line("/// 0-alloc concrete dispatch for the void command <c>" + handler.RequestFqn + "</c>.");
+            w.Line("/// Returns <c>ValueTask&lt;Unit&gt;</c> (the handler produces no value — discard the");
+            w.Line("/// <c>Unit</c>); this keeps the fast path allocation-free.");
+            w.Line("/// </summary>");
+        }
+        else
+        {
+            w.Line("/// <summary>0-alloc concrete dispatch for <c>" + handler.RequestFqn + "</c> — bypasses the ISender box.</summary>");
+        }
+
+        w.Open(
+            visibility + " static " + returnType + " " + extMethod + "(" +
+            "this global::SkathIO.Rogue.RogueDispatcher dispatcher, " +
+            requestFqn + " request, " +
+            "global::System.Threading.CancellationToken cancellationToken = default)");
+
+        w.Line(
+            "return ((global::SkathIO.Rogue.Generated.RogueDispatcherImpl)dispatcher)." +
+            sendMethod + "(request, cancellationToken);");
+
+        w.Close(); // method
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────────────
     // Helpers
     // ────────────────────────────────────────────────────────────────────────────────────
 
@@ -1106,5 +1622,25 @@ internal static class DispatcherEmitter
                 sb.Append(c);
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns the SIMPLE (unqualified) type name from a fully-qualified name — the segment after the
+    /// last namespace/containing-type <c>.</c> that precedes any generic-argument list. E.g.
+    /// "MyApp.PingRequest" → "PingRequest"; "MyApp.Page&lt;MyApp.Row&gt;" → "Page&lt;MyApp.Row&gt;"
+    /// (the dot inside the type-argument list is NOT a separator). Used to name the D3 public extension
+    /// method, which is overload-resolved by parameter type and so does not need the namespace in its
+    /// identifier (unlike the impl's Send_X, which uses the full mangled FQN for uniqueness). The result
+    /// is passed through <see cref="MakeSafeName"/> by the caller to sanitise any remaining generic
+    /// decoration into a valid identifier.
+    /// </summary>
+    internal static string SimpleName(string fqn)
+    {
+        int genericStart = fqn.IndexOf('<');
+        // Only consider dots BEFORE the generic argument list — a dot inside "<...>" qualifies a type
+        // argument, not the type's own name.
+        int searchEnd = genericStart < 0 ? fqn.Length : genericStart;
+        int lastDot = fqn.LastIndexOf('.', searchEnd - 1);
+        return lastDot < 0 ? fqn : fqn.Substring(lastDot + 1);
     }
 }

@@ -136,17 +136,13 @@ public class PingHandler : ICommandHandler<Ping, string>
         Assert.Contains("public override", text);
         Assert.Contains("Send<TResponse>", text);
 
-        // PipelineExecutor used (no MakeGenericMethod)
-        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor", text);
-
-        // NFR-SEC-1: no reflection-emit APIs in generated code
+        // NFR-SEC-1: no reflection-emit APIs in generated code. (This behavior-free Ping takes the D4
+        // bypass, so the dispatcher no longer references PipelineExecutor — the no-reflection invariant
+        // is what actually matters here and is asserted directly.)
         Assert.DoesNotContain("MakeGenericMethod", text);
         Assert.DoesNotContain("Activator.CreateInstance", text);
         Assert.DoesNotContain("Assembly.GetTypes", text);
         Assert.DoesNotContain("AppDomain.GetAssemblies", text);
-
-        // global:: prefix on all type references
-        Assert.DoesNotContain("SkathIO.Rogue.PipelineExecutor", text.Replace("global::SkathIO.Rogue.PipelineExecutor", ""));
     }
 
     [Fact]
@@ -358,6 +354,109 @@ public class UserCreatedHandler : IEventHandler<UserCreated>
         Assert.Contains("EventHandlerExecutor", text);
     }
 
+    // ── D1: Publish fan-out handler factory-delegate caching ───────────────────────────
+
+    private const string TwoHandlerEventSource = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+namespace My
+{
+    public class PingEvent : IEvent { }
+    public class Handler1 : IEventHandler<PingEvent>
+    {
+#if NETSTANDARD2_0
+        public ValueTask<Unit> Handle(PingEvent e, CancellationToken ct) => Unit.Task;
+#else
+        public ValueTask Handle(PingEvent e, CancellationToken ct) => ValueTask.CompletedTask;
+#endif
+    }
+    public class Handler2 : IEventHandler<PingEvent>
+    {
+#if NETSTANDARD2_0
+        public ValueTask<Unit> Handle(PingEvent e, CancellationToken ct) => Unit.Task;
+#else
+        public ValueTask Handle(PingEvent e, CancellationToken ct) => ValueTask.CompletedTask;
+#endif
+    }
+}";
+
+    private static string DispatcherText(string source) =>
+        GeneratorTestHelper.RunGeneratorAndAssertClean(source)
+            .Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs")
+            .SourceText.ToString();
+
+    [Fact]
+    public void PublishMethod_NoGetServicesCall_WhenHandlersKnown()
+    {
+        // D1: the per-Publish GetServices<IEventHandler<TEvent>>() enumeration is replaced by
+        // iteration over the constructor-cached factory array. The dispatcher output must contain
+        // no GetServices<...IEventHandler...> call at all (registration output is a separate file).
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        Assert.DoesNotContain("GetServices<global::SkathIO.Rogue.IEventHandler<", text);
+    }
+
+    [Fact]
+    public void PublishMethod_EmitsFactoryArrayField()
+    {
+        // D1: a `private readonly Func<IEventHandler<TEvent>>[]` field is emitted for the event type.
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        Assert.Contains(
+            "private readonly global::System.Func<global::SkathIO.Rogue.IEventHandler<global::My.PingEvent>>[] _handlers_My_PingEvent;",
+            text);
+    }
+
+    [Fact]
+    public void PublishMethod_ConstructorInitializesFactoryArray()
+    {
+        // D1: the constructor body populates the factory array with one GetRequiredService<THandler>()
+        // closure per handler — the per-Publish-fresh resolution that preserves transient lifetimes.
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        Assert.Contains("_handlers_My_PingEvent = new global::System.Func<", text);
+        Assert.Contains("() => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<global::My.Handler1>(serviceProvider),", text);
+        Assert.Contains("() => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<global::My.Handler2>(serviceProvider),", text);
+    }
+
+    [Fact]
+    public void PublishMethod_IteratesCachedArray_NotDiEnumeration()
+    {
+        // D1: Publish_X reads the cached field and walks it with an indexed loop building the
+        // executors array — no List<EventHandlerExecutor> allocation, no DI enumeration.
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        Assert.Contains("var __factories = _handlers_My_PingEvent;", text);
+        Assert.Contains("var executors = new global::SkathIO.Rogue.EventHandlerExecutor[__factories.Length];", text);
+        Assert.DoesNotContain("new global::System.Collections.Generic.List<global::SkathIO.Rogue.EventHandlerExecutor>", text);
+    }
+
+    [Fact]
+    public void PublishMethod_FactoryCaching_GeneratedDispatcherCompiles()
+    {
+        // The factory-field + constructor-population + indexed-loop reshape must produce a dispatcher
+        // that compiles in a consumer project (catches out-of-scope locals / CS-class emitter bugs
+        // that string assertions alone miss — see GeneratorTestHelper.RunGeneratorAndAssertCompiles).
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(TwoHandlerEventSource);
+    }
+
+    [Fact]
+    public void PublishMethod_ZeroHandlerEvent_EmitsNoFactoryField()
+    {
+        // An event type with no registered handler never enters handlersByEvent, so no factory field
+        // is emitted for it; the publish switch falls through to its default (FR-13).
+        const string source = @"
+using SkathIO.Rogue;
+public class Orphan : IEvent { }";
+        var text = DispatcherText(source);
+
+        Assert.DoesNotContain("_handlers_Orphan", text);
+        // No event handlers at all → the constructor stays body-less (chains base only).
+        Assert.Contains(": base(serviceProvider) { }", text);
+    }
+
     // ── Pipeline inspector ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -417,6 +516,146 @@ public class TracingBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> where T
         Assert.Contains("BehaviorInfo", text);
         Assert.Contains("TracingBehavior", text);
         Assert.Contains("open-generic", text);
+    }
+
+    // ── Phase 3 (rogue-perf D3): public concrete-dispatch extension methods ────────────
+
+    [Fact]
+    public void ExtensionsClass_EmitsOneMethodPerHandler()
+    {
+        // Two handlers — a command and a query, in a namespace — each gets one Send{SimpleName}
+        // extension method on the public RogueDispatcher, emitted into RogueExtensions.g.cs. The method
+        // uses the request type's SIMPLE name (SendPingRequest), not the namespace-mangled FQN
+        // (NOT SendMyApp_PingRequest) — the public API is overload-resolved by parameter type.
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+namespace MyApp
+{
+    public class PingRequest : ICommand<string> { }
+    public class PingHandler : ICommandHandler<PingRequest, string>
+    {
+        public ValueTask<string> Handle(PingRequest request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+    }
+    public class EchoQuery : IQuery<string> { }
+    public class EchoHandler : IQueryHandler<EchoQuery, string>
+    {
+        public ValueTask<string> Handle(EchoQuery request, CancellationToken ct) => ValueTask.FromResult(""echo"");
+    }
+}";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var ext = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueExtensions.g.cs");
+        var text = ext.SourceText.ToString();
+
+        Assert.Contains("public static class RogueExtensions", text);
+        Assert.Contains("SendPingRequest", text);
+        Assert.Contains("SendEchoQuery", text);
+        // Simple-name (not the namespace-mangled FQN) drives the method identifier.
+        Assert.DoesNotContain("SendMyApp_PingRequest", text);
+        // Receiver is the public RogueDispatcher base (NOT ISender — that resolves to Mediator).
+        Assert.Contains("this global::SkathIO.Rogue.RogueDispatcher dispatcher", text);
+        // Parameter and downcast still use the fully-qualified request type.
+        Assert.Contains("global::MyApp.PingRequest request", text);
+        Assert.Contains("Send_MyApp_PingRequest(request, cancellationToken)", text);
+    }
+
+    [Fact]
+    public void ExtensionsClass_DowncastsToImpl()
+    {
+        // The method body must downcast the public base to the generated impl (a static, AOT-safe cast)
+        // and call the internal Send_X directly — no reflection.
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class PingRequest : ICommand<string> { }
+public class PingHandler : ICommandHandler<PingRequest, string>
+{
+    public ValueTask<string> Handle(PingRequest request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+}";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var ext = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueExtensions.g.cs");
+        var text = ext.SourceText.ToString();
+
+        Assert.Contains("(global::SkathIO.Rogue.Generated.RogueDispatcherImpl)dispatcher", text);
+        Assert.Contains("Send_PingRequest(request, cancellationToken)", text);
+        Assert.DoesNotContain("MakeGenericMethod", text);
+        Assert.DoesNotContain("Activator.CreateInstance", text);
+    }
+
+    [Fact]
+    public void ExtensionsClass_Send_X_IsInternal()
+    {
+        // D3: the per-request Send_X entry point must be `internal` (not `private`) on the impl so the
+        // public extension class can reach it across the same consumer assembly.
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class PingRequest : ICommand<string> { }
+public class PingHandler : ICommandHandler<PingRequest, string>
+{
+    public ValueTask<string> Handle(PingRequest request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+}";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs");
+        var text = dispatcher.SourceText.ToString();
+
+        // The Send_X instance method is internal now (the static _Direct/_WithBehaviors companions stay
+        // private static — see DispatcherEmitter).
+        Assert.Contains("internal global::System.Threading.Tasks.ValueTask<global::System.String> Send_PingRequest(", text);
+        Assert.DoesNotContain("private global::System.Threading.Tasks.ValueTask<global::System.String> Send_PingRequest(", text);
+    }
+
+    [Fact]
+    public void ExtensionsClass_SkipsStreamHandlers()
+    {
+        // Stream handlers return IAsyncEnumerable<T> (a different signature) and live in a separate
+        // model collection (models.StreamHandlers, never models.Handlers) — RogueExtensions must NOT
+        // emit a Send{Name} method for them. A compilation with ONLY a stream handler has zero
+        // applicable Send_X handlers, so (like the library's own handler-less compilation) no public
+        // RogueExtensions type is emitted at all.
+        const string source = @"
+using SkathIO.Rogue;
+using System.Collections.Generic;
+using System.Threading;
+public class Tick : IStreamQuery<int> { }
+public class TickHandler : IStreamQueryHandler<Tick, int>
+{
+    public async IAsyncEnumerable<int> Handle(Tick request, System.Threading.CancellationToken ct)
+    {
+        yield return 1;
+        await System.Threading.Tasks.Task.CompletedTask;
+    }
+}";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var ext = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueExtensions.g.cs");
+        var text = ext.SourceText.ToString();
+
+        // No Send method for the stream request, and (no applicable handlers) no public type at all.
+        Assert.DoesNotContain("SendTick", text);
+        Assert.DoesNotContain("CreateStream", text);
+        Assert.DoesNotContain("public static class RogueExtensions", text);
+    }
+
+    [Fact]
+    public void ExtensionsClass_SuppressedWhenNoApplicableHandlers()
+    {
+        // PD-45-style suppression: a handler-less compilation (e.g. the SkathIO.Rogue library's own
+        // self-compilation) must NOT emit a public RogueExtensions type — that would add empty public
+        // surface to the shipped package and trip the PublicApiAnalyzers RS0016 gate.
+        const string source = "// empty";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var ext = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueExtensions.g.cs");
+        var text = ext.SourceText.ToString();
+
+        Assert.DoesNotContain("public static class RogueExtensions", text);
     }
 
     // ── Phase 4.2.1: stream pipeline behavior weaving (FR-23) ─────────────────────────
@@ -632,9 +871,9 @@ public class QueryHandler : ICommandHandler<Query, string>
             .First(s => s.HintName == "RogueDispatcher.g.cs");
         var text = dispatcher.SourceText.ToString();
 
-        // The handler interface reference must use global:: prefix
+        // The handler interface reference must use global:: prefix. (PipelineExecutor is not asserted
+        // here: this behavior-free Query takes the D4 bypass and the dispatcher does not reference it.)
         Assert.Contains("global::SkathIO.Rogue.ICommandHandler<", text);
-        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor", text);
         Assert.Contains("global::SkathIO.Rogue.Unit", text);
     }
 
@@ -768,10 +1007,12 @@ public class ExActionPing : IRequestExceptionAction<Ping, InvalidOperationExcept
         Assert.DoesNotContain("Expression.Compile", text);
     }
 
-    // A request type with NO processors keeps the allocation-conscious fast path (PD-2/PD-12): a
-    // direct PipelineExecutor.Execute call with no try/catch and no processor resolution.
+    // A request type with NO processors AND NO applicable behaviors takes the D4 bypass: zero
+    // GetService<IReadOnlyList<...>> lookup, zero `behaviors.Count` branch, zero PipelineExecutor.Execute
+    // — the handler is called directly through the {method}_Direct companion (no try/catch, no processor
+    // resolution, no RequestHandlerDelegate closure).
     [Fact]
-    public void NoProcessors_KeepsFastPath_NoTryCatchOrProcessorResolution()
+    public void NoProcessors_NoBehaviors_TakesD4Bypass_NoBehaviorListLookup()
     {
         const string source = @"
 using SkathIO.Rogue;
@@ -790,9 +1031,7 @@ public class PlainHandler : ICommandHandler<Plain, string>
         // The Send_Plain method body must not contain processor resolution or a try/catch.
         int start = text.IndexOf("Send_Plain(global::Plain request", System.StringComparison.Ordinal);
         Assert.True(start >= 0);
-        // Look at the slice that contains the Send_Plain method body (up to the next private method —
-        // which, per PD-31, is the Send_Plain_WithBehaviors companion the fast path delegates to for
-        // the has-behaviors case; see EmitSendWithBehaviorsMethod).
+        // Slice up to the next private method — the Send_Plain_Direct companion the bypass delegates to.
         string after = text.Substring(start);
         int nextMethod = after.IndexOf("private ", 1, System.StringComparison.Ordinal);
         string body = nextMethod > 0 ? after.Substring(0, nextMethod) : after;
@@ -800,21 +1039,263 @@ public class PlainHandler : ICommandHandler<Plain, string>
         Assert.DoesNotContain("GetServices<global::SkathIO.Rogue.IRequestPreProcessor", body);
         Assert.DoesNotContain("catch (", body);
 
-        // PD-31 (AC-C / NFR-PERF-1 closure elimination): the fast path must not build a
-        // RequestHandlerDelegate or call PipelineExecutor.Execute inline — both would force a
-        // display-class allocation that Roslyn would hoist to the top of THIS method (shared
-        // `handler`/`request`/`cancellationToken` locals). Instead it delegates the has-behaviors
-        // case to a companion method, confining that closure's scope away from the fast path.
+        // D4 bypass: no behavior-list lookup, no count branch, no behaviors local at all in the body.
+        Assert.DoesNotContain("GetService<global::System.Collections.Generic.IReadOnlyList", body);
+        Assert.DoesNotContain("behaviors.Count", body);
+
+        // PD-31 (AC-C / NFR-PERF-1 closure elimination): the bypass path must not build a
+        // RequestHandlerDelegate or call PipelineExecutor.Execute inline — it calls the handler directly
+        // through the parameterless-capture _Direct companion.
         Assert.DoesNotContain("RequestHandlerDelegate<", body);
         Assert.DoesNotContain("global::SkathIO.Rogue.PipelineExecutor.Execute", body);
-        Assert.Contains("Send_Plain_WithBehaviors(handler, request, behaviors, cancellationToken)", body);
+        Assert.Contains("Send_Plain_Direct(handler, request, cancellationToken)", body);
 
-        // The companion method must exist and be the one that actually drives PipelineExecutor.
-        Assert.Contains("private static global::System.Threading.Tasks.ValueTask<global::System.String> Send_Plain_WithBehaviors(", text);
-        int companionStart = text.IndexOf("Send_Plain_WithBehaviors(global::SkathIO.Rogue.ICommandHandler", System.StringComparison.Ordinal);
-        Assert.True(companionStart >= 0);
-        string companionBody = text.Substring(companionStart);
-        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor.Execute", companionBody);
+        // The _Direct companion exists and calls the handler directly (no PipelineExecutor anywhere in
+        // the whole dispatcher for this behavior-free, processor-free compilation).
+        Assert.Contains("private static global::System.Threading.Tasks.ValueTask<global::System.String> Send_Plain_Direct(", text);
+        Assert.DoesNotContain("global::SkathIO.Rogue.PipelineExecutor.Execute", text);
+        // No has-behaviors companion is emitted for the bypassed request.
+        Assert.DoesNotContain("Send_Plain_WithBehaviors", text);
+    }
+
+    // D4 bypass survives an open STREAM behavior (rogue-perf pass 2 — stream-filtered HasUsableOpenBehavior).
+    // A behavior-free NON-stream request must still take the D4 bypass when the only open behavior in the
+    // compilation is an IStreamPipelineBehavior<,> (which can never apply to a non-stream Send_X). Before the
+    // stream filter, the open stream behavior over-conservatively kept the IReadOnlyList lookup. This is the
+    // D4-side counterpart to ChainRuntimeTests.Chain_SurvivesOpenStreamBehavior (the D5-side).
+    [Fact]
+    public void D4Bypass_SurvivesOpenStreamBehavior_NonStreamRequestStillBypasses()
+    {
+        const string source = @"
+using SkathIO.Rogue;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+public class Plain : ICommand<string> { }
+public class PlainHandler : ICommandHandler<Plain, string>
+{
+    public ValueTask<string> Handle(Plain request, CancellationToken ct) => ValueTask.FromResult(""x"");
+}
+public sealed class OpenStreamBehavior<TReq, TRes> : IStreamPipelineBehavior<TReq, TRes>
+    where TReq : notnull
+{
+    public IAsyncEnumerable<TRes> Handle(TReq request, StreamHandlerDelegate<TRes> next, CancellationToken ct) => next();
+}";
+        var text = DispatcherText(source);
+
+        // The open stream behavior must NOT veto the non-stream D4 bypass: no behavior-list lookup, no
+        // _WithBehaviors companion — the handler is called directly through the _Direct companion.
+        Assert.DoesNotContain("GetService<global::System.Collections.Generic.IReadOnlyList", text);
+        Assert.DoesNotContain("Send_Plain_WithBehaviors", text);
+        Assert.Contains("Send_Plain_Direct(handler, request, cancellationToken)", text);
+    }
+
+    // D4 acceptance: a behavior-free request's generated dispatcher must make ZERO
+    // GetService<IReadOnlyList<IPipelineBehavior<,>>> calls (the whole point of the optimization).
+    [Fact]
+    public void BehaviorFreeRequest_DispatcherHasNoBehaviorListGetService()
+    {
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
+{
+    public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
+}";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs");
+        var text = dispatcher.SourceText.ToString();
+
+        // No behavior-list resolution at all (neither GetService nor the IReadOnlyList type reference
+        // for the pipeline behavior of this request).
+        Assert.DoesNotContain("GetService<global::System.Collections.Generic.IReadOnlyList", text);
+        Assert.DoesNotContain("IPipelineBehavior<global::Ping", text);
+
+        // And the generated dispatcher still compiles cleanly with the bypass in place.
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(source);
+    }
+
+    // D4 open-behavior guard: an OPEN IPipelineBehavior<,> applies to EVERY request, so the bypass must
+    // NOT fire for any request — the GetService<IReadOnlyList<...>> lookup MUST remain present so the
+    // open behavior is woven in at dispatch.
+    [Fact]
+    public void OpenBehaviorRegistered_DispatcherRetainsBehaviorListGetService()
+    {
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class Ping : ICommand<string> { }
+public class PingHandler : ICommandHandler<Ping, string>
+{
+    public System.Threading.Tasks.ValueTask<string> Handle(Ping request, System.Threading.CancellationToken ct) => ValueTask.FromResult(""pong"");
+}
+public class LoggingBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnull
+{
+    public ValueTask<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, System.Threading.CancellationToken ct) => next();
+}";
+        var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
+        var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
+            .First(s => s.HintName == "RogueDispatcher.g.cs");
+        var text = dispatcher.SourceText.ToString();
+
+        // The guard held: the per-dispatch behavior-list lookup is present for Ping, so the open
+        // LoggingBehavior is resolved and run.
+        Assert.Contains("GetService<global::System.Collections.Generic.IReadOnlyList<global::SkathIO.Rogue.IPipelineBehavior<global::Ping, global::System.String>>>", text);
+        Assert.Contains("behaviors.Count == 0", text);
+        Assert.Contains("Send_Ping_WithBehaviors(handler, request, behaviors, cancellationToken)", text);
+
+        // The bypass-only direct companion must NOT be emitted when the guard vetoes the bypass.
+        Assert.DoesNotContain("Send_Ping_Direct(", text);
+
+        // And it compiles cleanly.
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(source);
+    }
+
+    // ── D5 (PD-2 / rogue-perf): statically-typed per-request behavior chains ───────────
+    //
+    // A CLOSED behavior (one that implements IPipelineBehavior<ConcreteReq, ConcreteResp> directly,
+    // not the open IPipelineBehavior<,> generic) is the only kind that qualifies a request for static
+    // chain emission: its applicability is known at compile time and the runtime behavior-list length
+    // is statically bounded. The generator emits Send_X_Chain_1..8 and switches _WithBehaviors on
+    // behaviors.Count into them, falling back to PipelineExecutor.Execute beyond depth 8 / for open
+    // behaviors.
+
+    private const string ClosedBehaviorSource = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class PingRequest : ICommand<string> { }
+public class PingHandler : ICommandHandler<PingRequest, string>
+{
+    public ValueTask<string> Handle(PingRequest request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+}
+public sealed class PingClosedBehavior : IPipelineBehavior<PingRequest, string>
+{
+    public ValueTask<string> Handle(PingRequest request, RequestHandlerDelegate<string> next, CancellationToken ct) => next();
+}";
+
+    [Fact]
+    public void ChainMethod_EmittedForClosedBehaviorRequest()
+    {
+        // A request with one CLOSED behavior gets the per-request chain methods emitted.
+        var text = DispatcherText(ClosedBehaviorSource);
+
+        Assert.Contains("Send_PingRequest_Chain_1(", text);
+        // The Chain_1 body weaves b0 around the handler via next() — no PipelineState struct boxing.
+        Assert.Contains("b0.Handle(request, next, ct)", text);
+        // And it still compiles in a consumer project.
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(ClosedBehaviorSource);
+    }
+
+    [Fact]
+    public void ChainMethod_MaxDepth8_EmittedForAll8_NotNine()
+    {
+        // Chains are emitted up to MAX_STATIC_CHAIN_DEPTH = 8 and no further.
+        var text = DispatcherText(ClosedBehaviorSource);
+
+        Assert.Contains("Send_PingRequest_Chain_8(", text);
+        Assert.DoesNotContain("Send_PingRequest_Chain_9", text);
+
+        // Chain_N (N>=2) delegates its next() to the shorter chain.
+        Assert.Contains("Send_PingRequest_Chain_7(request,", text);
+    }
+
+    [Fact]
+    public void ChainMethod_WithBehaviors_SwitchesOnBehaviorCountIntoChain()
+    {
+        // _WithBehaviors switches on behaviors.Count and routes each closed count into the matching chain;
+        // depth > 8 falls back to PipelineExecutor.Execute.
+        var text = DispatcherText(ClosedBehaviorSource);
+
+        Assert.Contains("switch (behaviors.Count)", text);
+        Assert.Contains("return Send_PingRequest_Chain_1(request, behaviors[0], handler, cancellationToken);", text);
+        Assert.Contains("return Send_PingRequest_Chain_2(request, behaviors[0], behaviors[1], handler, cancellationToken);", text);
+        // The default arm keeps the runtime fold for depth > MAX_STATIC_CHAIN_DEPTH.
+        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor.Execute<global::PingRequest, global::System.String>", text);
+    }
+
+    [Fact]
+    public void ChainMethod_NotEmitted_ForOpenBehaviorRequest()
+    {
+        // An OPEN IPipelineBehavior<,> vetoes the static chain (its runtime list length is not statically
+        // known): _WithBehaviors keeps the PipelineExecutor.Execute body, and no chain method is emitted.
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class PingRequest : ICommand<string> { }
+public class PingHandler : ICommandHandler<PingRequest, string>
+{
+    public ValueTask<string> Handle(PingRequest request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+}
+public class LoggingBehavior<TReq, TRes> : IPipelineBehavior<TReq, TRes> where TReq : notnull
+{
+    public ValueTask<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, CancellationToken ct) => next();
+}";
+        var text = DispatcherText(source);
+
+        Assert.DoesNotContain("Send_PingRequest_Chain_1", text);
+        Assert.DoesNotContain("switch (behaviors.Count)", text);
+        // The open-behavior path still threads the resolved list through PipelineExecutor.Execute.
+        Assert.Contains("global::SkathIO.Rogue.PipelineExecutor.Execute<global::PingRequest, global::System.String>", text);
+    }
+
+    [Fact]
+    public void ChainMethod_NotEmitted_WhenNoBehaviors_D4BypassStillActive()
+    {
+        // A behavior-free request takes the D4 bypass — no chain, no behavior-list lookup at all.
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class PingRequest : ICommand<string> { }
+public class PingHandler : ICommandHandler<PingRequest, string>
+{
+    public ValueTask<string> Handle(PingRequest request, CancellationToken ct) => ValueTask.FromResult(""pong"");
+}";
+        var text = DispatcherText(source);
+
+        Assert.DoesNotContain("Send_PingRequest_Chain_1", text);
+        Assert.DoesNotContain("switch (behaviors.Count)", text);
+        // D4 bypass intact: no behavior-list GetService, no _WithBehaviors at all.
+        Assert.DoesNotContain("GetService<global::System.Collections.Generic.IReadOnlyList", text);
+        Assert.DoesNotContain("Send_PingRequest_WithBehaviors", text);
+    }
+
+    [Fact]
+    public void ChainMethod_VoidCommand_ChainsReturnValueTaskOfUnit()
+    {
+        // Void commands: every Send_X_Chain_N returns ValueTask<Unit> on all TFMs, and Chain_1's innermost
+        // next() wraps the handler's ValueTask into Unit. Asserts the chain compiles for the void path.
+        const string source = @"
+using SkathIO.Rogue;
+using System.Threading;
+using System.Threading.Tasks;
+public class DoThing : ICommand { }
+public class DoThingHandler : ICommandHandler<DoThing>
+{
+#if NETSTANDARD2_0
+    public ValueTask<Unit> Handle(DoThing request, CancellationToken ct) => Unit.Task;
+#else
+    public ValueTask Handle(DoThing request, CancellationToken ct) => ValueTask.CompletedTask;
+#endif
+}
+public sealed class DoThingBehavior : IPipelineBehavior<DoThing, Unit>
+{
+    public ValueTask<Unit> Handle(DoThing request, RequestHandlerDelegate<Unit> next, CancellationToken ct) => next();
+}";
+        var text = DispatcherText(source);
+
+        // Chain returns ValueTask<Unit> for the void command.
+        Assert.Contains("ValueTask<global::SkathIO.Rogue.Unit> Send_DoThing_Chain_1(", text);
+        // Innermost next() participates in the Unit-wrapping void path.
+        Assert.Contains("AwaitVoidThenUnit", text);
+        // And the void-command chain compiles in a consumer project (covers the TFM split).
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(source);
     }
 
     // ── FR-25/26/27 compile-verification matrix (pass 2, review 2026-06-07) ─────────────
@@ -1128,6 +1609,13 @@ public class ActionB : IRequestExceptionAction<Ping, InvalidOperationException>
         Assert.Equal(2, notifDescriptors.Count);
         Assert.Single(notifDescriptors, d => d.ImplementationType == handlerAType);
         Assert.Single(notifDescriptors, d => d.ImplementationType == handlerBType);
+
+        // D1 register/resolve lockstep: each notification handler is ALSO registered under its own
+        // concrete type (so the dispatcher's cached Func<IEventHandler<T>>[] factory can resolve it via
+        // GetRequiredService<TConcrete>()). TryAdd by the concrete service type is idempotent — exactly
+        // one descriptor each even after two Register invocations.
+        AssertExactlyOne(descriptors, handlerAType);
+        AssertExactlyOne(descriptors, handlerBType);
 
         // The IReadOnlyList<IPipelineBehavior<Ping,string>> factory descriptor: exactly one.
         var pingType = assembly.GetType("Ping", throwOnError: true)!;

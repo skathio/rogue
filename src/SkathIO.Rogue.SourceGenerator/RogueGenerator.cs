@@ -70,6 +70,11 @@ public sealed class RogueGenerator : IIncrementalGenerator
             spc.AddSource("RogueServiceCollectionExtensions.g.cs",
                 SourceText.From(fileHeader + RegistrationEmitter.Emit(models, emitOpts), Encoding.UTF8));
 
+            // D3: public concrete-dispatch extension methods (RogueExtensions). Separate top-level file
+            // so the public 0-alloc fast path is callable from consumer assemblies (incl. benchmarks).
+            spc.AddSource("RogueExtensions.g.cs",
+                SourceText.From(fileHeader + DispatcherEmitter.EmitExtensionsClass(models.Handlers), Encoding.UTF8));
+
             spc.AddSource("RoguePipelineInspector.g.cs",
                 SourceText.From(fileHeader + InspectorEmitter.Emit(models, emitOpts), Encoding.UTF8));
 
@@ -130,7 +135,9 @@ public sealed class RogueGenerator : IIncrementalGenerator
                     Accessibility: GetAccessibility(typeSymbol),
                     CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
                     IsAbstract: typeSymbol.IsAbstract,
-                    HasPublicCtor: HasPublicConstructor(typeSymbol)));
+                    HasPublicCtor: HasPublicConstructor(typeSymbol),
+                    RequestAccessibility: GetTypeAccessibility(iface.TypeArguments[0]),
+                    ResponseAccessibility: GetTypeAccessibility(iface.TypeArguments[1])));
             }
             else if (ifaceName == WellKnownTypeNames.IQueryHandler2 && iface.TypeArguments.Length == 2)
             {
@@ -142,7 +149,9 @@ public sealed class RogueGenerator : IIncrementalGenerator
                     Accessibility: GetAccessibility(typeSymbol),
                     CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
                     IsAbstract: typeSymbol.IsAbstract,
-                    HasPublicCtor: HasPublicConstructor(typeSymbol)));
+                    HasPublicCtor: HasPublicConstructor(typeSymbol),
+                    RequestAccessibility: GetTypeAccessibility(iface.TypeArguments[0]),
+                    ResponseAccessibility: GetTypeAccessibility(iface.TypeArguments[1])));
             }
             else if (ifaceName == WellKnownTypeNames.ICommandHandler1 && iface.TypeArguments.Length == 1)
             {
@@ -155,7 +164,8 @@ public sealed class RogueGenerator : IIncrementalGenerator
                     Accessibility: GetAccessibility(typeSymbol),
                     CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
                     IsAbstract: typeSymbol.IsAbstract,
-                    HasPublicCtor: HasPublicConstructor(typeSymbol)));
+                    HasPublicCtor: HasPublicConstructor(typeSymbol),
+                    RequestAccessibility: GetTypeAccessibility(iface.TypeArguments[0])));
             }
             // ── MediatR-adapter request handlers (PD-43 amendment / PD-48 adapter-mapping rule) ──
             // A class implementing the adapter's Compatibility.IRequestHandler<TReq,TResp> /
@@ -634,6 +644,21 @@ public sealed class RogueGenerator : IIncrementalGenerator
     }
 
     private static TypeAccessibility GetAccessibility(INamedTypeSymbol symbol) =>
+        symbol.DeclaredAccessibility switch
+        {
+            Accessibility.Public   => TypeAccessibility.Public,
+            Accessibility.Internal => TypeAccessibility.Internal,
+            _                      => TypeAccessibility.Other,
+        };
+
+    /// <summary>
+    /// Accessibility of an arbitrary type symbol (e.g. a request/response type argument). Mirrors the
+    /// <see cref="INamedTypeSymbol"/> overload; a type with no declared accessibility (e.g. a type
+    /// parameter) is treated as <see cref="TypeAccessibility.Other"/> so the generated D3 extension
+    /// method falls back to the safe <c>internal</c> visibility (D3: never expose a less-accessible
+    /// type from a public method — CS0051).
+    /// </summary>
+    private static TypeAccessibility GetTypeAccessibility(ITypeSymbol symbol) =>
         symbol.DeclaredAccessibility switch
         {
             Accessibility.Public   => TypeAccessibility.Public,

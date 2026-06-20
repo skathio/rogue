@@ -16,7 +16,6 @@ SkathIO.Rogue.ForeachAwaitPublisher.ForeachAwaitPublisher() -> void
 SkathIO.Rogue.ForeachAwaitPublisher.Publish(System.Collections.Generic.IEnumerable<SkathIO.Rogue.EventHandlerExecutor!>! handlerExecutors, SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Mediator
 SkathIO.Rogue.Mediator.CreateStream<TItem>(SkathIO.Rogue.IStreamQuery<TItem>! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
-SkathIO.Rogue.Mediator.Mediator(System.IServiceProvider! serviceProvider, SkathIO.Rogue.RogueOptions! options) -> void
 SkathIO.Rogue.Mediator.Publish(object! event, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Mediator.Publish(SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Mediator.Send(object! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<object?>

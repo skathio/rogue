@@ -9,7 +9,11 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 ## [1.0.0]
 
 First public release. An AOT-safe, source-generated CQRS/mediator for .NET — handlers are discovered
-and wired at compile time, with no runtime reflection or assembly scanning.
+and wired at compile time, with no runtime reflection or assembly scanning. Rogue's single-handler
+`Send` paths and Publish N=2 fan-out meet or beat MediatR on the reference hardware, alongside a ~19×
+cold-start lead. Honest positioning: Rogue is **not** the fastest mediator at every fan-out — it remains
+marginally slower than MediatR at Publish N=5 (~7%) and N=20 (~24%). See
+[bench/RESULTS.md](bench/RESULTS.md) for the full measured table, including the not-fastest scenarios.
 
 ### Packages
 
@@ -30,7 +34,14 @@ and wired at compile time, with no runtime reflection or assembly scanning.
   `IRequest<T>` / `IRequest` / `INotification` / `IStreamRequest<T>` surface lives in the
   `SkathIO.Rogue.MediatR` compatibility adapter for drop-in migration.
 - **Dispatch entry points.** `ISender`, `IPublisher`, `IMediator`; opt-in untyped `Send(object)` /
-  `Publish(object)` via `RogueOptions.EnableObjectDispatch`.
+  `Publish(object)` via `RogueOptions.EnableObjectDispatch`. The default `Mediator` implementation
+  constructor-injects and caches the generated `RogueDispatcher` (registered `Scoped`, matching
+  `RogueDispatcher`'s lifetime) rather than resolving it per dispatch.
+- **Public concrete dispatch path.** The generator emits `public static`
+  `RogueDispatcher.Send{RequestType}(request, ct)` extension methods (in `SkathIO.Rogue.Generated`,
+  one per command/query handler) that dispatch through the generated concrete entry point, bypassing the
+  `ISender` `ValueTask<T>` box. Inject `RogueDispatcher` (the public base, registered in DI) instead of
+  `ISender` to opt into this fast lane. Measured: ~30 ns concrete vs ~90 ns `ISender`.
 - **Pipeline behaviors.** `IPipelineBehavior<,>` and `IStreamPipelineBehavior<,>`, woven at compile
   time, with ordering via `[BehaviorOrder]` or registration order. Open-generic behaviors
   auto-discovered from referenced assemblies. `IRoguePipelineInspector` to inspect the resolved
@@ -67,6 +78,20 @@ and wired at compile time, with no runtime reflection or assembly scanning.
 - **Packaging.** All packages ship MIT-licensed with SourceLink, embedded symbols, deterministic
   builds, MinVer versioning, and a packed README. Public API surface is tracked per package and
   enforced by CI.
+
+### Performance
+
+- **Behavior-list bypass.** Generated dispatch for a request with no statically-discovered behaviors
+  skips the per-`Send` `GetService<IReadOnlyList<IPipelineBehavior<…>>>()` DI lookup entirely and calls
+  the handler directly: ~90 ns / 48 B for a behavior-free `Send` (vs. MediatR's ~111 ns / 224 B on the
+  reference hardware — see [bench/RESULTS.md](bench/RESULTS.md)).
+- **Notification handler caching.** `Publish` caches per-event `Func<IEventHandler<T>>[]` factory arrays
+  in the dispatcher constructor, eliminating a per-`Publish` `GetServices<IEventHandler<T>>()`
+  enumeration; each event handler is registered under its own concrete type (alongside the
+  `IEventHandler<T>` registration) so the cached factories resolve correctly.
+- **Static behavior chains.** For closed (per-request) behaviors, the generator emits statically-typed
+  chain methods (`Send_X_Chain_N`, up to 8 deep) that pass each behavior as a typed parameter instead of
+  folding over the behavior list at runtime — pipeline latency is flat across behavior depth.
 
 ### Target frameworks
 

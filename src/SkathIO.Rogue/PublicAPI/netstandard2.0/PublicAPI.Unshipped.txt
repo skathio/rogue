@@ -1,1 +1,3 @@
 #nullable enable
+*REMOVED*SkathIO.Rogue.Mediator.Mediator(System.IServiceProvider! serviceProvider, SkathIO.Rogue.RogueOptions! options) -> void
+SkathIO.Rogue.Mediator.Mediator(SkathIO.Rogue.RogueDispatcher! dispatcher, SkathIO.Rogue.RogueOptions! options) -> void
