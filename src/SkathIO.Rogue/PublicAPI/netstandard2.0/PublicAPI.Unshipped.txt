@@ -1,7 +1,1 @@
 #nullable enable
-*REMOVED*SkathIO.Rogue.Mediator.Mediator(System.IServiceProvider! serviceProvider, SkathIO.Rogue.RogueOptions! options) -> void
-SkathIO.Rogue.Mediator.Mediator(SkathIO.Rogue.RogueDispatcher! dispatcher, SkathIO.Rogue.RogueOptions! options) -> void
-*REMOVED*SkathIO.Rogue.ForeachAwaitPublisher.Publish(System.Collections.Generic.IEnumerable<SkathIO.Rogue.EventHandlerExecutor!>! handlerExecutors, SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
-*REMOVED*SkathIO.Rogue.WhenAllPublisher.Publish(System.Collections.Generic.IEnumerable<SkathIO.Rogue.EventHandlerExecutor!>! handlerExecutors, SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
-SkathIO.Rogue.ForeachAwaitPublisher.Publish<TEvent>(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.IEventHandler<TEvent>!>! handlers, TEvent ev, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
-SkathIO.Rogue.WhenAllPublisher.Publish<TEvent>(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.IEventHandler<TEvent>!>! handlers, TEvent ev, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>

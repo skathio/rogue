@@ -1,7 +1,4 @@
 #nullable enable
-override SkathIO.Rogue.Unit.Equals(object? obj) -> bool
-override SkathIO.Rogue.Unit.GetHashCode() -> int
-override SkathIO.Rogue.Unit.ToString() -> string!
 SkathIO.Rogue.BehaviorInfo
 SkathIO.Rogue.BehaviorInfo.BehaviorInfo(System.Type! BehaviorType, int Order, string! Source) -> void
 SkathIO.Rogue.BehaviorInfo.BehaviorType.get -> System.Type!
@@ -23,12 +20,13 @@ SkathIO.Rogue.IEvent
 SkathIO.Rogue.IEventHandler<TEvent>
 SkathIO.Rogue.IEventHandler<TEvent>.Handle(TEvent event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
 SkathIO.Rogue.IEventPublisher
+SkathIO.Rogue.IEventPublisher.Publish<TEvent>(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.IEventHandler<TEvent>!>! handlers, TEvent ev, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
 SkathIO.Rogue.IMediator
 SkathIO.Rogue.IPipelineBehavior<TRequest, TResponse>
 SkathIO.Rogue.IPipelineBehavior<TRequest, TResponse>.Handle(TRequest request, SkathIO.Rogue.RequestHandlerDelegate<TResponse>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
 SkathIO.Rogue.IPublisher
-SkathIO.Rogue.IPublisher.Publish(object! event, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
 SkathIO.Rogue.IPublisher.Publish(SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
+SkathIO.Rogue.IPublisher.Publish(object! event, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
 SkathIO.Rogue.IQuery<TResponse>
 SkathIO.Rogue.IQueryHandler<TQuery, TResponse>
 SkathIO.Rogue.IQueryHandler<TQuery, TResponse>.Handle(TQuery query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
@@ -44,8 +42,8 @@ SkathIO.Rogue.IRoguePipelineInspector
 SkathIO.Rogue.IRoguePipelineInspector.GetPipeline(System.Type! requestType) -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.BehaviorInfo!>!
 SkathIO.Rogue.IRoguePipelineInspector.GetPipeline<TRequest>() -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.BehaviorInfo!>!
 SkathIO.Rogue.ISender
-SkathIO.Rogue.ISender.Send(object! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<object?>
 SkathIO.Rogue.ISender.Send(SkathIO.Rogue.ICommand! command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.ISender.Send(object! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<object?>
 SkathIO.Rogue.ISender.Send<TResponse>(SkathIO.Rogue.ICommand<TResponse>! command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<TResponse>
 SkathIO.Rogue.ISender.Send<TResponse>(SkathIO.Rogue.IQuery<TResponse>! query, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<TResponse>
 SkathIO.Rogue.RequestExceptionHandlerState<TResponse>
@@ -57,7 +55,10 @@ SkathIO.Rogue.RequestHandlerDelegate<TResponse>
 SkathIO.Rogue.Unit
 SkathIO.Rogue.Unit.Equals(SkathIO.Rogue.Unit other) -> bool
 SkathIO.Rogue.Unit.Unit() -> void
-static readonly SkathIO.Rogue.Unit.Value -> SkathIO.Rogue.Unit
+override SkathIO.Rogue.Unit.Equals(object? obj) -> bool
+override SkathIO.Rogue.Unit.GetHashCode() -> int
+override SkathIO.Rogue.Unit.ToString() -> string!
+static SkathIO.Rogue.Unit.Task.get -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
 static SkathIO.Rogue.Unit.operator !=(SkathIO.Rogue.Unit left, SkathIO.Rogue.Unit right) -> bool
 static SkathIO.Rogue.Unit.operator ==(SkathIO.Rogue.Unit left, SkathIO.Rogue.Unit right) -> bool
-static SkathIO.Rogue.Unit.Task.get -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
+static readonly SkathIO.Rogue.Unit.Value -> SkathIO.Rogue.Unit
