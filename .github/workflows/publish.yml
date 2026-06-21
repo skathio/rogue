@@ -1,5 +1,19 @@
 # .github/workflows/publish.yml
+#
+# Publishes to nuget.org via OIDC trusted publishing on a `v*` tag push.
+#
+# Why this is a self-authored job (not the hashira nuget-package-publish
+# reusable workflow): NuGet trusted publishing validates the OIDC token's
+# `job_workflow_ref` claim against the policy's workflow file. When the job
+# runs inside a reusable workflow from another repo, that claim is
+# `skathio/hashira/.github/workflows/nuget-package-publish.yml@…`, which does
+# NOT match the policy (repo skathio/rogue, workflow publish.yml) → HTTP 401.
+# A composite ACTION, by contrast, runs in THIS job, so the claim stays
+# `skathio/rogue/.github/workflows/publish.yml`. So we run the steps here and
+# call hashira's `nuget-push` composite action for the OIDC push — the same
+# pattern the npm flow uses (skathio/hashira npm-release composite action).
 name: publish
+
 on:
   push:
     tags:
@@ -10,19 +24,40 @@ permissions: {}
 
 jobs:
   publish:
-    uses: skathio/hashira/.github/workflows/nuget-package-publish.yml@780b40fdd21c61643733e8455b47c27a3cd9f37a
+    runs-on: ubuntu-latest
+    # The gate: pauses for the required reviewer, and scopes the OIDC token's
+    # `environment` claim to `production` (matching the trusted-publishing policy).
+    environment: production
     permissions:
-      id-token: write
-      contents: write
-      pull-requests: write
-    with:
-      project_path: 'SkathIO.Rogue.sln'
-      dotnet_version: '10.0.x'
-      target: 'https://api.nuget.org/v3/index.json'
-      environment_name: 'production'
-      library_ref: '780b40fdd21c61643733e8455b47c27a3cd9f37a'
-      # OIDC trusted publishing: NuGet/login mints a short-lived key from the
-      # job's id-token. No NUGET_API_KEY secret is passed (omitting the
-      # secrets: block selects the OIDC path). Verify this matches your
-      # nuget.org username.
-      nuget_user: 'skathi'
+      id-token: write   # NuGet OIDC trusted-publishing token exchange (NuGet/login)
+      contents: write   # gh release create
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # MinVer walks full history + tags to infer the version
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Pack (MinVer infers the version from the v* tag)
+        run: dotnet pack SkathIO.Rogue.sln -c Release -o "${{ runner.temp }}/nupkgs"
+
+      - name: Push to nuget.org (OIDC trusted publishing)
+        # Composite action → runs in THIS job, so the OIDC job_workflow_ref is
+        # this publish.yml. nuget-push runs NuGet/login (no api_key) to mint a
+        # short-lived key. SHA-pinned to skathio/hashira main.
+        uses: skathio/hashira/.github/actions/nuget-push@59c5b1705bd5a862bafb0384faf32e9ccf48257d
+        with:
+          nupkg_path: '${{ runner.temp }}/nupkgs/*.nupkg'
+          # Verify this matches your nuget.org account username (the policy creator).
+          nuget_user: 'skathi'
+
+      - name: Create GitHub Release
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          gh release view "${tag}" >/dev/null 2>&1 || gh release create "${tag}" --generate-notes
