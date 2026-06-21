@@ -6,6 +6,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <Deterministic>true</Deterministic>
+    <!-- MinVer reads version from git tags; our release tags are `v*` (publish.yml
+         triggers on `v*`), and MinVer's default tag prefix is empty — so without
+         this it ignores `v1.0.0` and falls back to 0.0.0-alpha.0.<height>. -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <!-- SourceLink -->
