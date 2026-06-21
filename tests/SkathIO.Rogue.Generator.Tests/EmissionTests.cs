@@ -350,8 +350,17 @@ public class UserCreatedHandler : IEventHandler<UserCreated>
         // Per-notification dispatch method
         Assert.Contains("Publish_UserCreated", text);
 
-        // EventHandlerExecutor used
-        Assert.Contains("EventHandlerExecutor", text);
+        // D2 (publish-fanout-perf): EventHandlerExecutor is removed entirely — the generated body
+        // hands the new generic IEventPublisher.Publish<TEvent> an IEventHandler<TEvent>[] directly.
+        Assert.DoesNotContain("EventHandlerExecutor", text);
+        Assert.Contains("new global::SkathIO.Rogue.IEventHandler<global::UserCreated>[__factories.Length]", text);
+
+        // D3 (publish-fanout-perf): the handler array + publisher call moved out of the single
+        // Publish_X body into the non-async Publish_X_Direct companion, which reads the
+        // constructor-cached singleton _eventPublisher (no per-call DI re-resolution). The old
+        // single-method shape called a per-call `publisher` local inline — that local is gone.
+        Assert.Contains("_eventPublisher.Publish(__handlers, ev, cancellationToken)", text);
+        Assert.DoesNotContain("publisher.Publish(", text);
     }
 
     // ── D1: Publish fan-out handler factory-delegate caching ───────────────────────────
@@ -399,6 +408,27 @@ namespace My
     }
 
     [Fact]
+    public void PublishMethod_DirectBody_NoPerCallEventPublisherResolution()
+    {
+        // D3 (publish-fanout-perf): the singleton IEventPublisher is resolved ONCE in the constructor
+        // (PublishMethod_ConstructorPopulatesEventPublisher) and read from the _eventPublisher field on
+        // the hot path — so the Publish_X_Direct body must NOT re-resolve it via
+        // GetRequiredService<IEventPublisher> per call. The only GetRequiredService<IEventPublisher> in
+        // the whole dispatcher lives in the constructor; the _Direct body uses the cached field.
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        // Slice out the Publish_My_PingEvent_Direct body (between its signature and the next method).
+        int start = text.IndexOf("_Direct(global::My.PingEvent ev", System.StringComparison.Ordinal);
+        Assert.True(start >= 0, "Publish_My_PingEvent_Direct must be emitted");
+        string after = text.Substring(start);
+        int nextMethod = after.IndexOf("private ", 1, System.StringComparison.Ordinal);
+        string body = nextMethod > 0 ? after.Substring(0, nextMethod) : after;
+
+        Assert.DoesNotContain("GetRequiredService<global::SkathIO.Rogue.IEventPublisher>", body);
+        Assert.Contains("_eventPublisher.Publish(__handlers, ev, cancellationToken)", body);
+    }
+
+    [Fact]
     public void PublishMethod_EmitsFactoryArrayField()
     {
         // D1: a `private readonly Func<IEventHandler<TEvent>>[]` field is emitted for the event type.
@@ -424,12 +454,17 @@ namespace My
     [Fact]
     public void PublishMethod_IteratesCachedArray_NotDiEnumeration()
     {
-        // D1: Publish_X reads the cached field and walks it with an indexed loop building the
-        // executors array — no List<EventHandlerExecutor> allocation, no DI enumeration.
+        // D1: Publish reads the cached field and walks it with an indexed loop. D2
+        // (publish-fanout-perf): the loop now builds an IEventHandler<TEvent>[] directly (the cached
+        // factory result IS the typed handler) instead of wrapping each one in an EventHandlerExecutor
+        // — no wrapper allocation, no closure, no List<EventHandlerExecutor> allocation, no DI enumeration.
+        // D3 (publish-fanout-perf): this build now lives in the non-async Publish_X_Direct companion
+        // (the entry point Publish_X only gates on telemetry) — the array-build text is unchanged.
         var text = DispatcherText(TwoHandlerEventSource);
 
         Assert.Contains("var __factories = _handlers_My_PingEvent;", text);
-        Assert.Contains("var executors = new global::SkathIO.Rogue.EventHandlerExecutor[__factories.Length];", text);
+        Assert.Contains("var __handlers = new global::SkathIO.Rogue.IEventHandler<global::My.PingEvent>[__factories.Length];", text);
+        Assert.DoesNotContain("EventHandlerExecutor", text);
         Assert.DoesNotContain("new global::System.Collections.Generic.List<global::SkathIO.Rogue.EventHandlerExecutor>", text);
     }
 
@@ -439,6 +474,79 @@ namespace My
         // The factory-field + constructor-population + indexed-loop reshape must produce a dispatcher
         // that compiles in a consumer project (catches out-of-scope locals / CS-class emitter bugs
         // that string assertions alone miss — see GeneratorTestHelper.RunGeneratorAndAssertCompiles).
+        GeneratorTestHelper.RunGeneratorAndAssertCompiles(TwoHandlerEventSource);
+    }
+
+    // ── D3: publisher caching + telemetry-gated three-method Publish fast path ──────────
+
+    [Fact]
+    public void PublishMethod_CachesEventPublisherField()
+    {
+        // D3 (publish-fanout-perf): a `private readonly IEventPublisher _eventPublisher;` field is
+        // emitted (mirrors the D1 factory-array guard — only when the compilation has event handlers).
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        Assert.Contains("private readonly global::SkathIO.Rogue.IEventPublisher _eventPublisher;", text);
+    }
+
+    [Fact]
+    public void PublishMethod_ConstructorPopulatesEventPublisher()
+    {
+        // D3: the singleton IEventPublisher is resolved ONCE in the constructor (TryAddSingleton in
+        // RegistrationEmitter — re-resolving per Publish was the wasted DI lookup rogue-perf's D2 already
+        // removed for Send/Mediator). Mirrors PublishMethod_ConstructorInitializesFactoryArray's shape.
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        Assert.Contains(
+            "_eventPublisher = global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<global::SkathIO.Rogue.IEventPublisher>(serviceProvider);",
+            text);
+    }
+
+    [Fact]
+    public void PublishMethod_EntryPoint_HasTelemetryGateNullBranch()
+    {
+        // D3: Publish_X is the telemetry-gated entry point — it starts a dispatch scope and, on the
+        // disabled/unsubscribed path (StartDispatch returns null), returns Publish_X_Direct's ValueTask
+        // with no async state machine and no try/finally; otherwise it delegates to the async
+        // _DirectWithTelemetry companion. This mirrors EmitSendMethod's `if (__scope is null) return
+        // ..._Direct(...)` bypass shape (see NoProcessors_NoBehaviors_TakesD4Bypass_NoBehaviorListLookup).
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        Assert.Contains("var __scope = global::SkathIO.Rogue.RogueTelemetry.StartDispatch<global::My.PingEvent>();", text);
+        Assert.Contains("if (__scope is null)", text);
+        Assert.Contains("return Publish_My_PingEvent_Direct(ev, cancellationToken);", text);
+        Assert.Contains("return Publish_My_PingEvent_DirectWithTelemetry(ev, cancellationToken, __scope.Value);", text);
+    }
+
+    [Fact]
+    public void PublishMethod_ThreeMethodShape_NonAsyncDirect_AsyncTelemetryCompanion()
+    {
+        // D3: the Publish path splits into the Send-mirroring triple. _Direct is NON-async (returns the
+        // publisher's ValueTask straight through — zero extra state machine on the telemetry-off path);
+        // _DirectWithTelemetry is `async` and owns the StopDispatch try/catch/finally. The entry point
+        // Publish_X is non-async too. (Send threads the handler as a parameter so its companions are
+        // `private static`; Publish reads instance fields _eventPublisher/_handlers_X so its triple is
+        // `private` instance methods — the documented structural divergence.)
+        var text = DispatcherText(TwoHandlerEventSource);
+
+        // Non-async _Direct (net8+ bare ValueTask shape — no `async` keyword).
+        Assert.Contains("private global::System.Threading.Tasks.ValueTask Publish_My_PingEvent_Direct(", text);
+        // Async _DirectWithTelemetry takes the captured DispatchScope and observes the outcome.
+        Assert.Contains("private async global::System.Threading.Tasks.ValueTask Publish_My_PingEvent_DirectWithTelemetry(", text);
+        Assert.Contains("global::SkathIO.Rogue.RogueTelemetry.StopDispatch(scope, __exc);", text);
+        // The entry point itself is non-async (the gate returns the companion's ValueTask directly).
+        Assert.Contains("private global::System.Threading.Tasks.ValueTask Publish_My_PingEvent(", text);
+        Assert.DoesNotContain("private async global::System.Threading.Tasks.ValueTask Publish_My_PingEvent(", text);
+    }
+
+    [Fact]
+    public void PublishMethod_TelemetryGatedFastPath_GeneratedDispatcherCompiles()
+    {
+        // The three-method reshape (entry gate + non-async _Direct + async _DirectWithTelemetry), reading
+        // the cached _eventPublisher field, must compile in a consumer project for a multi-handler event
+        // — catches out-of-scope locals / CS-class emitter bugs (e.g. a _Direct that referenced a local
+        // only declared in the entry point) that string assertions alone miss. This is the D3 analogue of
+        // PublishMethod_FactoryCaching_GeneratedDispatcherCompiles, gating the full triple shape.
         GeneratorTestHelper.RunGeneratorAndAssertCompiles(TwoHandlerEventSource);
     }
 

@@ -12,24 +12,24 @@ public sealed class WhenAllPublisher : IEventPublisher
 {
     /// <inheritdoc/>
 #if NETSTANDARD2_0
-    public async ValueTask<Unit> Publish(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event, CancellationToken cancellationToken)
+    public async ValueTask<Unit> Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
     {
-        await PublishCore(handlerExecutors, @event, cancellationToken).ConfigureAwait(false);
+        await PublishCore(handlers, ev, cancellationToken).ConfigureAwait(false);
         return Unit.Value;
     }
 #else
-    public System.Threading.Tasks.ValueTask Publish(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event, CancellationToken cancellationToken)
-        => new System.Threading.Tasks.ValueTask(PublishCore(handlerExecutors, @event, cancellationToken));
+    public System.Threading.Tasks.ValueTask Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
+        => new System.Threading.Tasks.ValueTask(PublishCore(handlers, ev, cancellationToken));
 #endif
 
-    private static async Task PublishCore(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event, CancellationToken cancellationToken)
+    private static async Task PublishCore<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
     {
         var tasks = new List<Task>();
-        foreach (var executor in handlerExecutors)
+        for (var i = 0; i < handlers.Count; i++)
         {
             // Capture synchronous throws as faulted Tasks so WhenAll sees them all.
             Task t;
-            try { t = executor.ExecuteAsync(@event, cancellationToken).AsTask(); }
+            try { t = handlers[i].Handle(ev, cancellationToken).AsTask(); }
             catch (System.Exception ex) { t = Task.FromException(ex); }
             tasks.Add(t);
         }

@@ -169,6 +169,13 @@ internal static class DispatcherEmitter
     {
         if (handlersByEvent.Count == 0) return;
 
+        // D3 (publish-fanout-perf): cache the singleton IEventPublisher once. IEventPublisher is
+        // registered TryAddSingleton (RegistrationEmitter), so resolving it per Publish call is a wasted
+        // DI lookup — the same per-call re-resolution rogue-perf's D2 eliminated for Send/Mediator, never
+        // applied to Publish. Emitted only when there are event handlers (same guard as the factory
+        // arrays): a compilation with no Publish_X methods has nothing to read it.
+        w.Line("private readonly global::SkathIO.Rogue.IEventPublisher _eventPublisher;");
+
         foreach (var kvp in handlersByEvent)
         {
             string eventType   = ToGlobalFqn(kvp.Key);
@@ -184,11 +191,12 @@ internal static class DispatcherEmitter
     /// <summary>
     /// Emits the constructor. Always chains <c>: base(serviceProvider)</c> (the base stores the
     /// provider in the protected <c>_serviceProvider</c> field the overrides read). When there are
-    /// event handlers (D1), the body initializes each per-event factory-delegate array; each element
-    /// is a closure over <c>serviceProvider</c> that resolves a fresh handler instance via
-    /// <c>GetRequiredService&lt;THandler&gt;()</c> on every call — preserving transient/scoped
-    /// lifetimes (a fresh instance per factory call per Publish). With no event handlers the
-    /// constructor is body-less.
+    /// event handlers (D1), the body first caches the singleton <c>IEventPublisher</c> (D3 —
+    /// resolved once here, read per call by <c>Publish_X_Direct</c>), then initializes each per-event
+    /// factory-delegate array; each element is a closure over <c>serviceProvider</c> that resolves a
+    /// fresh handler instance via <c>GetRequiredService&lt;THandler&gt;()</c> on every call —
+    /// preserving transient/scoped lifetimes (a fresh instance per factory call per Publish). With no
+    /// event handlers the constructor is body-less.
     /// </summary>
     private static void EmitConstructor(CodeWriter w, Dictionary<string, List<string>> handlersByEvent)
     {
@@ -203,6 +211,11 @@ internal static class DispatcherEmitter
         w.Line("    : base(serviceProvider)");
         w.Line("{");
         w.Indent();
+
+        // D3 (publish-fanout-perf): resolve the singleton IEventPublisher once here, not per Publish
+        // call (Publish_X_Direct reads this cached field). Mirrors rogue-perf D2's constructor-cached
+        // dispatcher/Mediator singletons.
+        w.Line("_eventPublisher = " + SP + ".GetRequiredService<global::SkathIO.Rogue.IEventPublisher>(serviceProvider);");
 
         foreach (var kvp in handlersByEvent)
         {
@@ -1325,6 +1338,34 @@ internal static class DispatcherEmitter
     // Per-notification-type Publish helper
     // ────────────────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// D3 (publish-fanout-perf): emits the three-method <c>Publish_X</c> triple for one event type,
+    /// the direct transplant of the <c>Send_X</c> / <c>_Direct</c> / <c>_DirectWithTelemetry</c>
+    /// pattern (see <see cref="EmitSendMethod"/>, <see cref="EmitSendDirectMethod"/>,
+    /// <see cref="EmitSendDirectWithTelemetryMethod"/>) onto the Publish path:
+    /// <list type="bullet">
+    /// <item><c>Publish_X</c> — the switch-dispatched entry point (same name/signature
+    ///   <see cref="EmitPublishSwitchBody"/> already calls). Starts a dispatch scope; on the
+    ///   disabled/unsubscribed path (<c>StartDispatch</c> returns <c>null</c>) it returns
+    ///   <c>Publish_X_Direct</c>'s <see cref="System.Threading.Tasks.ValueTask"/> with no async state
+    ///   machine and no try/finally; otherwise it delegates to <c>Publish_X_DirectWithTelemetry</c>.</item>
+    /// <item><c>Publish_X_Direct</c> — <c>private</c> and NON-async. Builds the
+    ///   <c>IEventHandler&lt;TEvent&gt;[]</c> from the cached factory array (the D1/D1a per-call factory
+    ///   resolution is unchanged — D4's singleton caching is Phase 2) and returns
+    ///   <c>_eventPublisher.Publish(...)</c>'s ValueTask directly. The single source of truth for the
+    ///   handler-array build, shared by the entry point and the telemetry companion.</item>
+    /// <item><c>Publish_X_DirectWithTelemetry</c> — <c>private async</c>, reached only when a scope is
+    ///   live (already allocating a state machine). Awaits <c>Publish_X_Direct</c> inside the
+    ///   try/catch/finally that observes the outcome and calls
+    ///   <see cref="RogueTelemetry.StopDispatch"/> — identical telemetry behavior to before, just
+    ///   delegating the handler build to <c>_Direct</c> instead of duplicating it inline.</item>
+    /// </list>
+    /// Structural note vs. <see cref="EmitSendMethod"/>: Send threads the resolved handler as a
+    /// method PARAMETER, so its <c>_Direct</c>/<c>_DirectWithTelemetry</c> companions are
+    /// <c>private static</c>. Publish reads instance fields (<c>_eventPublisher</c> and the per-event
+    /// <c>_handlers_X</c> factory array) inside <c>_Direct</c>, so the triple is <c>private</c>
+    /// instance methods rather than static — the closest faithful adaptation the Publish shape allows.
+    /// </summary>
     private static void EmitPublishEventMethod(CodeWriter w, string eventFqn, List<string> handlerFqns)
     {
         string eventType  = ToGlobalFqn(eventFqn);
@@ -1332,63 +1373,115 @@ internal static class DispatcherEmitter
         // D1: the factory-delegate array field emitted by EmitConstructor for this event type.
         string fieldName  = HandlerFieldName(eventFqn);
 
-        // ns2.0: ValueTask<Unit>; net8+: ValueTask. async: FR-45/PD-30 telemetry wraps the dispatch
-        // in a try/finally that observes the outcome.
+        // ── Entry point: Publish_X (telemetry gate) ──
+        // ns2.0: ValueTask<Unit>; net8+: ValueTask. On the disabled/unsubscribed path StartDispatch
+        // returns null and we return _Direct's ValueTask straight through — no async state machine,
+        // no try/finally — mirroring EmitSendMethod's `if (__scope is null) return ..._Direct(...)`.
         w.Line("#if NETSTANDARD2_0");
-        w.Open("private async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
-        EmitPublishEventBody(w, eventType, fieldName, returnsUnit: true);
+        w.Open("private global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
+        EmitPublishEntryBody(w, eventType, methodName);
         w.Close();
         w.Line("#else");
-        w.Open("private async global::System.Threading.Tasks.ValueTask " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
-        EmitPublishEventBody(w, eventType, fieldName, returnsUnit: false);
+        w.Open("private global::System.Threading.Tasks.ValueTask " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
+        EmitPublishEntryBody(w, eventType, methodName);
+        w.Close();
+        w.Line("#endif");
+
+        w.Line();
+
+        // ── Publish_X_Direct (non-async, shared handler-array build) ──
+        w.Line("#if NETSTANDARD2_0");
+        w.Open("private global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "_Direct(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
+        EmitPublishDirectBody(w, eventType, fieldName);
+        w.Close();
+        w.Line("#else");
+        w.Open("private global::System.Threading.Tasks.ValueTask " + methodName + "_Direct(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
+        EmitPublishDirectBody(w, eventType, fieldName);
+        w.Close();
+        w.Line("#endif");
+
+        w.Line();
+
+        // ── Publish_X_DirectWithTelemetry (async, wraps _Direct in the observe try/catch/finally) ──
+        w.Line("#if NETSTANDARD2_0");
+        w.Open("private async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "_DirectWithTelemetry(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken, global::SkathIO.Rogue.DispatchScope scope)");
+        EmitPublishDirectWithTelemetryBody(w, methodName, returnsUnit: true);
+        w.Close();
+        w.Line("#else");
+        w.Open("private async global::System.Threading.Tasks.ValueTask " + methodName + "_DirectWithTelemetry(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken, global::SkathIO.Rogue.DispatchScope scope)");
+        EmitPublishDirectWithTelemetryBody(w, methodName, returnsUnit: false);
         w.Close();
         w.Line("#endif");
     }
 
-    private static void EmitPublishEventBody(CodeWriter w, string eventTypeFqn, string fieldName, bool returnsUnit)
+    /// <summary>
+    /// D3: the entry-point body — start a dispatch scope, take the zero-state-machine
+    /// <c>_Direct</c> path when telemetry is off/unsubscribed, otherwise delegate to the async
+    /// telemetry companion. TFM-agnostic: both <c>ValueTask&lt;Unit&gt;</c> and bare <c>ValueTask</c>
+    /// returns flow through the same `return ...` shape (the scope is non-generic).
+    /// </summary>
+    private static void EmitPublishEntryBody(CodeWriter w, string eventTypeFqn, string methodName)
     {
-        w.Line("var publisher = " + SP + ".GetRequiredService<global::SkathIO.Rogue.IEventPublisher>(" + SVC + ");");
-
-        // D1: iterate the constructor-cached factory delegates instead of calling
-        // GetServices<IEventHandler<TEvent>>() per Publish. Each factory resolves a fresh handler
-        // instance (transient/scoped lifetimes preserved). The executors array is built once per
-        // Publish; arrays implement IEnumerable<EventHandlerExecutor> natively, so it passes to
-        // IEventPublisher.Publish with no boxing and no signature change.
-        w.Line("var __factories = " + fieldName + ";");
-        w.Line("var executors = new global::SkathIO.Rogue.EventHandlerExecutor[__factories.Length];");
-        w.Open("for (int __i = 0; __i < __factories.Length; __i++)");
-        w.Line("var __h = __factories[__i]();");
-        w.Line("executors[__i] = new global::SkathIO.Rogue.EventHandlerExecutor(__h, (__ev, __ct) => __h.Handle((" + eventTypeFqn + ")__ev, __ct));");
-        w.Close();
-
-        // FR-45 / PD-30: one dispatch scope per Publish call. The method is async; on the
-        // disabled/unsubscribed path StartDispatch returns null and we await the publisher directly
-        // (the async state machine is unavoidable here — Publish is already a ValueTask-returning
-        // fan-out). On the enabled path the try/catch/finally observes the aggregate outcome.
+        // FR-45 / PD-30: begin a dispatch scope. When telemetry is disabled or unsubscribed,
+        // StartDispatch returns null and we return _Direct's ValueTask directly — no async state
+        // machine, no try/finally — the genuinely zero-extra-overhead Publish path.
         w.Line("var __scope = " + RT + ".StartDispatch<" + eventTypeFqn + ">();");
         w.Open("if (__scope is null)");
-        if (returnsUnit)
-            w.Line("return await publisher.Publish(executors, ev, cancellationToken).ConfigureAwait(false);");
-        else
-        {
-            w.Line("await publisher.Publish(executors, ev, cancellationToken).ConfigureAwait(false);");
-            w.Line("return;");
-        }
+        w.Line("return " + methodName + "_Direct(ev, cancellationToken);");
         w.Close(); // if (__scope is null)
+        w.Line();
+        w.Line("return " + methodName + "_DirectWithTelemetry(ev, cancellationToken, __scope.Value);");
+    }
 
+    /// <summary>
+    /// D3: the <c>_Direct</c> body — the single source of truth for the handler-array build, shared by
+    /// the telemetry-off entry-point return and the <c>_DirectWithTelemetry</c> companion. Reads the
+    /// constructor-cached <c>_eventPublisher</c> (D3 — no per-call <c>GetRequiredService</c>) and
+    /// returns its <c>ValueTask</c> directly (no <c>await</c>, no state machine).
+    /// </summary>
+    private static void EmitPublishDirectBody(CodeWriter w, string eventTypeFqn, string fieldName)
+    {
+        // D2 (publish-fanout-perf): build the IReadOnlyList<IEventHandler<TEvent>> the generic
+        // IEventPublisher.Publish<TEvent> signature takes directly. Each factory resolves a fresh
+        // handler instance (transient/scoped lifetimes preserved — D4's singleton caching is Phase 2,
+        // unchanged here) — the cached factory result IS the typed handler, so no EventHandlerExecutor
+        // wrapper or per-handler closure is needed.
+        string handlerIface = "global::SkathIO.Rogue.IEventHandler<" + eventTypeFqn + ">";
+        w.Line("var __factories = " + fieldName + ";");
+        w.Line("var __handlers = new " + handlerIface + "[__factories.Length];");
+        w.Open("for (int __i = 0; __i < __factories.Length; __i++)");
+        w.Line("__handlers[__i] = __factories[__i]();");
+        w.Close();
+
+        // D3: read the constructor-cached singleton — no per-call GetRequiredService<IEventPublisher>.
+        // Return the publisher's ValueTask directly: this method is NOT async, so the telemetry-off
+        // path adds no state machine over the publisher's own.
+        w.Line("return _eventPublisher.Publish(__handlers, ev, cancellationToken);");
+    }
+
+    /// <summary>
+    /// D3: the <c>_DirectWithTelemetry</c> body — reached only when a scope is live (telemetry enabled
+    /// AND subscribed), so this path is already allocating an async state machine. Awaits
+    /// <c>_Direct</c> inside the try/catch/finally that observes the outcome and stops the scope —
+    /// the exact telemetry behavior the pre-1.2 single-method Publish_X had, just delegating the
+    /// handler build to <c>_Direct</c> instead of duplicating it. Mirrors
+    /// <see cref="EmitSendDirectWithTelemetryMethod"/>.
+    /// </summary>
+    private static void EmitPublishDirectWithTelemetryBody(CodeWriter w, string methodName, bool returnsUnit)
+    {
         w.Line("global::System.Exception? __exc = null;");
         w.Open("try");
         if (returnsUnit)
-            w.Line("return await publisher.Publish(executors, ev, cancellationToken).ConfigureAwait(false);");
+            w.Line("return await " + methodName + "_Direct(ev, cancellationToken).ConfigureAwait(false);");
         else
-            w.Line("await publisher.Publish(executors, ev, cancellationToken).ConfigureAwait(false);");
+            w.Line("await " + methodName + "_Direct(ev, cancellationToken).ConfigureAwait(false);");
         w.Close(); // try
         w.Open("catch (global::System.Exception __ex)");
         w.Line("__exc = __ex;");
         w.Line("throw;");
         w.Close(); // catch
         w.Open("finally");
-        w.Line(RT + ".StopDispatch(__scope.Value, __exc);");
+        w.Line(RT + ".StopDispatch(scope, __exc);");
         w.Close(); // finally
     }
 

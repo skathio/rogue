@@ -17,10 +17,28 @@ benchmark suite against MediatR and martinothamar.
 
 **Performance**
 
-- **Allocation-free notification fan-out.** Replace the per-call `GetServices<>()` + list build in
-  the generated `Publish` with a generator-emitted static handler array per notification type
-  (mirroring martinothamar). This is the documented NFR-PERF-5 not-fastest scenario; closing it would
-  change the benchmark honesty entry (see [benchmarks](benchmarks.md)).
+- ~~**Allocation-free notification fan-out.**~~ **Done (`publish-fanout-perf`, 2026-06-20).** The
+  goal — close the NFR-PERF-5 not-fastest Publish scenario — is achieved: Rogue now wins Publish N=5
+  and N=20 against MediatR on both time and allocation (see
+  [bench/RESULTS.md](../bench/RESULTS.md#post-publish-fanout-perf)). Delivered in two layers: the
+  per-call `GetServices<>()` DI enumeration was already eliminated by `rogue-perf`'s D1/D1a
+  cached-factory-array change; `publish-fanout-perf` then removed the remaining `EventHandlerExecutor`
+  wrapper/closure/boxed-enumerator abstraction tax (D2 generic `IEventPublisher`) plus the per-call
+  publisher re-resolution and unconditional async state machine (D3). The benchmark honesty entry is
+  updated accordingly.
+- **Singleton-lifetime notification-handler caching (new, filed 2026-06-20).** For event handlers
+  registered at `ServiceLifetime.Singleton`, `Publish` still re-invokes a factory delegate
+  (`GetRequiredService<THandler>()`) on every call even though a singleton handler's resolved
+  instance never changes — the per-call indirection buys nothing. `publish-fanout-perf`'s Phase 2
+  attempted this (tracked as D4) and discovered the chosen mechanism is architecturally impossible:
+  the source generator has no compile-time visibility into the runtime `RogueOptions.Lifetime`
+  value (`RogueEmitOptions` carries no such field, and nothing feeds one into generation — see
+  `.somi/plans/publish-fanout-perf/decisions.md` D5 for the full discovery). Phase 2 was abandoned
+  before any code was written. A future attempt needs to resolve this via one of: (a) a build-time
+  config signal (e.g. an MSBuild property) fed into `RogueEmitOptions`, accepting a two-places-to-
+  declare-lifetime DX cost; or (b) a new compile-time-visible per-handler marker (attribute or
+  marker interface), accepting new public API surface. Either needs its own `/plan` pass before
+  implementation — this is not a same-iteration fix.
 - **Public concrete dispatch entry point.** The 0-byte concrete path is currently verified only by
   internal integration tests because the generated `Send_X` method is not reachable from a consumer
   benchmark. Emitting a public per-request dispatch entry point would let the published benchmark

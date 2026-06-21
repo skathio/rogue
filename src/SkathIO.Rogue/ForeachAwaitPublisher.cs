@@ -12,20 +12,20 @@ public sealed class ForeachAwaitPublisher : IEventPublisher
 {
     /// <inheritdoc/>
 #if NETSTANDARD2_0
-    public async ValueTask<Unit> Publish(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event, CancellationToken cancellationToken)
+    public async ValueTask<Unit> Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
     {
-        foreach (var executor in handlerExecutors)
+        for (var i = 0; i < handlers.Count; i++)
         {
-            await executor.ExecuteAsync(@event, cancellationToken).ConfigureAwait(false);
+            await handlers[i].Handle(ev, cancellationToken).ConfigureAwait(false);
         }
         return Unit.Value;
     }
 #else
-    public async ValueTask Publish(IEnumerable<EventHandlerExecutor> handlerExecutors, IEvent @event, CancellationToken cancellationToken)
+    public async ValueTask Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
     {
-        foreach (var executor in handlerExecutors)
+        for (var i = 0; i < handlers.Count; i++)
         {
-            await executor.ExecuteAsync(@event, cancellationToken).ConfigureAwait(false);
+            await handlers[i].Handle(ev, cancellationToken).ConfigureAwait(false);
         }
     }
 #endif

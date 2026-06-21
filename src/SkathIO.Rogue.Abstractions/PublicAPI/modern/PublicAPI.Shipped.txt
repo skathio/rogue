@@ -13,10 +13,6 @@ SkathIO.Rogue.BehaviorInfo.Source.init -> void
 SkathIO.Rogue.BehaviorOrderAttribute
 SkathIO.Rogue.BehaviorOrderAttribute.BehaviorOrderAttribute(int order) -> void
 SkathIO.Rogue.BehaviorOrderAttribute.Order.get -> int
-SkathIO.Rogue.EventHandlerExecutor
-SkathIO.Rogue.EventHandlerExecutor.EventHandlerExecutor(object! handlerInstance, System.Func<SkathIO.Rogue.IEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> void
-SkathIO.Rogue.EventHandlerExecutor.ExecuteAsync(SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.EventHandlerExecutor.HandlerInstance.get -> object!
 SkathIO.Rogue.ICommand
 SkathIO.Rogue.ICommand<TResponse>
 SkathIO.Rogue.ICommandHandler<TCommand, TResponse>
@@ -27,7 +23,6 @@ SkathIO.Rogue.IEvent
 SkathIO.Rogue.IEventHandler<TEvent>
 SkathIO.Rogue.IEventHandler<TEvent>.Handle(TEvent event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.IEventPublisher
-SkathIO.Rogue.IEventPublisher.Publish(System.Collections.Generic.IEnumerable<SkathIO.Rogue.EventHandlerExecutor!>! handlerExecutors, SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.IMediator
 SkathIO.Rogue.IPipelineBehavior<TRequest, TResponse>
 SkathIO.Rogue.IPipelineBehavior<TRequest, TResponse>.Handle(TRequest request, SkathIO.Rogue.RequestHandlerDelegate<TResponse>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
