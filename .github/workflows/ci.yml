@@ -9,7 +9,7 @@ permissions: {}
 
 jobs:
   ci:
-    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@70762f37277be0e7646953a7c2f16057e38ebbd5
+    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@780b40fdd21c61643733e8455b47c27a3cd9f37a
     permissions:
       contents: read
       pull-requests: write
@@ -17,7 +17,7 @@ jobs:
     with:
       project_path: 'SkathIO.Rogue.sln'
       dotnet_version: '10.0.x'
-      library_ref: '70762f37277be0e7646953a7c2f16057e38ebbd5'
+      library_ref: '780b40fdd21c61643733e8455b47c27a3cd9f37a'
 
   aot-publish:
     name: AOT publish
