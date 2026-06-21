@@ -37,46 +37,52 @@ builder.Services.AddRogue(o =>
 });
 ```
 
-## Define a request and handler
+## Define a message and handler
 
-A request implements `IRequest<TResponse>` (or `IRequest` for the void path). The handler implements
-`IRequestHandler<TRequest, TResponse>` and returns a `ValueTask`.
+Rogue's core is CQS-explicit: a read implements `IQuery<TResponse>`, a write implements `ICommand` or
+`ICommand<TResponse>`, and each is served by the matching `*Handler` returning a `ValueTask`.
 
 ```csharp
-public sealed record GreetRequest(string Name) : IRequest<GreetResponse>;
+public sealed record GreetQuery(string Name) : IQuery<GreetResponse>;
 public sealed record GreetResponse(string Greeting);
 
-public sealed class GreetHandler : IRequestHandler<GreetRequest, GreetResponse>
+public sealed class GreetHandler : IQueryHandler<GreetQuery, GreetResponse>
 {
-    public ValueTask<GreetResponse> Handle(GreetRequest request, CancellationToken ct)
-        => new(new GreetResponse($"Hello, {request.Name}!"));
+    public ValueTask<GreetResponse> Handle(GreetQuery query, CancellationToken ct)
+        => new(new GreetResponse($"Hello, {query.Name}!"));
 }
 ```
 
 ## Dispatch
 
-Inject `ISender` (requests/queries/streams) or `IPublisher` (notifications). `IMediator` combines
-both.
+Inject `ISender` (queries/commands/streams) or `IPublisher` (events). `IMediator` combines both.
 
 ```csharp
 app.MapGet("/greet/{name}", async (string name, ISender sender) =>
-    Results.Ok(await sender.Send(new GreetRequest(name))));
+    Results.Ok(await sender.Send(new GreetQuery(name))));
 ```
 
 A full runnable version of this is in [`samples/minimal-api`](../samples/minimal-api).
 
 ## Message shapes
 
+The core is CQS-explicit — each contract is independent (a type implementing two of them raises the
+`ROGUE011` diagnostic).
+
 | Interface | Handler | Dispatch | Notes |
 |-----------|---------|----------|-------|
-| `IRequest<T>` | `IRequestHandler<TRequest, T>` | `ISender.Send` | One handler per request (FR-7). |
-| `IRequest` | `IRequestHandler<TRequest>` | `ISender.Send` | Void path returns `ValueTask` (`ValueTask<Unit>` on netstandard2.0). |
-| `IQuery<T>` / `ICommand<T>` / `ICommand` | the matching `*Handler` | `ISender.Send` | Semantic aliases of `IRequest` for CQRS naming. |
-| `INotification` | `INotificationHandler<TNotification>` | `IPublisher.Publish` | Zero-to-many handlers, fan-out. |
-| `IStreamRequest<T>` | `IStreamRequestHandler<TRequest, T>` | `ISender.CreateStream` | Returns `IAsyncEnumerable<T>` (net8.0+). |
+| `IQuery<T>` | `IQueryHandler<TQuery, T>` | `ISender.Send` | A read; one handler per query (FR-7). |
+| `ICommand<T>` | `ICommandHandler<TCommand, T>` | `ISender.Send` | A write with a response; one handler. |
+| `ICommand` | `ICommandHandler<TCommand>` | `ISender.Send` | A write, void; returns `ValueTask` (`ValueTask<Unit>` on netstandard2.0). |
+| `IEvent` | `IEventHandler<TEvent>` | `IPublisher.Publish` | Zero-to-many handlers, fan-out. |
+| `IStreamQuery<T>` | `IStreamQueryHandler<TQuery, T>` | `ISender.CreateStream` | Returns `IAsyncEnumerable<T>` (net8.0+). |
 
 The untyped `Send(object)` / `Publish(object)` overloads exist for dynamic dispatch but are **opt-in**
 via `RogueOptions.EnableObjectDispatch` (FR-17); they route through a generated type `switch`.
+
+Migrating from MediatR? The `IRequest` / `INotification` / `IStreamRequest`-shaped surface is available
+in the `SkathIO.Rogue.MediatR` package (`SkathIO.Rogue.Compatibility` namespace) — see the
+[migration guide](migration-guide.md).
 
 ## Lifetimes
 

@@ -11,7 +11,7 @@ feature set: queries/commands (CQS-explicit core), events with fan-out, streamin
 stream behaviors with ordering, pre/post processors and exception handlers, compile-time diagnostics
 (ROGUE001–006 + ROGUE010/011/012; ROGUE007 unused), logging + FluentValidation integrations, a
 telemetry shim, MediatR compatibility + migration analyzer (ROGM001–006), AOT/trim support, and a
-benchmark suite against MediatR and martinothamar.
+benchmark suite against MediatR.
 
 ## Post-v1 candidates
 

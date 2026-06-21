@@ -13,11 +13,23 @@ dotnet add package SkathIO.Rogue.MediatR  # compat shim + migration analyzer
 
 ## Step 2 — Run the migration analyzer
 
-The `SkathIO.Rogue.MediatR` package includes a Roslyn analyzer (`ROGM001`/`ROGM002`). In Visual Studio or Rider, run **Analyze → Fix all in Solution** for both diagnostics.
+The `SkathIO.Rogue.MediatR` package bundles a Roslyn analyzer with code-fixes (`ROGM001`–`ROGM006`). In
+Visual Studio or Rider, run **Analyze → Fix all in Solution** to apply them.
 
-What the code-fix does automatically:
-- `ROGM001`: Replaces `using MediatR;` → `using SkathIO.Rogue;` (the marker interfaces all live in `SkathIO.Rogue`; add `using SkathIO.Rogue.Compatibility;` by hand only where you call the DI-only compat helpers such as `AddMediatR`)
-- `ROGM002`: Replaces handler `Task<T>` return types → `ValueTask<T>`
+What the code-fixes do automatically:
+- `ROGM001`: replaces `using MediatR;` → `using SkathIO.Rogue;`
+- `ROGM002`: replaces handler `Task` / `Task<T>` return types → `ValueTask` / `ValueTask<T>`
+- `ROGM006`: rewrites the MediatR-shaped marker/handler interfaces to Rogue's native CQS contracts —
+  `IRequest<T>` → `IQuery<T>` or `ICommand<T>`, `IRequestHandler<,>` → `IQueryHandler<,>` / `ICommandHandler<,>`,
+  `INotification` → `IEvent`, `INotificationHandler<>` → `IEventHandler<>`,
+  `IStreamRequest<T>` → `IStreamQuery<T>`
+- `ROGM005` (review, not auto-applied): a response-bearing request whose command-vs-query intent can't be
+  inferred from its name is migrated to the safe default `ICommand<T>` and flagged — change it to `IQuery<T>`
+  (and its handler to `IQueryHandler<,>`) if it only reads state
+
+> Prefer to keep the MediatR-shaped names instead of migrating to CQS? Reference `SkathIO.Rogue.MediatR`
+> and change `using MediatR;` → `using SkathIO.Rogue.Compatibility;` — the `IRequest` / `INotification` /
+> `IStreamRequest` surface lives there. (Skip the ROGM006 fix in that case.)
 
 ## Step 3 — Build and verify
 
@@ -28,15 +40,23 @@ dotnet test
 
 ## Feature mapping
 
-| MediatR | SkathIO.Rogue | Notes |
-|---------|---------------|-------|
-| `IRequest<T>` | `IRequest<T>` | Identical shape |
-| `IRequestHandler<T,R>` → `Task<R>` | `IRequestHandler<T,R>` → `ValueTask<R>` | Code-fix rewrites return type |
-| `INotification` / `INotificationHandler` | identical names | Direct map |
+The default migration rewrites MediatR types to Rogue's native CQS core (via the ROGM006 code-fix):
+
+| MediatR | SkathIO.Rogue (CQS core) | Notes |
+|---------|--------------------------|-------|
+| `IRequest<T>` (read) | `IQuery<T>` + `IQueryHandler<T,R>` | `Task<R>` → `ValueTask<R>` |
+| `IRequest<T>` (write) | `ICommand<T>` + `ICommandHandler<T,R>` | Ambiguous intent → `ICommand<T>` + ROGM005 review |
+| `IRequest` (void) | `ICommand` + `ICommandHandler<T>` | Void path returns `ValueTask` |
+| `INotification` / `INotificationHandler<>` | `IEvent` / `IEventHandler<>` | Fan-out preserved |
+| `IStreamRequest<T>` / `IStreamRequestHandler<,>` | `IStreamQuery<T>` / `IStreamQueryHandler<,>` | net8.0+ |
 | `IPipelineBehavior<T,R>` | `IPipelineBehavior<T,R>` | Shape preserved; `Task` → `ValueTask` |
-| `IMediator` / `ISender` / `IPublisher` | same | Use `ISender`/`IPublisher` where possible |
-| `AddMediatR(cfg => ...)` | `AddRogue()` | Assembly scan replaced by compile-time discovery |
+| `IMediator` / `ISender` / `IPublisher` | same names | Prefer `ISender` / `IPublisher` |
+| `AddMediatR(cfg => ...)` | `AddRogue()` | Assembly scan → compile-time discovery (the compat shim forwards `AddMediatR`) |
 | Open-generic request handlers | `ReflectionMediator` escape hatch | Not AOT-safe; see ROGM003 |
+
+If you instead keep the MediatR-shaped surface (the `SkathIO.Rogue.Compatibility` namespace in the
+`SkathIO.Rogue.MediatR` package), the interface names stay identical — only the `using` and the handler
+return types (`Task` → `ValueTask`) change.
 
 ## Handling open-generic requests (ROGM003)
 

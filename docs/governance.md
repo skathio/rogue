@@ -3,9 +3,8 @@
 ## License
 
 SkathIO.Rogue is licensed under the [MIT License](../LICENSE). Every package declares
-`PackageLicenseExpression = MIT`. The benchmark suite references MediatR (Apache-2.0) and
-martinothamar/Mediator (MIT) as comparison-only dependencies; neither is a runtime dependency of any
-shipped package.
+`PackageLicenseExpression = MIT`. The benchmark suite references MediatR (Apache-2.0) as a
+comparison-only dependency; it is not a runtime dependency of any shipped package.
 
 ## Dependency policy
 
@@ -83,9 +82,9 @@ Before tagging `v1.0.0`:
   frozen, so this must happen before — or atomically with — the tag. It is irreversible and is the
   reason it lives on this checklist rather than in an automated gate (the `public-api` CI job only
   fails on *undeclared* surface, not on Unshipped-vs-Shipped placement).
-- **Run the full benchmark suite and commit the baseline** to `bench/results/<date>-<sha>/`, then
-  populate the `TBD` cells in `bench/RESULTS.md` so the published competitive comparison is backed by
-  committed data rather than placeholders.
+- **Run the full benchmark suite and commit the baseline** to `bench/results/<date>-<sha>/` so the
+  published competitive comparison is backed by committed data rather than placeholders. (Satisfied for
+  v1.0.0: the committed baselines live under `bench/results/`, newest `2026-06-20-a734d6f/`.)
 
 ## Contributing
 

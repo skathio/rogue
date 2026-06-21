@@ -6,14 +6,15 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
-## [1.0.0]
+## [1.0.0] - 2026-06-21
 
 First public release. An AOT-safe, source-generated CQRS/mediator for .NET — handlers are discovered
-and wired at compile time, with no runtime reflection or assembly scanning. Rogue's single-handler
-`Send` paths and Publish N=2 fan-out meet or beat MediatR on the reference hardware, alongside a ~19×
-cold-start lead. Honest positioning: Rogue is **not** the fastest mediator at every fan-out — it remains
-marginally slower than MediatR at Publish N=5 (~7%) and N=20 (~24%). See
-[bench/RESULTS.md](bench/RESULTS.md) for the full measured table, including the not-fastest scenarios.
+and wired at compile time, with no runtime reflection or assembly scanning. On the reference hardware
+Rogue meets or beats MediatR across every measured head-to-head scenario — single-handler `Send` (both
+the mean and the generated concrete fast path), the untyped object path, and notification fan-out at
+N = 2 / 5 / 20 — on both wall-clock and allocated bytes, alongside a ~19× cold-start lead. We still
+commit to reporting any scenario where Rogue is not fastest, honestly and in the open; see
+[bench/RESULTS.md](bench/RESULTS.md) for the full measured tables and the retained "before" baselines.
 
 ### Packages
 
@@ -71,10 +72,11 @@ marginally slower than MediatR at Publish N=5 (~7%) and N=20 (~24%). See
   MediatR marker/handler interface → CQS contract rewrite) plus a
   [migration guide](docs/migration-guide.md) and before/after sample.
 - **AOT + trimming.** AOT sample publishes with no IL trim or AOT warnings.
-- **Benchmarks.** BenchmarkDotNet suite comparing against MediatR 12.4.1 and martinothamar/Mediator
-  3.0.2 across typed send, cold-start, behaviors, object path (and 25-type scaling), notification
-  fan-out (N = 2/5/20), and streaming, with a documented NFR-PERF-5 honesty scenario (notification
-  fan-out allocation). See [docs/benchmarks.md](docs/benchmarks.md).
+- **Benchmarks.** BenchmarkDotNet suite comparing against MediatR 12.4.1 across typed send, cold-start,
+  behaviors, object path (and 25-type scaling), notification fan-out (N = 2/5/20), and streaming, with a
+  standing NFR-PERF-5 commitment to document any not-fastest scenario. (martinothamar/Mediator was an
+  early comparison target, removed from the suite on 2026-06-17 — PD-48.) See
+  [docs/benchmarks.md](docs/benchmarks.md).
 - **Packaging.** All packages ship MIT-licensed with SourceLink, embedded symbols, deterministic
   builds, MinVer versioning, and a packed README. Public API surface is tracked per package and
   enforced by CI.
@@ -89,6 +91,12 @@ marginally slower than MediatR at Publish N=5 (~7%) and N=20 (~24%). See
   in the dispatcher constructor, eliminating a per-`Publish` `GetServices<IEventHandler<T>>()`
   enumeration; each event handler is registered under its own concrete type (alongside the
   `IEventHandler<T>` registration) so the cached factories resolve correctly.
+- **Allocation-free notification fan-out.** `IEventPublisher.Publish` is generic over the event type
+  (`Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>>, …)`) and receives the resolved, strongly-typed
+  handlers directly — no per-handler wrapper, closure, or boxed enumerator. The generated `Publish`
+  caches the publisher singleton and, when telemetry is off, bypasses the async state machine entirely.
+  Rogue wins Publish N=5 (258 ns / 208 B vs MediatR 410 ns / 920 B) and N=20 (884 ns / 688 B vs
+  1,459 ns / 3,200 B) on both axes.
 - **Static behavior chains.** For closed (per-request) behaviors, the generator emits statically-typed
   chain methods (`Send_X_Chain_N`, up to 8 deep) that pass each behavior as a typed parameter instead of
   folding over the behavior list at runtime — pipeline latency is flat across behavior depth.

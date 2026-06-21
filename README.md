@@ -21,7 +21,7 @@ Rogue is a drop-in alternative to MediatR built for the modern .NET ecosystem: r
 | Streaming | No | No | **`IAsyncEnumerable<T>`** |
 | Migration path from MediatR | — | Manual | **One-line + compat shim** |
 
-Benchmarks comparing Rogue, MediatR, and martinothamar/Mediator will be published with v1.0.
+Benchmarks: Rogue meets or beats MediatR across the measured warm-path scenarios (single-handler `Send`, notification fan-out at N = 2 / 5 / 20) and leads cold-start by ~19×. See [docs/benchmarks.md](docs/benchmarks.md) and [bench/RESULTS.md](bench/RESULTS.md) for the full measured tables and methodology.
 
 ---
 
@@ -55,8 +55,9 @@ dotnet add package SkathIO.Rogue.Validation.FluentValidation
 builder.Services.AddRogue();
 ```
 
-The source generator discovers all `IRequestHandler<,>`, `INotificationHandler<>`, and
-`IStreamRequestHandler<,>` types in your project at compile time — no assembly scanning, no reflection.
+The source generator discovers all `IQueryHandler<,>`, `ICommandHandler<>` / `ICommandHandler<,>`,
+`IEventHandler<>`, and `IStreamQueryHandler<,>` types in your project at compile time — no assembly
+scanning, no reflection.
 
 ### 2. Define requests and handlers
 
@@ -82,12 +83,12 @@ public class CreateOrderCommandHandler : ICommandHandler<CreateOrderCommand, Ord
     }
 }
 
-// Notifications fan out to all handlers
-public record OrderPlacedEvent(OrderId OrderId) : INotification;
+// Events fan out to all handlers
+public record OrderPlacedEvent(OrderId OrderId) : IEvent;
 
-public class SendOrderConfirmationHandler : INotificationHandler<OrderPlacedEvent>
+public class SendOrderConfirmationHandler : IEventHandler<OrderPlacedEvent>
 {
-    public ValueTask Handle(OrderPlacedEvent notification, CancellationToken ct)
+    public ValueTask Handle(OrderPlacedEvent @event, CancellationToken ct)
     {
         // ... send email
         return ValueTask.CompletedTask;
@@ -113,9 +114,9 @@ public class OrderController(ISender sender, IPublisher publisher)
 ### 4. Stream
 
 ```csharp
-public record PagedProductsQuery(int PageSize) : IStreamRequest<Product>;
+public record PagedProductsQuery(int PageSize) : IStreamQuery<Product>;
 
-public class PagedProductsHandler : IStreamRequestHandler<PagedProductsQuery, Product>
+public class PagedProductsHandler : IStreamQueryHandler<PagedProductsQuery, Product>
 {
     public async IAsyncEnumerable<Product> Handle(
         PagedProductsQuery query,
@@ -177,11 +178,12 @@ public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TReques
 
 Rogue dispatches via source-generated, DI-resolved methods — no reflection on the hot path.
 
-- **0 bytes allocated** on strongly-typed `Send` with no behaviors and a synchronously-completing handler
+- **0 bytes allocated** on the generated concrete dispatch path (`RogueDispatcher.Send{Request}`) for a behavior-free, synchronously-completing handler; the portable `ISender.Send<T>` path boxes one `ValueTask<T>` by design
+- **Faster than MediatR** on the measured warm paths (single-handler `Send`, notification fan-out at N = 2 / 5 / 20) and ~19× faster cold-start — no runtime assembly scan
 - **Native AOT compatible** — no dynamic code generation, no `Expression.Compile()`, no `MakeGenericMethod`
 - **`ValueTask`-based** throughout — avoids unnecessary heap allocations vs `Task`
 
-Full benchmark results comparing Rogue, MediatR, and martinothamar/Mediator across multiple scenarios will be published with v1.0.
+Full benchmark results and methodology: [docs/benchmarks.md](docs/benchmarks.md) and [bench/RESULTS.md](bench/RESULTS.md).
 
 ---
 
@@ -194,12 +196,14 @@ Most MediatR code migrates in one step:
 + services.AddRogue();
 ```
 
-The core interfaces (`IRequest<T>`, `IRequestHandler<,>`, `IPipelineBehavior<,>`, `INotification`,
-`INotificationHandler<>`) are intentionally identical in shape. Inject `ISender` and `IPublisher`
-instead of `IMediator` for the cleanest code — or use the `SkathIO.Rogue.MediatR` compatibility shim
-to keep existing `IMediator` injection points unchanged during migration.
+Rogue's native core is CQS-explicit (`IQuery<T>`, `ICommand` / `ICommand<T>`, `IEvent`,
+`IStreamQuery<T>`). For drop-in migration, the `SkathIO.Rogue.MediatR` package provides the
+MediatR-shaped surface (`IRequest<T>`, `IRequestHandler<,>`, `INotification`, `INotificationHandler<>`,
+`IStreamRequest<T>`, …) under the `SkathIO.Rogue.Compatibility` namespace, plus an `AddMediatR(...)`
+shim so existing `IMediator` injection points keep working. A bundled Roslyn analyzer (ROGM001–006)
+ships code-fixes — including rewrites to the native CQS contracts.
 
-A full migration guide and a Roslyn migration analyzer/code-fix will ship with v1.0.
+See the [migration guide](docs/migration-guide.md) and the [before/after sample](samples/mediatr-migration).
 
 ---
 

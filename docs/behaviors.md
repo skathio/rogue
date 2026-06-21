@@ -48,7 +48,7 @@ at runtime via `IRoguePipelineInspector.GetPipeline<TRequest>()`, which returns 
 
 ## Stream pipeline behaviors
 
-Streaming requests (`IStreamRequest<T>`) have their own behavior interface,
+Streaming queries (`IStreamQuery<T>`) have their own behavior interface,
 `IStreamPipelineBehavior<TRequest, TResponse>`, which wraps an `IAsyncEnumerable<T>` via
 `StreamHandlerDelegate<T>`. These are woven around the stream handler in generated code the same way
 the request behaviors are (net8.0+).
@@ -81,7 +81,7 @@ dotnet add package SkathIO.Rogue.Logging
 
 ```csharp
 [LogPayload]                                  // opt this request's payload into the log
-public sealed record GreetRequest(string Name) : IRequest<GreetResponse>;
+public sealed record GreetQuery(string Name) : IQuery<GreetResponse>;
 ```
 
 ## Validation behavior
@@ -95,9 +95,9 @@ dotnet add package SkathIO.Rogue.Validation.FluentValidation
 ```
 
 ```csharp
-public sealed class GreetRequestValidator : AbstractValidator<GreetRequest>
+public sealed class GreetQueryValidator : AbstractValidator<GreetQuery>
 {
-    public GreetRequestValidator() => RuleFor(x => x.Name).NotEmpty();
+    public GreetQueryValidator() => RuleFor(x => x.Name).NotEmpty();
 }
 ```
 

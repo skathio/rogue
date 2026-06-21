@@ -17,21 +17,24 @@ the streaming types are net8.0+ only) are noted inline.
 
 ## Abstractions (`SkathIO.Rogue.Abstractions`)
 
-**Messages**
+**Messages** (CQS-explicit core — each an independent contract)
 
-- `IRequest` / `IRequest<TResponse>` — request, void or with a response.
-- `IQuery<TResponse>`, `ICommand`, `ICommand<TResponse>` — CQRS-named aliases of `IRequest`.
-- `INotification` — fan-out message.
-- `IStreamRequest<TResponse>`, `IStreamQuery<TResponse>` — streaming request (net8.0+).
-- `IBaseRequest`, `IBaseStreamRequest` — non-generic markers.
+- `IQuery<TResponse>` — a read. Dispatched by `ISender.Send`.
+- `ICommand` / `ICommand<TResponse>` — a write, void or with a response. Dispatched by `ISender.Send`.
+- `IEvent` — a fan-out message. Dispatched by `IPublisher.Publish`.
+- `IStreamQuery<TItem>` — a streaming read returning `IAsyncEnumerable<TItem>` (net8.0+).
 - `Unit` — the void response type (value type; `Unit.Value`, `Unit.Task`).
+
+The MediatR-shaped surface (`IRequest`, `INotification`, `IStreamRequest`, …) is **not** in this
+package; it lives in `SkathIO.Rogue.MediatR` for migration — see
+[Compatibility](#compatibility-skathioroguemediatr) below.
 
 **Handlers**
 
-- `IRequestHandler<TRequest, TResponse>` / `IRequestHandler<TRequest>`
-- `IQueryHandler<TQuery, TResponse>`, `ICommandHandler<TCommand, TResponse>`, `ICommandHandler<TCommand>`
-- `INotificationHandler<TNotification>`
-- `IStreamRequestHandler<TRequest, TResponse>` (net8.0+)
+- `IQueryHandler<TQuery, TResponse>` — one handler per query.
+- `ICommandHandler<TCommand, TResponse>` / `ICommandHandler<TCommand>` — one handler per command.
+- `IEventHandler<TEvent>` — zero-to-many handlers per event (fan-out).
+- `IStreamQueryHandler<TQuery, TItem>` (net8.0+)
 
 **Pipeline**
 
@@ -44,14 +47,16 @@ the streaming types are net8.0+ only) are noted inline.
 
 **Dispatch entry points**
 
-- `ISender` — `Send<TResponse>(IRequest<TResponse>)`, `Send(object)`, `CreateStream<TResponse>(IStreamRequest<TResponse>)`.
-- `IPublisher` — `Publish(INotification)`, `Publish(object)`.
+- `ISender` — `Send<TResponse>(IQuery<TResponse>)`, `Send<TResponse>(ICommand<TResponse>)`,
+  `Send(ICommand)`, `Send(object)`, `CreateStream<TItem>(IStreamQuery<TItem>)`.
+- `IPublisher` — `Publish(IEvent)`, `Publish(object)`.
 - `IMediator` — combines `ISender` + `IPublisher`.
 
-**Notification publishing**
+**Event publishing**
 
-- `INotificationPublisher` — strategy contract.
-- `NotificationHandlerExecutor` — a resolved handler + its invoker.
+- `IEventPublisher` — fan-out strategy contract:
+  `Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>>, TEvent, CancellationToken)`. Implementations
+  receive the resolved, strongly-typed handlers directly — there is no wrapper/executor type.
 
 **Inspection**
 
@@ -67,7 +72,7 @@ the streaming types are net8.0+ only) are noted inline.
   - `EnableObjectDispatch` (bool) — opt into untyped `Send(object)`/`Publish(object)`.
   - `EnableTelemetry` (bool) — turn on the telemetry shim.
   - `Lifetime` (`ServiceLifetime`) — DI lifetime applied to discovered handlers and behaviors (default `Transient`). Note: this does not control the `RogueDispatcher` registration, which is `Scoped`.
-  - `NotificationPublisher` (`INotificationPublisher`) — fan-out strategy.
+  - `NotificationPublisher` (`IEventPublisher`) — fan-out strategy.
   - `AddBehavior<TBehavior>(int order = 0)`, `AddOpenBehavior(Type, int order = 0)`, `BehaviorRegistrations`.
 - `BehaviorRegistration(Type BehaviorType, int Order, bool IsOpen)` — a registered behavior.
 - `RogueRegistrationBridge.GeneratedRegistrar` — the static seam the generated module initializer
@@ -127,6 +132,24 @@ dispatcher is acceptable.
 - `RogueUnregisteredRequestException(Type requestType)` — thrown when a request has no generated route
   (usually means the generator did not run in the dispatching compilation — see
   [getting-started](getting-started.md#troubleshooting)).
+
+## Compatibility (`SkathIO.Rogue.MediatR`)
+
+For drop-in MediatR migration. Types live in the `SkathIO.Rogue.Compatibility` namespace unless noted.
+
+- **MediatR-shaped messages/handlers** — `IRequest` / `IRequest<TResponse>`,
+  `IRequestHandler<TRequest, TResponse>` / `IRequestHandler<TRequest>`, `INotification`,
+  `INotificationHandler<TNotification>`, `IStreamRequest<TResponse>`,
+  `IStreamRequestHandler<TRequest, TItem>` (net8.0+), `IPipelineBehavior<TRequest, TResponse>`,
+  `IMediator` / `ISender` / `IPublisher`, `Unit`, `ServiceFactory`.
+- **Registration shim** — `MediatRCompatExtensions.AddMediatR(this IServiceCollection, …)` +
+  `MediatRCompatOptions` (`RegisterServicesFromAssembly…`), forwarding to `AddRogue`.
+- **Reflection escape hatch** — `ReflectionMediator` (obsolete; not AOT-safe) for open-generic request
+  types the generator cannot close at compile time.
+- **`[MapAsQuery]`** (`SkathIO.Rogue.MediatR.MapAsQueryAttribute`) — maps an otherwise-ambiguous MediatR
+  request onto the CQS `IQuery` side during migration.
+
+Migration analyzer diagnostics `ROGM001`–`ROGM006` — see [migration-guide](migration-guide.md).
 
 ## Diagnostics
 
