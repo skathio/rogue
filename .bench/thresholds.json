@@ -1,0 +1,6 @@
+{
+  "scenario1_rogue_allocated_bytes": 0,
+  "scenario1_rogue_ns_p95": 254,
+  "interface_path_ceiling_bytes": 1024,
+  "_note": "scenario1_rogue_allocated_bytes is the concrete-path contract (RogueDispatcher.Send_PingRequest is 0-alloc, authoritatively gated at the PipelineExecutor.Execute layer by PipelineExecutorTests.Execute_NoBehaviors_ZeroAllocations (not the generated Send_X method)). The benchmark suite can only measure the public ISender.Send<T> interface path, which boxes one ValueTask<T> by design (PD-12) and measured 384 B / 254 ns P95 on the ShortRun job (Skylake, .NET 10.0.8) — see bench/results/2026-06-09-b037bd9/ for the source artifact. interface_path_ceiling_bytes is the regression tripwire the bench-smoke CI step gates the measured interface-path allocation against (option (a) from the 7.2.1 pass-1 review): it is a generous ceiling on the boxed interface path, NOT the 0-byte concrete-path target. scenario1_rogue_ns_p95 is BDN's Statistics.Percentiles.P95 for Rogue_NoBehavior (was named _p99 before 9.4 but BDN exposes no P99 field — renamed; latency is recorded for visibility only, not a CI gate). The concrete 0-alloc path is private on internal RogueDispatcherImpl and not reachable from a consumer assembly to benchmark."
+}

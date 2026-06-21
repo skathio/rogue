@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.Abstractions</PackageId>
+    <Description>Contracts-only package for SkathIO.Rogue — interfaces, Unit, and marker types.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>cqrs;mediator;abstractions</PackageTags>
+  </PropertyGroup>
+  <!-- ValueTask<T> polyfill for netstandard2.0 (built-in on net5+) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Threading.Tasks.Extensions" />
+  </ItemGroup>
+  <!-- Public API surface differs by TFM (the void-path handlers return ValueTask<Unit> on -->
+  <!-- netstandard2.0 vs ValueTask on net8+, and the stream types are net8+ only), so the -->
+  <!-- PublicAPI.Shipped.txt and PublicAPI.Unshipped.txt are both supplied per TFM (PD-36). -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
+    <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+</Project>

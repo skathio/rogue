@@ -1,0 +1,66 @@
+# Allow-list of NuGet package ids permitted in the transitive dependency closure
+# of the 5 packable projects (AC-H / NFR-LIC-1, PD-34).
+#
+# The `license-check` CI job (.github/workflows/ci.yml) runs
+# `dotnet list <project> package --include-transitive --format json` for each
+# packable project below and fails the build if the union of all returned
+# package ids (top-level + transitive, all target frameworks) is not a subset
+# of this file.
+#
+# Packable projects covered:
+#   src/SkathIO.Rogue.Abstractions/SkathIO.Rogue.Abstractions.csproj
+#   src/SkathIO.Rogue/SkathIO.Rogue.csproj
+#   src/SkathIO.Rogue.MediatR/SkathIO.Rogue.MediatR.csproj
+#   src/SkathIO.Rogue.Logging/SkathIO.Rogue.Logging.csproj
+#   src/SkathIO.Rogue.Validation.FluentValidation/SkathIO.Rogue.Validation.FluentValidation.csproj
+#
+# Adding a new id to this file requires FIRST verifying that the package's
+# license is permissive (MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, MS-PL,
+# 0BSD, Unlicense, or the .NET-foundation/MICROSOFT family) — see
+# docs/governance.md "Dependency policy" for the procedure. Annotate the new
+# line with the format: # <id> — <SPDX/license> — verified <date>
+#
+# This gate checks identity, not license text; the license check happens here,
+# at allow-list-edit time, by a human.
+#
+# One package id per line (lines starting with `#` and blank lines are ignored).
+
+# FluentValidation — Apache-2.0 — verified 2026-06-12
+FluentValidation
+# Microsoft.Bcl.AsyncInterfaces — MIT — verified 2026-06-12
+Microsoft.Bcl.AsyncInterfaces
+# Microsoft.Build.Tasks.Git — MIT — verified 2026-06-12
+Microsoft.Build.Tasks.Git
+# Microsoft.CodeAnalysis.PublicApiAnalyzers — MIT — verified 2026-06-12
+Microsoft.CodeAnalysis.PublicApiAnalyzers
+# Microsoft.Extensions.DependencyInjection.Abstractions — MIT — verified 2026-06-12
+Microsoft.Extensions.DependencyInjection.Abstractions
+# Microsoft.Extensions.Logging.Abstractions — MIT — verified 2026-06-12
+Microsoft.Extensions.Logging.Abstractions
+# Microsoft.NET.ILLink.Tasks — MIT — verified 2026-06-12
+Microsoft.NET.ILLink.Tasks
+# Microsoft.NETCore.Platforms — Microsoft .NET Library License (proprietary EULA,
+# dotnet_library_license.txt; content-free RID-graph metadata package, build-time-only —
+# not present in any of the 5 packable projects' shipped .nuspec dependency lists) —
+# accepted, verified 2026-06-12
+Microsoft.NETCore.Platforms
+# Microsoft.SourceLink.Common — MIT — verified 2026-06-12
+Microsoft.SourceLink.Common
+# Microsoft.SourceLink.GitHub — MIT — verified 2026-06-12
+Microsoft.SourceLink.GitHub
+# MinVer — Apache-2.0 — verified 2026-06-12
+MinVer
+# NETStandard.Library — MIT (.NET Foundation and Contributors, dotnet/standard LICENSE.TXT) — verified 2026-06-12
+NETStandard.Library
+# System.Buffers — MIT — verified 2026-06-12
+System.Buffers
+# System.Diagnostics.DiagnosticSource — MIT — verified 2026-06-12
+System.Diagnostics.DiagnosticSource
+# System.Memory — MIT — verified 2026-06-12
+System.Memory
+# System.Numerics.Vectors — MIT — verified 2026-06-12
+System.Numerics.Vectors
+# System.Runtime.CompilerServices.Unsafe — MIT — verified 2026-06-12
+System.Runtime.CompilerServices.Unsafe
+# System.Threading.Tasks.Extensions — MIT — verified 2026-06-12
+System.Threading.Tasks.Extensions

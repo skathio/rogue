@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The integration packages live in their own test project (not SkathIO.Rogue.Integration.Tests):
+         referencing them makes the generator's PD-17 metadata scan auto-discover the open-generic
+         LoggingBehavior<,>/ValidationBehavior<,> and weave them into EVERY request globally, which
+         would rewire the existing dispatch/inspector tests. Isolating here keeps that suite intact. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Logging\SkathIO.Rogue.Logging.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation\SkathIO.Rogue.Validation.FluentValidation.csproj" />
+    <!-- Analyzer reference runs the generator in this compilation (needed for the dispatch-based
+         telemetry test). -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.MediatR</PackageId>
+    <Description>MediatR compatibility shim and migration tooling for SkathIO.Rogue.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <ProjectReference Include="..\SkathIO.Rogue.Migration.Analyzer\SkathIO.Rogue.Migration.Analyzer.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Pack the migration analyzer DLL under analyzers/dotnet/cs so the ROGM001/002/003 diagnostics +
+       code-fixes run in the consumer's compilation when they reference SkathIO.Rogue.MediatR. Same
+       rationale as the SkathIO.Rogue PackGenerator target — the analyzer ProjectReference feeds the
+       build, not the pack. -->
+  <Target Name="PackMigrationAnalyzer" BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <_MigrationAnalyzerDll>..\SkathIO.Rogue.Migration.Analyzer\bin\$(Configuration)\netstandard2.0\SkathIO.Rogue.Migration.Analyzer.dll</_MigrationAnalyzerDll>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_MigrationAnalyzerDll)')"
+           Text="Migration analyzer DLL not found at $(_MigrationAnalyzerDll); build SkathIO.Rogue.Migration.Analyzer before packing." />
+    <ItemGroup>
+      <None Include="$(_MigrationAnalyzerDll)"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+  <!-- ReflectionMediator's Publish/CreateStream surface differs by TFM (ValueTask<Unit> vs -->
+  <!-- ValueTask, and CreateStream is net8+ only), so PublicAPI.Shipped.txt and -->
+  <!-- PublicAPI.Unshipped.txt are both supplied per TFM (PD-36). -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
+    <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+</Project>

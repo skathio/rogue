@@ -1,0 +1,7 @@
+#nullable enable
+*REMOVED*SkathIO.Rogue.EventHandlerExecutor
+*REMOVED*SkathIO.Rogue.EventHandlerExecutor.EventHandlerExecutor(object! handlerInstance, System.Func<SkathIO.Rogue.IEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>>! handler) -> void
+*REMOVED*SkathIO.Rogue.EventHandlerExecutor.ExecuteAsync(SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
+*REMOVED*SkathIO.Rogue.EventHandlerExecutor.HandlerInstance.get -> object!
+*REMOVED*SkathIO.Rogue.IEventPublisher.Publish(System.Collections.Generic.IEnumerable<SkathIO.Rogue.EventHandlerExecutor!>! handlerExecutors, SkathIO.Rogue.IEvent! event, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
+SkathIO.Rogue.IEventPublisher.Publish<TEvent>(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.IEventHandler<TEvent>!>! handlers, TEvent ev, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>

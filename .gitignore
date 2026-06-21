@@ -1,0 +1,26 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+*.DotSettings.user
+TestResults/
+coverage/
+artifacts/
+.hashira/
+# Generated benchmark result dirs (bench/results/<date>-<sha>/). Ad-hoc local runs are
+# ignored, but the README and committed baseline runs (the artifacts AC-G's "reproducible by a
+# third party" criterion rests on) are kept — negate each committed run dir explicitly.
+bench/results/*
+!bench/results/README.md
+!bench/results/2026-06-09-b037bd9/
+!bench/results/2026-06-19-cb81a30/
+!bench/results/2026-06-20-cb81a30-pre-d2-medium/
+!bench/results/2026-06-20-cb81a30-post-d2-medium/
+!bench/results/2026-06-20-a734d6f/
+# BenchmarkDotNet artifact output (local + CI)
+BenchmarkDotNet.Artifacts/
+
+# Internal planning and tooling — not part of the public repo
+.somi/
+.claude/

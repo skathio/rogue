@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The 7.2.1 WebApplicationFactory host. Referenced as a normal (ReferenceOutputAssembly)
+         ProjectReference so its assembly — including the generator-emitted module initializer that
+         wires RogueRegistrationBridge.GeneratedRegistrar — loads into this test process. The host's
+         OWN analyzer reference already runs the generator in the host compilation; this suite
+         deliberately does NOT add its own analyzer reference (see README + diary plan-change
+         2026-06-06): this project declares zero handlers, so a second analyzer would emit a competing
+         EMPTY RogueGeneratedRegistration + a second [ModuleInitializer] that could clobber the host's
+         populated registrar (last-writer-wins on the static bridge field). Consuming the host's
+         registration is the correct wiring for a no-handler test assembly. -->
+    <ProjectReference Include="..\..\samples\SkathIO.Rogue.Sample.WebApi\SkathIO.Rogue.Sample.WebApi.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>
