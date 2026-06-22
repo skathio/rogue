@@ -14,7 +14,7 @@ Rogue meets or beats MediatR across every measured head-to-head scenario — sin
 the mean and the generated concrete fast path), the untyped object path, and notification fan-out at
 N = 2 / 5 / 20 — on both wall-clock and allocated bytes, alongside a ~19× cold-start lead. We still
 commit to reporting any scenario where Rogue is not fastest, honestly and in the open; see
-[bench/RESULTS.md](bench/RESULTS.md) for the full measured tables and the retained "before" baselines.
+[bench/RESULTS.md](bench/RESULTS.md) for the full measured tables and methodology.
 
 ### Packages
 
@@ -74,9 +74,8 @@ commit to reporting any scenario where Rogue is not fastest, honestly and in the
 - **AOT + trimming.** AOT sample publishes with no IL trim or AOT warnings.
 - **Benchmarks.** BenchmarkDotNet suite comparing against MediatR 12.4.1 across typed send, cold-start,
   behaviors, object path (and 25-type scaling), notification fan-out (N = 2/5/20), and streaming, with a
-  standing NFR-PERF-5 commitment to document any not-fastest scenario. (martinothamar/Mediator was an
-  early comparison target, removed from the suite on 2026-06-17 — PD-48.) See
-  [docs/benchmarks.md](docs/benchmarks.md).
+  standing commitment to document any scenario where Rogue is not fastest. (martinothamar/Mediator was an
+  early comparison target, since removed from the suite.) See [docs/benchmarks.md](docs/benchmarks.md).
 - **Packaging.** All packages ship MIT-licensed with SourceLink, embedded symbols, deterministic
   builds, MinVer versioning, and a packed README. Public API surface is tracked per package and
   enforced by CI.
@@ -108,7 +107,7 @@ commit to reporting any scenario where Rogue is not fastest, honestly and in the
 
 ### Release notes
 
-- **Repository visibility (NFR-LIC-2):** the repository must be **public** before tagging `v1.0.0`.
+- **Repository visibility:** the repository must be **public** before tagging `v1.0.0`.
   The benchmark results, roadmap, and governance docs linked from the packages are only publicly
   accessible when the repo is public; tagging a release on a private repo would publish packages whose
   linked documentation is unreachable. Confirm visibility in GitHub settings before tagging. See

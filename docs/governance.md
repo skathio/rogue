@@ -17,7 +17,7 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
   `Microsoft.Extensions.DependencyInjection.Abstractions` (plus netstandard2.0 polyfills). Integration
   packages add exactly one dependency each (`Microsoft.Extensions.Logging.Abstractions`,
   `FluentValidation`).
-- **Transitive dependency allow-list (AC-H / NFR-LIC-1).** The `license-check` CI job runs
+- **Transitive dependency allow-list.** The `license-check` CI job runs
   `dotnet list <project> package --include-transitive --format json` for each of the 5 packable
   projects (`SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`, `SkathIO.Rogue.MediatR`,
   `SkathIO.Rogue.Logging`, `SkathIO.Rogue.Validation.FluentValidation`), unions the resulting
@@ -43,7 +43,7 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
 
 ## Versioning and releases
 
-- **Semantic versioning**, MinVer-driven from git tags (PD-7). A `vMAJOR.MINOR.PATCH` tag is the
+- **Semantic versioning**, MinVer-driven from git tags. A `vMAJOR.MINOR.PATCH` tag is the
   version source of truth.
 - **Public API is gated.** Each package tracks its surface in `PublicAPI.Shipped.txt`; the
   `public-api` CI job fails any unintended public-surface change. Surface that differs by target
@@ -62,13 +62,13 @@ runtimes; net8.0/net10.0 get the streaming surface and the in-box `ValueTask`/di
 
 - `TreatWarningsAsErrors = true` across all target frameworks — zero warnings.
 - AOT/trim clean: the AOT sample publishes with no IL trim or AOT warnings.
-- Security NFRs (NFR-SEC-1…4): reflection-free dispatch; payload logging off by default.
+- Security NFRs: reflection-free dispatch; payload logging off by default.
 
 ## Release readiness
 
 Before tagging `v1.0.0`:
 
-- The repository **must be public** (NFR-LIC-2). Benchmarks (`bench/results/`), this roadmap, and the
+- The repository **must be public**. Benchmarks (`bench/results/`), this roadmap, and the
   governance docs are only publicly accessible when the repo is public — a v1.0.0 tag on a private
   repo would ship packages whose linked documentation 404s for consumers. Confirm visibility in the
   GitHub repository settings before tagging. This is a release-process check, not an automated gate.

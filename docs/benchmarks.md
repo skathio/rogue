@@ -5,8 +5,8 @@ Methodology, scenario definitions, and the raw per-run data live in
 setup and the headline findings.
 
 **Status of the numbers:** the competitive comparison in `bench/RESULTS.md` is populated from committed
-baseline runs (newest: `bench/results/2026-06-20-a734d6f/`, after the `rogue-perf` warm-path overhaul
-and the `publish-fanout-perf` notification fan-out rewrite). The headline finding: **Rogue meets or
+baseline runs (newest: `bench/results/2026-06-20-a734d6f/`, after the warm-path and notification
+fan-out optimizations). The headline finding: **Rogue meets or
 beats MediatR on every currently-measured head-to-head scenario** — single-handler `Send` (both the
 mean and the generated concrete fast path), the untyped object path, and notification fan-out at
 N = 2 / 5 / 20 — on both wall-clock and allocated bytes, plus a structural **~19× cold-start** lead (no
@@ -19,7 +19,7 @@ path adds **0 B** of its own.
 - Harness: BenchmarkDotNet 0.15.2, ShortRun job (3 iterations, 3 warmup, 1 launch).
 - SDK: .NET 10 (X64 RyuJIT AVX2).
 - Competitor: **MediatR 12.4.1** (Apache-2.0). martinothamar/Mediator was dropped from the suite on
-  2026-06-17 (PD-48); the README's feature table still cites it as a positioning comparison, but it is
+  2026-06-17; the README's feature table still cites it as a positioning comparison, but it is
   no longer a benchmarked dependency.
 - Source: `bench/SkathIO.Rogue.Benchmarks`. Run with:
 
@@ -30,8 +30,8 @@ path adds **0 B** of its own.
 ## Scenarios
 
 The suite covers typed `Send` with zero behaviors, cold-start (first dispatch including DI build),
-`Send` + pipeline behaviors, the untyped object path (and its scaling at 25 handler types — the PD-3a
-evidence that the generated `switch` stays O(1)), notification fan-out at N = 2 / 5 / 20, a 10-item
+`Send` + pipeline behaviors, the untyped object path (and its scaling at 25 handler types — evidence
+that the generated `switch` stays O(1)), notification fan-out at N = 2 / 5 / 20, a 10-item
 stream, and a Rogue-only concurrent-dispatch sweep (`Task.WhenAll` over N = 1 / 4 / 8 / 16 independent
 DI scopes, with `[ThreadingDiagnoser]`). Some cells are `n/a`: MediatR v12's core has no streaming, and
 the concurrency and pipeline-depth sweeps are Rogue-only scaling checks, not comparisons.
@@ -49,15 +49,15 @@ The generated concrete fast path (`RogueDispatcher.Send{Request}`) is the fastes
 handler resolution, not dispatch overhead. `bench/RESULTS.md` states this plainly — do not read the
 published interface-path number as the concrete-path number.
 
-## NFR-PERF-5 honesty: reporting where Rogue is not fastest
+## Honesty: reporting where Rogue is not fastest
 
 We commit to documenting — honestly and in the open — any realistic scenario where Rogue does **not**
-win. This was originally the **notification fan-out**: before the `publish-fanout-perf` rewrite, Rogue
-was ~7% slower than MediatR at Publish N=5 and ~24% slower at N=20.
+win. This was originally the **notification fan-out**: before the fan-out optimization, Rogue was
+~7% slower than MediatR at Publish N=5 and ~24% slower at N=20.
 
-**That gap is now closed.** The D2 generic `IEventPublisher` (which removed the per-handler
-`EventHandlerExecutor` wrapper, its closure, and a boxed enumerator) plus the D3 publisher-caching and
-telemetry-gated fast path flipped both scenarios on both axes:
+**That gap is now closed.** Making `IEventPublisher.Publish` generic over the event type removed the
+per-handler wrapper, its closure, and a boxed enumerator, and caching the publisher plus a
+telemetry-gated fast path removed the remaining per-call overhead — flipping both scenarios on both axes:
 
 | Scenario | Rogue | MediatR |
 |----------|-------|---------|

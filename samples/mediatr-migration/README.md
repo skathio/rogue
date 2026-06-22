@@ -30,9 +30,9 @@ ROGM001 (`using` rewrite) and ROGM002 (`Task` → `ValueTask`). The compat
 `using SkathIO.Rogue.Compatibility;` is added by hand only where DI-only helpers (e.g. `AddMediatR`)
 are called — see `docs/migration-guide.md`.
 
-## Automated AC-F gate
+## Automated migration gate
 
 `tests/SkathIO.Rogue.Migration.Tests/MigrationGateTests.cs` runs the whole `before/` sample through
 the analyzer code-fixes to a fixed point, recompiles the migrated source against the real
 `SkathIO.Rogue` assemblies, runs its entry point, and asserts the end-to-end migration completes
-within the 15-minute ceiling — the literal AC-F gate, not a documentation illustration.
+within the 15-minute ceiling — an executable gate, not a documentation illustration.
