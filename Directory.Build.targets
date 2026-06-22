@@ -6,8 +6,8 @@
        PackageVersion is MinVer-driven (PD-7); RepositoryUrl/commit are also populated by SourceLink
        at pack time (PublishRepositoryUrl=true), set explicitly here so a no-git pack still emits them. -->
   <PropertyGroup Condition="'$(IsPackable)' == 'true'">
-    <Authors>skathio</Authors>
-    <Company>skathio</Company>
+    <Authors>SkathIO</Authors>
+    <Company>SkathIO</Company>
     <PackageProjectUrl>https://github.com/skathio/rogue</PackageProjectUrl>
     <RepositoryUrl>https://github.com/skathio/rogue.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

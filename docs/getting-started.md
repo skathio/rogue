@@ -71,14 +71,14 @@ The core is CQS-explicit — each contract is independent (a type implementing t
 
 | Interface | Handler | Dispatch | Notes |
 |-----------|---------|----------|-------|
-| `IQuery<T>` | `IQueryHandler<TQuery, T>` | `ISender.Send` | A read; one handler per query (FR-7). |
+| `IQuery<T>` | `IQueryHandler<TQuery, T>` | `ISender.Send` | A read; one handler per query. |
 | `ICommand<T>` | `ICommandHandler<TCommand, T>` | `ISender.Send` | A write with a response; one handler. |
 | `ICommand` | `ICommandHandler<TCommand>` | `ISender.Send` | A write, void; returns `ValueTask` (`ValueTask<Unit>` on netstandard2.0). |
 | `IEvent` | `IEventHandler<TEvent>` | `IPublisher.Publish` | Zero-to-many handlers, fan-out. |
 | `IStreamQuery<T>` | `IStreamQueryHandler<TQuery, T>` | `ISender.CreateStream` | Returns `IAsyncEnumerable<T>` (net8.0+). |
 
 The untyped `Send(object)` / `Publish(object)` overloads exist for dynamic dispatch but are **opt-in**
-via `RogueOptions.EnableObjectDispatch` (FR-17); they route through a generated type `switch`.
+via `RogueOptions.EnableObjectDispatch`; they route through a generated type `switch`.
 
 Migrating from MediatR? The `IRequest` / `INotification` / `IStreamRequest`-shaped surface is available
 in the `SkathIO.Rogue.MediatR` package (`SkathIO.Rogue.Compatibility` namespace) — see the
@@ -86,10 +86,9 @@ in the `SkathIO.Rogue.MediatR` package (`SkathIO.Rogue.Compatibility` namespace)
 
 ## Lifetimes
 
-The generated **dispatcher** is registered **scoped** — it is per-scope so it can resolve handlers
-that themselves depend on scoped services (the prior singleton dispatcher captured the root
-provider — a captive-dependency defect fixed in Phase 7.3.1). **Discovered handlers and behaviors**
-default to **transient** (`RogueOptions.Lifetime`, overridable per your needs).
+The generated **dispatcher** is registered **scoped** — per-scope, so it can resolve handlers that
+themselves depend on scoped services. **Discovered handlers and behaviors** default to **transient**
+(`RogueOptions.Lifetime`, overridable per your needs).
 `IRoguePipelineInspector` and the notification publishers are stateless singletons.
 
 ## Troubleshooting

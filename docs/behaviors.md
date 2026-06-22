@@ -33,7 +33,7 @@ Or register a closed/typed behavior with `o.AddBehavior<TBehavior>()`.
 ### Auto-discovery from referenced assemblies
 
 The generator also scans **referenced assemblies** for open-generic `IPipelineBehavior<,>` and applies
-them automatically (PD-17). This is why merely referencing `SkathIO.Rogue.Logging` wires
+them automatically. This is why merely referencing `SkathIO.Rogue.Logging` wires
 `LoggingBehavior` onto every request, and referencing the FluentValidation package wires
 `ValidationBehavior`. It is the intended contract — be aware that it also introduces the package's DI
 dependencies (e.g. `LoggingBehavior` requires an `ILogger` in the container).
@@ -55,7 +55,7 @@ the request behaviors are (net8.0+).
 
 ## Pre/post processors and exception handlers
 
-Beyond behaviors, four processor interfaces give finer-grained hooks (FR-25/26/27). The generator
+Beyond behaviors, four processor interfaces give finer-grained hooks. The generator
 wraps the behavior engine with a processor stage when any are registered, and preserves a fast path
 for processor-free requests:
 
@@ -66,12 +66,12 @@ for processor-free requests:
 | `IRequestExceptionAction<TRequest, TException>` | On a matching exception (side effect; does not recover). |
 | `IRequestExceptionHandler<TRequest, TResponse, TException>` | On a matching exception; can mark it handled and supply a response via `RequestExceptionHandlerState<TResponse>`. |
 
-Exception matching is reflection-free `is TException` type matching in generated code (NFR-SEC-1).
+Exception matching is reflection-free `is TException` type matching in generated code.
 
 ## Logging behavior
 
 `SkathIO.Rogue.Logging` provides `LoggingBehavior<TRequest, TResponse>`. It logs request start/finish
-and timing through `ILogger`. **Payload logging is off by default** (NFR-SEC-2) to avoid leaking
+and timing through `ILogger`. **Payload logging is off by default** to avoid leaking
 request contents. Opt in per-request type with `[LogPayload]` on the request, or globally via
 `LoggingOptions.LogPayload`.
 

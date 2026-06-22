@@ -76,7 +76,7 @@ package; it lives in `SkathIO.Rogue.MediatR` for migration — see
   - `AddBehavior<TBehavior>(int order = 0)`, `AddOpenBehavior(Type, int order = 0)`, `BehaviorRegistrations`.
 - `BehaviorRegistration(Type BehaviorType, int Order, bool IsOpen)` — a registered behavior.
 - `RogueRegistrationBridge.GeneratedRegistrar` — the static seam the generated module initializer
-  wires `AddRogue` to (PD-15/PD-16). Public for the generator's emitted code; not a consumer API.
+  wires `AddRogue` to. Public for the generator's emitted code; not a consumer API.
 
 **Dispatcher**
 
