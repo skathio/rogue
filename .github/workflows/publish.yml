@@ -97,7 +97,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: skathio/hashira
-          ref: c8d9eac6175f99b6ed40dbd94c4177df8e3a916a # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as ci.yml/somi's pins
+          ref: 4005e0a8305e1ff912dea9568d76062ce1790f2a # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as ci.yml/somi's pins
           path: .hashira
           persist-credentials: false
 
@@ -179,7 +179,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: skathio/hashira
-          ref: c8d9eac6175f99b6ed40dbd94c4177df8e3a916a # MUST match the version job's checkout above and the nuget-push pin below (dual-pin invariant, D9)
+          ref: 4005e0a8305e1ff912dea9568d76062ce1790f2a # MUST match the version job's checkout above and the nuget-push pin below (dual-pin invariant, D9)
           path: .hashira
           persist-credentials: false
 
@@ -237,7 +237,7 @@ jobs:
         # --target "${GITHUB_SHA}"` step (confirmed directly against
         # nuget-push/action.yml's "Tag + GitHub Release" step before deleting
         # the hand-rolled equivalent here).
-        uses: skathio/hashira/.github/actions/nuget-push@c8d9eac6175f99b6ed40dbd94c4177df8e3a916a # MUST match the dual pin above (D9) — main tip at hashira-v2 phase 6.1; no v2 tag exists yet
+        uses: skathio/hashira/.github/actions/nuget-push@4005e0a8305e1ff912dea9568d76062ce1790f2a # MUST match the dual pin above (D9) — main tip at hashira-v2 phase 6.1; no v2 tag exists yet
         with:
           nupkg_path: '${{ runner.temp }}/nupkgs/*.nupkg'
           # Verify this matches your nuget.org account username (the policy creator).
