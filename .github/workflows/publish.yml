@@ -85,19 +85,15 @@ jobs:
       # D14 self-checkout: version-resolver is an in-repo hashira composite
       # action; GitHub's `uses:` keyword rejects an expression in the `@ref`
       # position, so the library is checked out locally and invoked via a
-      # literal `./` path instead. Pinned to hashira's current `main` tip,
-      # NOT a `@v2` tag — hashira has not yet cut a `v2` release (no `v2` tag
-      # exists on hashira as of this migration); D6's refinement explicitly
-      # names "a consumer pinned to a released commit SHA on an unreleased
-      # main" as a supported interim state for exactly this reason. Same SHA
-      # already established in rogue's own `ci.yml` (iteration 6.3) and
-      # somi's `ci.yml`/`publish.yml` (iterations 6.1/6.2) — re-pin to a
-      # released `@v2`/`@v2.x.y` tag once hashira cuts one.
+      # literal `./` path instead. Pinned to `v2`, hashira's rolling
+      # major-version tag, now that hashira has cut a `v2.0.0` release (see
+      # hashira's `docs/usage.md` "Pin policy"). Same ref already
+      # established in rogue's own `ci.yml` and somi's `ci.yml`/`publish.yml`.
       - name: Checkout hashira library (D14)
         uses: actions/checkout@v4
         with:
           repository: skathio/hashira
-          ref: 396cfe5cc443178c67b89ee8933a84d7ac6c870f # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as ci.yml/somi's pins
+          ref: v2
           path: .hashira
           persist-credentials: false
 
@@ -179,7 +175,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: skathio/hashira
-          ref: 396cfe5cc443178c67b89ee8933a84d7ac6c870f # MUST match the version job's checkout above and the nuget-push pin below (dual-pin invariant, D9)
+          ref: v2 # MUST match the version job's checkout above and the nuget-push pin below (dual-pin invariant, D9)
           path: .hashira
           persist-credentials: false
 
@@ -237,7 +233,7 @@ jobs:
         # --target "${GITHUB_SHA}"` step (confirmed directly against
         # nuget-push/action.yml's "Tag + GitHub Release" step before deleting
         # the hand-rolled equivalent here).
-        uses: skathio/hashira/.github/actions/nuget-push@396cfe5cc443178c67b89ee8933a84d7ac6c870f # MUST match the dual pin above (D9) — main tip at hashira-v2 phase 6.1; no v2 tag exists yet
+        uses: skathio/hashira/.github/actions/nuget-push@v2 # MUST match the dual pin above (D9) — rolling major tag
         with:
           nupkg_path: '${{ runner.temp }}/nupkgs/*.nupkg'
           # Verify this matches your nuget.org account username (the policy creator).

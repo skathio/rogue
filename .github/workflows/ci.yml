@@ -10,13 +10,10 @@
 # Existing permission grant re-verified unchanged against the current
 # `scan-suite`/`coverage-report` jobs' actual needs.
 #
-# Pinned to hashira's current `main` tip, NOT a released `@v2`/`@v2.x.y`
-# tag — hashira has no `v2` tag yet (hashira-v2 itself is still mid-Phase-6
-# as of this migration). D6's refinement explicitly names "a consumer
-# pinned to a released commit SHA on an unreleased main" as a supported
-# interim state for exactly this reason; this is the same SHA somi's
-# `ci.yml`/`publish.yml` already use (iterations 6.1/6.2). Re-pin to a
-# released `@v2`/`@v2.x.y` tag once hashira cuts one.
+# Pinned to `v2`, hashira's rolling major-version tag, now that hashira has
+# cut a `v2.0.0` release (see hashira's `docs/usage.md` "Pin policy" —
+# "acceptable for most consumers"; auto-advances to future `v2.x.y`
+# releases). Same ref somi's `ci.yml`/`publish.yml` use.
 name: ci
 on:
   pull_request:
@@ -27,7 +24,7 @@ permissions: {}
 
 jobs:
   ci:
-    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@396cfe5cc443178c67b89ee8933a84d7ac6c870f # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as somi's pins
+    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@v2 # rolling major tag — same ref as somi's pins
     permissions:
       contents: read
       pull-requests: write
@@ -35,7 +32,7 @@ jobs:
     with:
       project_path: 'SkathIO.Rogue.sln'
       dotnet_version: '10.0.x'
-      library_ref: '396cfe5cc443178c67b89ee8933a84d7ac6c870f' # MUST match the uses: pin above (dual-pin invariant, D9)
+      library_ref: 'v2' # MUST match the uses: pin above (dual-pin invariant, D9)
 
   aot-publish:
     name: AOT publish
