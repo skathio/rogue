@@ -1,6 +1,13 @@
 # .github/workflows/publish.yml
 #
-# Publishes to nuget.org via OIDC trusted publishing on a `v*` tag push.
+# Publishes to nuget.org via OIDC trusted publishing. Migrated to hashira's
+# v2 contract (work item hashira-v2, iteration 6.4): explicit,
+# dispatch-driven version resolution (`version-resolver`) feeding
+# `dotnet-pack-version` (MinVer's `MinVerVersionOverride` escape hatch) and
+# `nuget-push` (explicit `auth` enum + internal tag/Release creation). This
+# REPLACES the v1 `push: tags: ['v*']` trigger, which let MinVer infer the
+# version from whatever tag was just pushed — there was no resolver, no
+# explicit version input, and no `version` job.
 #
 # Why this is a self-authored job (not the hashira nuget-package-publish
 # reusable workflow): NuGet trusted publishing validates the OIDC token's
@@ -12,52 +19,235 @@
 # `skathio/rogue/.github/workflows/publish.yml`. So we run the steps here and
 # call hashira's `nuget-push` composite action for the OIDC push — the same
 # pattern the npm flow uses (skathio/hashira npm-release composite action).
+#
+# ## Trigger model — the real, visible v2 behavior change
+#
+# v1: a `push: tags: ['v*']` event triggered the job; MinVer inferred the
+# version from that tag during `dotnet pack`. Cutting a release meant
+# pushing a tag directly — no resolver, no explicit version input.
+#
+# v2 (D1, work-item-wide — not a new decision made here): the resolver
+# requires an EXPLICIT `bump` (`patch`/`minor`/`major`). There is no tag-push
+# trigger left in this pipeline. A maintainer now runs `workflow_dispatch`
+# and picks a `bump` (and, only for the very first release under this model,
+# a `seed_version`). Both jobs are gated on `github.event.inputs.bump != ''`
+# (NOT `inputs.bump` — this is a top-level workflow triggered by
+# `workflow_dispatch`, not a `workflow_call` target; `github.event.inputs.*`
+# is the form already established in somi's iteration 6.1 migration, kept
+# here for consistency across both consumers' v2 publish workflows).
 name: publish
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "One of 'patch' | 'minor' | 'major' to cut a release. Leave empty for a no-op dispatch that resolves/publishes nothing."
+        required: false
+        type: string
+        default: ""
+      seed_version:
+        description: "Bare semver baseline (e.g. '0.0.0') for a first release with no prior stable tag. Ignored unless 'bump' is set and no stable tag exists yet."
+        required: false
+        type: string
+        default: ""
 
+# Deny-all baseline; each job grants the minimum it needs.
 permissions: {}
 
 jobs:
+  # Resolves the next release version (D1/D8). Gated on an explicit
+  # `workflow_dispatch` with a non-empty `bump` — see "## Trigger model"
+  # above. A dispatch with `bump` left empty skips this job entirely (shows
+  # as "skipped"). Mirrors `nuget-package-ci.yml`'s own `version` job shape
+  # (tag-gathering, D14 self-checkout, resolver invocation, run-summary
+  # surfacing) — same precedent already applied to somi's `publish.yml` in
+  # iteration 6.1. Unlike `nuget-package-ci.yml`'s `version` job, this job
+  # does NOT pack here: rogue's `publish` job below does its own checkout +
+  # pack + push in one place (the pre-existing shape, preserved), so there is
+  # no same-run artifact handoff to wire — `publish` just consumes this job's
+  # `resolved_version` output directly via `needs:`.
+  version:
+    name: version
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      resolved_version: ${{ steps.resolve.outputs.version }}
+    steps:
+      # Full tag history (not the shallow default) so the resolver can see
+      # the real tag list via `git tag --list` below.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # D14 self-checkout: version-resolver is an in-repo hashira composite
+      # action; GitHub's `uses:` keyword rejects an expression in the `@ref`
+      # position, so the library is checked out locally and invoked via a
+      # literal `./` path instead. Pinned to hashira's current `main` tip,
+      # NOT a `@v2` tag — hashira has not yet cut a `v2` release (no `v2` tag
+      # exists on hashira as of this migration); D6's refinement explicitly
+      # names "a consumer pinned to a released commit SHA on an unreleased
+      # main" as a supported interim state for exactly this reason. Same SHA
+      # already established in rogue's own `ci.yml` (iteration 6.3) and
+      # somi's `ci.yml`/`publish.yml` (iterations 6.1/6.2) — re-pin to a
+      # released `@v2`/`@v2.x.y` tag once hashira cuts one.
+      - name: Checkout hashira library (D14)
+        uses: actions/checkout@v4
+        with:
+          repository: skathio/hashira
+          ref: 396cfe5cc443178c67b89ee8933a84d7ac6c870f # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as ci.yml/somi's pins
+          path: .hashira
+          persist-credentials: false
+
+      - name: Gather tag list
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_list="$(git tag --list)"
+          {
+            echo "tags<<ROGUE_TAGS_EOF"
+            echo "${tag_list}"
+            echo "ROGUE_TAGS_EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve next version
+        id: resolve
+        uses: ./.hashira/.github/actions/version-resolver
+        with:
+          tags: ${{ steps.tags.outputs.tags }}
+          bump: ${{ github.event.inputs.bump }}
+          seed_version: ${{ github.event.inputs.seed_version }}
+
+      - name: Surface resolved version in run summary (NFR-DX-3)
+        shell: bash
+        env:
+          RESOLVED_VERSION: ${{ steps.resolve.outputs.version }}
+          BUMP: ${{ github.event.inputs.bump }}
+        run: |
+          set -euo pipefail
+          echo "publish: resolved version ${RESOLVED_VERSION} (bump=${BUMP})" >> "${GITHUB_STEP_SUMMARY}"
+
   publish:
+    name: publish
+    needs: version
+    # Same gate as `version` (see "## Trigger model" above) — a dispatch with
+    # `bump` left empty is a no-op (resolves/publishes nothing).
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
     runs-on: ubuntu-latest
     # The gate: pauses for the required reviewer, and scopes the OIDC token's
     # `environment` claim to `production` (matching the trusted-publishing policy).
     environment: production
+    # Re-derived field-by-field against nuget-push/action.yml's own
+    # documented caller-permission block (its "## Caller-job permissions"
+    # header comment), not carried over from the pre-migration grant
+    # unmodified:
+    #   - id-token: write     — auth: oidc's NuGet/login OIDC token exchange.
+    #   - contents: write     — nuget-push's internal `gh release create`
+    #                           (D4/D13, now folded into the composite —
+    #                           this job no longer creates the release itself).
+    #   - pull-requests: read — `--generate-notes` reads merged-PR metadata
+    #                           to compose the notes; it does NOT write to or
+    #                           comment on PRs. NOT `write` — the pre-migration
+    #                           grant only had `contents: write` (the
+    #                           hand-rolled `gh release create` step never
+    #                           declared a pull-requests grant at all because
+    #                           it didn't use --generate-notes' PR-metadata
+    #                           read path explicitly; nuget-push's internal
+    #                           step does, and per the correction already
+    #                           made in iteration 3.2's review, the correct
+    #                           grant for that is read, not write).
     permissions:
-      id-token: write   # NuGet OIDC trusted-publishing token exchange (NuGet/login)
-      contents: write   # gh release create
+      id-token: write
+      contents: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # MinVer walks full history + tags to infer the version
+          fetch-depth: 0   # historically for MinVer's tag walk; harmless to keep — nuget-push's tag/Release step also resolves against this checkout (its own documented runtime contract: the caller must have checked out the repo before the composite runs).
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Pack (MinVer infers the version from the v* tag)
-        run: dotnet pack SkathIO.Rogue.sln -c Release -o "${{ runner.temp }}/nupkgs"
+      # D14 self-checkout (this job's own copy — jobs don't share a
+      # filesystem): dotnet-pack-version is an in-repo hashira composite
+      # action. Same pin as the `version` job above (dual-pin invariant, D9).
+      - name: Checkout hashira library (D14)
+        uses: actions/checkout@v4
+        with:
+          repository: skathio/hashira
+          ref: 396cfe5cc443178c67b89ee8933a84d7ac6c870f # MUST match the version job's checkout above and the nuget-push pin below (dual-pin invariant, D9)
+          path: .hashira
+          persist-credentials: false
 
-      - name: Push to nuget.org (OIDC trusted publishing)
+      - name: Pack with stamped version (D1 — explicit version always wins over MinVer's tag inference)
+        id: pack
+        # version_override wires MinVer's own MinVerVersionOverride escape
+        # hatch (phase 2 iteration 2.3): the resolver's output is used
+        # verbatim instead of MinVer inferring from git tag history. This
+        # checkout is NOT a `.git`-less staging copy (unlike
+        # nuget-package-ci.yml's isolated pack-staging dir) — MinVer's
+        # tag-inference fallback is technically still reachable here if
+        # version_override were ever empty, but it never is on this path:
+        # this job only runs gated on `bump != ''`, which always resolves a
+        # version first (see the `version` job above), so version_override
+        # is always non-empty in practice.
+        uses: ./.hashira/.github/actions/dotnet-pack-version
+        with:
+          project_path: 'SkathIO.Rogue.sln'
+          output_directory: '${{ runner.temp }}/nupkgs'
+          version_override: ${{ needs.version.outputs.resolved_version }}
+
+      # Sanity check: dotnet-pack-version's own `version` output is parsed
+      # straight from the produced .nupkg's filename (mechanical, not
+      # MinVer's log output) — asserting it matches the resolver's output is
+      # an end-to-end proof that version_override actually reached the
+      # packed artifact (same assertion nuget-package-ci.yml's `version` job
+      # makes), not a sign of two independent resolutions: dotnet-pack-version
+      # never recomputes a version on its own when version_override is set
+      # (verified directly against its action.yml — MinVerVersionOverride is
+      # used VERBATIM, and the action's `version` output is read back from
+      # the resulting filename, which can only carry the override value on
+      # this path). Both names below necessarily carry the identical scalar;
+      # this step proves that, it doesn't introduce a second source of truth.
+      - name: Assert packed version matches the resolved version
+        shell: bash
+        env:
+          RESOLVED_VERSION: ${{ needs.version.outputs.resolved_version }}
+          PACKED_VERSION: ${{ steps.pack.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "${PACKED_VERSION}" != "${RESOLVED_VERSION}" ]; then
+            echo "::error::publish: packed .nupkg version '${PACKED_VERSION}' does not match resolved version '${RESOLVED_VERSION}' — MinVerVersionOverride did not win over tag inference" >&2
+            exit 1
+          fi
+          echo "publish: packed .nupkg version ${PACKED_VERSION} matches resolved version" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Push to nuget.org (OIDC trusted publishing; tag + GitHub Release created internally)
         # Composite action → runs in THIS job, so the OIDC job_workflow_ref is
         # this publish.yml. nuget-push runs NuGet/login (no api_key) to mint a
-        # short-lived key. SHA-pinned to skathio/hashira main.
-        uses: skathio/hashira/.github/actions/nuget-push@59c5b1705bd5a862bafb0384faf32e9ccf48257d
+        # short-lived key, then (D4/D13, folded into the composite as of v2)
+        # creates the git tag + GitHub Release for `version` after a
+        # successful push — the old hand-rolled "Create GitHub Release" step
+        # below this one is gone; it would now duplicate nuget-push's own
+        # internal `gh release view || gh release create --generate-notes
+        # --target "${GITHUB_SHA}"` step (confirmed directly against
+        # nuget-push/action.yml's "Tag + GitHub Release" step before deleting
+        # the hand-rolled equivalent here).
+        uses: skathio/hashira/.github/actions/nuget-push@396cfe5cc443178c67b89ee8933a84d7ac6c870f # MUST match the dual pin above (D9) — main tip at hashira-v2 phase 6.1; no v2 tag exists yet
         with:
           nupkg_path: '${{ runner.temp }}/nupkgs/*.nupkg'
           # Verify this matches your nuget.org account username (the policy creator).
           nuget_user: 'skathi'
-
-      - name: Create GitHub Release
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          gh release view "${tag}" >/dev/null 2>&1 || gh release create "${tag}" --generate-notes
+          # auth: oidc — rogue's CURRENT production posture already runs
+          # OIDC-only (no api_key/token configured anywhere in this repo);
+          # this is the explicit continuation of that already-proven
+          # behavior, not a new assumption. Fails loud on any OIDC failure
+          # rather than silently falling back to a token that doesn't exist
+          # in this repo's secrets (auth: auto's fallback behavior, not used
+          # here).
+          auth: oidc
+          version: ${{ needs.version.outputs.resolved_version }}

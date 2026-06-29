@@ -43,15 +43,22 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
 
 ## Versioning and releases
 
-- **Semantic versioning**, MinVer-driven from git tags. A `vMAJOR.MINOR.PATCH` tag is the
-  version source of truth.
+- **Semantic versioning**, explicitly resolved from git tags + a chosen bump (not inferred from
+  commit messages). A `vMAJOR.MINOR.PATCH` tag is the version source of truth.
 - **Public API is gated.** Each package tracks its surface in `PublicAPI.Shipped.txt`; the
   `public-api` CI job fails any unintended public-surface change. Surface that differs by target
   framework is tracked per-TFM.
-- **Releases are tag-triggered.** Pushing a `v*` tag runs `.github/workflows/publish.yml`, which calls
-  the `skathio/hashira` reusable `nuget-package-publish` workflow (pinned to a SHA) to pack and
-  push all packages to NuGet.org atomically. The push is gated by the `production` GitHub Environment
-  (required reviewer + `NUGET_API_KEY` secret). See [release readiness](#release-readiness).
+- **Releases are dispatch-triggered.** A maintainer runs `.github/workflows/publish.yml` via
+  `workflow_dispatch` and picks a `bump` (`patch`/`minor`/`major`). The `version` job resolves the
+  next version (`skathio/hashira`'s `version-resolver` composite action), `dotnet-pack-version`
+  packs with that version stamped in (MinVer's tag-inference is bypassed via its
+  `MinVerVersionOverride` escape hatch), and `nuget-push` publishes to NuGet.org via OIDC trusted
+  publishing, then creates the git tag + GitHub Release. There is no `nuget-package-publish`
+  reusable workflow anymore — `skathio/hashira` retired it; these are composite actions invoked
+  directly from this repo's own `publish.yml`, which is what makes the OIDC token's
+  `job_workflow_ref` claim match `skathio/rogue/.github/workflows/publish.yml` (the policy this
+  repo's nuget.org trusted-publishing config is scoped to). The push is gated by the `production`
+  GitHub Environment (required reviewer). See [release readiness](#release-readiness).
 
 ## Supported target frameworks
 
@@ -66,15 +73,19 @@ runtimes; net8.0/net10.0 get the streaming surface and the in-box `ValueTask`/di
 
 ## Release readiness
 
-Before tagging `v1.0.0`:
+Before dispatching the `v1.0.0` release:
 
 - The repository **must be public**. Benchmarks (`bench/results/`), this roadmap, and the
-  governance docs are only publicly accessible when the repo is public — a v1.0.0 tag on a private
-  repo would ship packages whose linked documentation 404s for consumers. Confirm visibility in the
-  GitHub repository settings before tagging. This is a release-process check, not an automated gate.
-- The `production` GitHub Environment must have a required reviewer and the `NUGET_API_KEY` secret
-  configured (consumer responsibility per the hashira nuget flow; an Environment with zero
-  reviewers publishes without pausing).
+  governance docs are only publicly accessible when the repo is public — a v1.0.0 release on a
+  private repo would ship packages whose linked documentation 404s for consumers. Confirm
+  visibility in the GitHub repository settings before dispatching. This is a release-process
+  check, not an automated gate.
+- The `production` GitHub Environment must have a required reviewer configured (an Environment
+  with zero reviewers publishes without pausing). No `NUGET_API_KEY` secret is needed or set —
+  this repo publishes via OIDC trusted publishing only (`auth: oidc`, fails loud rather than
+  falling back to a token, and there is no token configured to fall back to). nuget.org's
+  trusted-publishing policy must be scoped to `skathio/rogue`, workflow `publish.yml`, environment
+  `production` (consumer responsibility per the hashira nuget flow).
 - **Promote `PublicAPI.Unshipped.txt` entries to `PublicAPI.Shipped.txt`** for all packable projects
   (use the analyzer's "mark shipped" fixer; preserve the per-TFM split — `PublicAPI/netstandard2.0/`
   + `PublicAPI/modern/` — for `Abstractions`, `SkathIO.Rogue`, and `SkathIO.Rogue.MediatR`). This is
