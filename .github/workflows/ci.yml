@@ -27,7 +27,7 @@ permissions: {}
 
 jobs:
   ci:
-    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@4005e0a8305e1ff912dea9568d76062ce1790f2a # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as somi's pins
+    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@396cfe5cc443178c67b89ee8933a84d7ac6c870f # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as somi's pins
     permissions:
       contents: read
       pull-requests: write
@@ -35,7 +35,7 @@ jobs:
     with:
       project_path: 'SkathIO.Rogue.sln'
       dotnet_version: '10.0.x'
-      library_ref: '4005e0a8305e1ff912dea9568d76062ce1790f2a' # MUST match the uses: pin above (dual-pin invariant, D9)
+      library_ref: '396cfe5cc443178c67b89ee8933a84d7ac6c870f' # MUST match the uses: pin above (dual-pin invariant, D9)
 
   aot-publish:
     name: AOT publish
