@@ -1,4 +1,22 @@
 # .github/workflows/ci.yml
+#
+# `ci` job migrated to hashira's v2 contract (work item hashira-v2,
+# iteration 6.3) — a pin update only, per that iteration's explicit scope.
+# No `nuget-package-ci.yml` input/job-graph change required: this repo's
+# `with:` block already only sets `project_path`/`dotnet_version`/
+# `library_ref`, and v2's new `bump`/`seed_version` inputs are optional
+# (empty by default) and correctly left unset here — this file is PR/push
+# CI, not a release dispatch (that's `publish.yml`'s job, iteration 6.4).
+# Existing permission grant re-verified unchanged against the current
+# `scan-suite`/`coverage-report` jobs' actual needs.
+#
+# Pinned to hashira's current `main` tip, NOT a released `@v2`/`@v2.x.y`
+# tag — hashira has no `v2` tag yet (hashira-v2 itself is still mid-Phase-6
+# as of this migration). D6's refinement explicitly names "a consumer
+# pinned to a released commit SHA on an unreleased main" as a supported
+# interim state for exactly this reason; this is the same SHA somi's
+# `ci.yml`/`publish.yml` already use (iterations 6.1/6.2). Re-pin to a
+# released `@v2`/`@v2.x.y` tag once hashira cuts one.
 name: ci
 on:
   pull_request:
@@ -9,7 +27,7 @@ permissions: {}
 
 jobs:
   ci:
-    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@780b40fdd21c61643733e8455b47c27a3cd9f37a
+    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@18ed5cd32de455d5886aac07d11cb7262de7a352 # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as somi's pins
     permissions:
       contents: read
       pull-requests: write
@@ -17,7 +35,7 @@ jobs:
     with:
       project_path: 'SkathIO.Rogue.sln'
       dotnet_version: '10.0.x'
-      library_ref: '780b40fdd21c61643733e8455b47c27a3cd9f37a'
+      library_ref: '18ed5cd32de455d5886aac07d11cb7262de7a352' # MUST match the uses: pin above (dual-pin invariant, D9)
 
   aot-publish:
     name: AOT publish
