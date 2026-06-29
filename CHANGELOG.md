@@ -6,6 +6,34 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-06-29
+
+### Changed
+
+- **CI/CD pipeline migrated to [`skathio/hashira`](https://github.com/skathio/hashira)'s v2
+  contract.** Releases are now cut via an explicit `workflow_dispatch` with a `bump`
+  (`patch`/`minor`/`major`) input, resolved by hashira's version-resolver and fed to MinVer at pack
+  time, replacing the previous direct pin. NuGet publishing continues to use OIDC trusted
+  publishing. CI now also runs hashira's shared `nuget-package-ci.yml` (coverage reporting,
+  CodeQL/OSV/Gitleaks/dependency-review) alongside the existing AOT publish, benchmark smoke,
+  license check, and Public API checks.
+- No behavior change to `SkathIO.Rogue`, `SkathIO.Rogue.Abstractions`, `SkathIO.Rogue.MediatR`,
+  `SkathIO.Rogue.Logging`, or `SkathIO.Rogue.Validation.FluentValidation` — this release is
+  CI/tooling only.
+
+## [1.0.1] - 2026-06-22
+
+### Changed
+
+- **Package metadata:** `<Authors>`/`<Company>` renamed `skathio` → `SkathIO` (the NuGet
+  organization's display name) ahead of transferring the packages to the SkathIO org account.
+- **Public docs scrubbed** of internal development-process references (the repo is public, so
+  committed docs are publicly visible): removed links to the private `.somi/` planning
+  directories, neutralized internal work-item codenames, stripped dangling internal
+  requirement/decision IDs (kept the public `ROGUE0xx`/`ROGM0xx` diagnostic IDs), and rewrote
+  `bench/RESULTS.md` as a clean public benchmark report (methodology + current results; numbers
+  unchanged).
+
 ## [1.0.0] - 2026-06-21
 
 First public release. An AOT-safe, source-generated CQRS/mediator for .NET — handlers are discovered

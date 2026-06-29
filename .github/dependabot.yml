@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Refresh third-party GitHub Actions pinned by SHA across the repo weekly.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # NuGet dependencies across all projects (src/tests/samples/bench) — Dependabot
+  # discovers every .csproj recursively from "/" via the solution. Grouped into
+  # one weekly PR to keep review load low; PD-7's MinVer/SourceLink/AOT pins and
+  # the transitive dependency allow-list (.github/allowed-packages.txt, enforced
+  # by ci.yml's "License check" job) are re-verified by CI on every Dependabot PR
+  # like any other PR — a bump that adds a disallowed transitive package fails
+  # the allow-list check rather than silently landing.
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      nuget:
+        patterns: ["*"]
