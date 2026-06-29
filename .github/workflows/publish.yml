@@ -77,7 +77,7 @@ jobs:
     steps:
       # Full tag history (not the shallow default) so the resolver can see
       # the real tag list via `git tag --list` below.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -94,7 +94,7 @@ jobs:
       # somi's `ci.yml`/`publish.yml` (iterations 6.1/6.2) — re-pin to a
       # released `@v2`/`@v2.x.y` tag once hashira cuts one.
       - name: Checkout hashira library (D14)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: skathio/hashira
           ref: 396cfe5cc443178c67b89ee8933a84d7ac6c870f # main tip at hashira-v2 phase 6.1; no v2 tag exists yet — same SHA as ci.yml/somi's pins
@@ -164,11 +164,11 @@ jobs:
       contents: write
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # historically for MinVer's tag walk; harmless to keep — nuget-push's tag/Release step also resolves against this checkout (its own documented runtime contract: the caller must have checked out the repo before the composite runs).
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
 
@@ -176,7 +176,7 @@ jobs:
       # filesystem): dotnet-pack-version is an in-repo hashira composite
       # action. Same pin as the `version` job above (dual-pin invariant, D9).
       - name: Checkout hashira library (D14)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: skathio/hashira
           ref: 396cfe5cc443178c67b89ee8933a84d7ac6c870f # MUST match the version job's checkout above and the nuget-push pin below (dual-pin invariant, D9)
@@ -237,7 +237,7 @@ jobs:
         # --target "${GITHUB_SHA}"` step (confirmed directly against
         # nuget-push/action.yml's "Tag + GitHub Release" step before deleting
         # the hand-rolled equivalent here).
-        uses: skathio/hashira/.github/actions/nuget-push@396cfe5cc443178c67b89ee8933a84d7ac6c870f # MUST match the dual pin above (D9) — main tip at hashira-v2 phase 6.1; no v2 tag exists yet
+        uses: skathio/hashira/.github/actions/nuget-push@d2354a8c7cfd6d2456a6f35ada5e3d781979e844 # MUST match the dual pin above (D9) — main tip at hashira-v2 phase 6.1; no v2 tag exists yet
         with:
           nupkg_path: '${{ runner.temp }}/nupkgs/*.nupkg'
           # Verify this matches your nuget.org account username (the policy creator).
