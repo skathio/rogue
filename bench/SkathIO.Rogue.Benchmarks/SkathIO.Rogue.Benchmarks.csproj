@@ -6,6 +6,9 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.Extensions.Logging" VersionOverride="10.0.9" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
     <!-- Analyzer reference makes the Rogue generator run in this bench compilation, -->
     <!-- discovering the benchmark handlers and emitting the dispatcher (PD-26). -->
