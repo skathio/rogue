@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- D2/D6 (fluentvalidation-di-fix): this project is the dedicated DI-resolution container-
+         boundary regression gate. Referencing the FluentValidation integration package makes the
+         generator's PD-17 metadata scan auto-discover the open-generic ValidationBehavior<,> and
+         weave it into EVERY request in THIS compilation — deliberate here (mirrors
+         SkathIO.Rogue.Behaviors.Tests' isolation rationale, see that project's own comment), since
+         the whole point of this project is exercising the real FluentValidation-woven pipeline under
+         ValidateScopes+ValidateOnBuild. It must stay isolated from every other test project for the
+         same reason Behaviors.Tests is isolated. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation\SkathIO.Rogue.Validation.FluentValidation.csproj" />
+    <!-- Analyzer reference runs the generator in this compilation (needed for real dispatch through
+         ISender/IMediator, not direct behavior construction). -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>
