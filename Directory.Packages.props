@@ -4,39 +4,54 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Build tooling -->
-    <PackageVersion Include="MinVer" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
-    <!-- Roslyn / generator -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+    <PackageVersion Include="MinVer" Version="7.0.0" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <!-- Roslyn / generator. Microsoft.CodeAnalysis.Analyzers is dev-time-only analyzer-authoring
+         tooling (PrivateAssets="All" everywhere it's referenced) — it never gets compiled into the
+         shipped generator's assembly references, so its version doesn't affect consumer min-SDK;
+         5.6.0 is safe and current. Microsoft.CodeAnalysis.CSharp DOES get compiled into the shipped
+         SkathIO.Rogue.SourceGenerator.dll's assembly-reference table, which the host compiler
+         version-checks at analyzer-load time (CS9057) — see D8 (decisions.md#d8, supersedes D4's
+         version choice): 5.6.0 requires a newer Roslyn than any currently-verified .NET 10 SDK
+         ships (confirmed empirically: CS9057 against SDK 10.0.109's bundled compiler 5.0.0.0).
+         Pinned to 5.0.0 — the newest version confirmed to load without CS9057. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.6.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
     <!-- DI -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
     <!-- netstandard2.0 polyfills -->
-    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.9" />
     <!-- Observability shim: ActivitySource + Meter (in-box on net8+; NuGet for ns2.0) -->
-    <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.0" />
-    <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
+    <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.9" />
+    <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
     <!-- Integration packages -->
-    <PackageVersion Include="FluentValidation" Version="11.10.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="FluentValidation" Version="11.12.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.9" />
     <!-- Test -->
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
-    <PackageVersion Include="Verify.Xunit" Version="27.0.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.12.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="Verify.Xunit" Version="31.12.5" />
+    <!-- Companion package to Microsoft.CodeAnalysis.CSharp above (migration analyzer/test
+         projects); kept in lockstep to avoid a restore/assembly-version conflict (D4/D8, F-6). -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
     <!-- Benchmarks. 0.15.2: 0.14.0 predates the net10.0 runtime moniker, so its
          ThreadingDiagnoser runtime-support validator hard-aborts the whole suite on .NET 10
          (".NET Core 3.0+" check fails on an unrecognized moniker). PD-18 directs "latest
          net10.0-compatible"; 0.15.2 recognizes Net10_0. See diary 2026-06-09 plan-change. -->
-    <PackageVersion Include="BenchmarkDotNet" Version="0.15.2" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <!-- Held at 12.4.1 deliberately: MediatR 13+ moved to a commercial license (Jimmy Bogard,
+         2025). This repo uses MediatR only as a benchmarks-only comparison baseline
+         (bench/SkathIO.Rogue.Benchmarks), never shipped to consumers, but must not take on a
+         commercial dependency even there. Excluded from Dependabot's nuget group via
+         .github/dependabot.yml's ignore rule so this pin is never silently re-proposed. -->
     <PackageVersion Include="MediatR" Version="12.4.1" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <!-- Public API surface enforcement -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="3.3.4" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
   </ItemGroup>
 </Project>

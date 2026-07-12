@@ -1,8 +1,11 @@
 #nullable enable
 SkathIO.Rogue.BehaviorInfo
+SkathIO.Rogue.BehaviorInfo.<Clone>$() -> SkathIO.Rogue.BehaviorInfo!
 SkathIO.Rogue.BehaviorInfo.BehaviorInfo(System.Type! BehaviorType, int Order, string! Source) -> void
 SkathIO.Rogue.BehaviorInfo.BehaviorType.get -> System.Type!
 SkathIO.Rogue.BehaviorInfo.BehaviorType.init -> void
+SkathIO.Rogue.BehaviorInfo.Deconstruct(out System.Type! BehaviorType, out int Order, out string! Source) -> void
+SkathIO.Rogue.BehaviorInfo.Equals(SkathIO.Rogue.BehaviorInfo? other) -> bool
 SkathIO.Rogue.BehaviorInfo.Order.get -> int
 SkathIO.Rogue.BehaviorInfo.Order.init -> void
 SkathIO.Rogue.BehaviorInfo.Source.get -> string!
@@ -62,10 +65,17 @@ SkathIO.Rogue.StreamHandlerDelegate<TResponse>
 SkathIO.Rogue.Unit
 SkathIO.Rogue.Unit.Equals(SkathIO.Rogue.Unit other) -> bool
 SkathIO.Rogue.Unit.Unit() -> void
+override SkathIO.Rogue.BehaviorInfo.Equals(object? obj) -> bool
+override SkathIO.Rogue.BehaviorInfo.GetHashCode() -> int
+override SkathIO.Rogue.BehaviorInfo.ToString() -> string!
 override SkathIO.Rogue.Unit.Equals(object? obj) -> bool
 override SkathIO.Rogue.Unit.GetHashCode() -> int
 override SkathIO.Rogue.Unit.ToString() -> string!
+static SkathIO.Rogue.BehaviorInfo.operator !=(SkathIO.Rogue.BehaviorInfo? left, SkathIO.Rogue.BehaviorInfo? right) -> bool
+static SkathIO.Rogue.BehaviorInfo.operator ==(SkathIO.Rogue.BehaviorInfo? left, SkathIO.Rogue.BehaviorInfo? right) -> bool
 static SkathIO.Rogue.Unit.Task.get -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Unit>
 static SkathIO.Rogue.Unit.operator !=(SkathIO.Rogue.Unit left, SkathIO.Rogue.Unit right) -> bool
 static SkathIO.Rogue.Unit.operator ==(SkathIO.Rogue.Unit left, SkathIO.Rogue.Unit right) -> bool
 static readonly SkathIO.Rogue.Unit.Value -> SkathIO.Rogue.Unit
+virtual SkathIO.Rogue.RequestHandlerDelegate<TResponse>.Invoke() -> System.Threading.Tasks.ValueTask<TResponse>
+virtual SkathIO.Rogue.StreamHandlerDelegate<TResponse>.Invoke() -> System.Collections.Generic.IAsyncEnumerable<TResponse>!

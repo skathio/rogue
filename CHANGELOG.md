@@ -6,6 +6,29 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- **Minimum consumer Roslyn/SDK raised.** The shipped source generator
+  (`SkathIO.Rogue.SourceGenerator`) now targets `Microsoft.CodeAnalysis.CSharp` 5.0.0 (up from
+  4.12.0) — consumers need a .NET SDK whose bundled compiler is Roslyn 5.0.0 or newer (any .NET 10
+  SDK) to load the analyzer/generator; older SDKs will see `CS9057`. This is a deliberate trade for
+  currency, accepted with the min-SDK-raise consequence explicitly acknowledged (work item
+  `fluentvalidation-di-fix`, decision D4). Note: Dependabot's original proposal bumped to 5.6.0, but
+  that version was found, during validation, to require a newer Roslyn than any currently-verified
+  .NET 10 SDK ships (confirmed via `CS9057` against a real SDK install; see decision D8) — 5.0.0 is
+  the newest version confirmed to load cleanly. The dev-time-only analyzer-authoring/API-tracking
+  tooling (`Microsoft.CodeAnalysis.Analyzers`, `Microsoft.CodeAnalysis.PublicApiAnalyzers`) moved to
+  5.6.0, which does **not** affect consumer min-SDK (never compiled into the shipped generator).
+- Routine dependency bumps consolidating Dependabot PRs #13/#14 (superseded by this branch):
+  `Microsoft.Extensions.DependencyInjection*` 10.0.0→10.0.9, `Microsoft.Extensions.Logging*`
+  10.0.0→10.0.9, `FluentValidation` 11.10.0→11.12.0, `MinVer` 5.0.0→7.0.0, `Microsoft.SourceLink.GitHub`
+  8.0.0→10.0.300, `BenchmarkDotNet` 0.15.2→0.15.8 (benchmarks only), and test-infrastructure majors
+  (`Microsoft.NET.Test.Sdk` 17.13→18.7, `xunit.runner.visualstudio` 2.8→3.1.5, `coverlet.collector`
+  6→10, `Verify.Xunit` 27→31) — test discovery and all 239 existing tests verified passing against
+  the new versions. `MediatR` is deliberately **not** bumped past 12.4.1: v13+ moved to a commercial
+  license, and this benchmarks-only comparison dependency must not take one on. Excluded going
+  forward via `.github/dependabot.yml`'s ignore rule.
+
 ## [1.0.2] - 2026-06-29
 
 ### Changed

@@ -35,3 +35,4 @@ SkathIO.Rogue.MediatR.MapAsQueryAttribute
 SkathIO.Rogue.MediatR.MapAsQueryAttribute.MapAsQueryAttribute() -> void
 static SkathIO.Rogue.Compatibility.MediatRCompatExtensions.AddMediatR(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<SkathIO.Rogue.Compatibility.MediatRCompatOptions!>? configure = null, System.Action<SkathIO.Rogue.RogueOptions!>? rogueOptions = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static SkathIO.Rogue.Compatibility.Unit.Value.get -> SkathIO.Rogue.Unit
+virtual SkathIO.Rogue.Compatibility.ServiceFactory.Invoke(System.Type! serviceType) -> object!
