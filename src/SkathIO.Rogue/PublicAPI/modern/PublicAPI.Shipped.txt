@@ -1,8 +1,11 @@
 #nullable enable
 SkathIO.Rogue.BehaviorRegistration
+SkathIO.Rogue.BehaviorRegistration.<Clone>$() -> SkathIO.Rogue.BehaviorRegistration!
 SkathIO.Rogue.BehaviorRegistration.BehaviorRegistration(System.Type! BehaviorType, int Order, bool IsOpen) -> void
 SkathIO.Rogue.BehaviorRegistration.BehaviorType.get -> System.Type!
 SkathIO.Rogue.BehaviorRegistration.BehaviorType.init -> void
+SkathIO.Rogue.BehaviorRegistration.Deconstruct(out System.Type! BehaviorType, out int Order, out bool IsOpen) -> void
+SkathIO.Rogue.BehaviorRegistration.Equals(SkathIO.Rogue.BehaviorRegistration? other) -> bool
 SkathIO.Rogue.BehaviorRegistration.IsOpen.get -> bool
 SkathIO.Rogue.BehaviorRegistration.IsOpen.init -> void
 SkathIO.Rogue.BehaviorRegistration.Order.get -> int
@@ -51,7 +54,12 @@ SkathIO.Rogue.WhenAllPublisher
 SkathIO.Rogue.WhenAllPublisher.Publish<TEvent>(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.IEventHandler<TEvent>!>! handlers, TEvent ev, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.WhenAllPublisher.WhenAllPublisher() -> void
 const SkathIO.Rogue.RogueTelemetry.Name = "SkathIO.Rogue" -> string!
+override SkathIO.Rogue.BehaviorRegistration.Equals(object? obj) -> bool
+override SkathIO.Rogue.BehaviorRegistration.GetHashCode() -> int
+override SkathIO.Rogue.BehaviorRegistration.ToString() -> string!
 readonly SkathIO.Rogue.RogueDispatcher._serviceProvider -> System.IServiceProvider!
+static SkathIO.Rogue.BehaviorRegistration.operator !=(SkathIO.Rogue.BehaviorRegistration? left, SkathIO.Rogue.BehaviorRegistration? right) -> bool
+static SkathIO.Rogue.BehaviorRegistration.operator ==(SkathIO.Rogue.BehaviorRegistration? left, SkathIO.Rogue.BehaviorRegistration? right) -> bool
 static SkathIO.Rogue.PipelineExecutor.Execute<TRequest, TResponse>(TRequest request, System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.IPipelineBehavior<TRequest, TResponse>!>! behaviors, SkathIO.Rogue.RequestHandlerDelegate<TResponse>! handler, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TResponse>
 static SkathIO.Rogue.RogueRegistrationBridge.GeneratedRegistrar.get -> System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection!, SkathIO.Rogue.RogueOptions!>?
 static SkathIO.Rogue.RogueRegistrationBridge.GeneratedRegistrar.set -> void
