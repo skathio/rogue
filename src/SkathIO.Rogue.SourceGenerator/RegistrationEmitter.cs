@@ -210,16 +210,28 @@ internal static class RegistrationEmitter
         "global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions";
 
     /// <summary>
+    /// D3 carve-out: the behavior self-registrations and the <c>IReadOnlyList&lt;IPipelineBehavior&lt;,&gt;&gt;</c>
+    /// factory in <see cref="EmitBehaviorListRegistration"/> are always Transient, regardless of
+    /// <see cref="RogueOptions.Lifetime"/> — see that method's remarks for the rationale.
+    /// </summary>
+    private const string TransientLifetimeFqn =
+        "global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient";
+
+    /// <summary>
     /// Emits an idempotent single-registration (PD-38): <c>ServiceCollectionDescriptorExtensions.TryAdd(
     /// services, new ServiceDescriptor(serviceType, implType, options.Lifetime))</c>. <c>TryAdd</c>
     /// no-ops if the <em>service type</em> is already registered, so re-invoking the registrar (a
     /// double-<c>AddRogue()</c> or a duplicate append) does not double-register. The consumer's
     /// <see cref="RogueOptions.Lifetime"/> is honoured (Fix 3 / FR — RogueOptions.Lifetime). Used for
     /// kinds the dispatcher resolves via singular <c>GetService&lt;&gt;</c> — exactly one implementation
-    /// per service type is correct: request handlers (ROGUE002 forbids duplicates), stream handlers,
-    /// behavior self-registration, and the <c>IReadOnlyList&lt;IPipelineBehavior&lt;,&gt;&gt;</c> factory.
+    /// per service type is correct: request handlers (ROGUE002 forbids duplicates) and stream handlers.
     /// Multi-registration kinds the dispatcher resolves via <c>GetServices&lt;&gt;</c> (notification
     /// handlers and all four processor kinds) use <see cref="EmitEnumerableDescriptor"/> instead (PD-45).
+    /// D3 carve-out: behavior self-registration and the <c>IReadOnlyList&lt;IPipelineBehavior&lt;,&gt;&gt;</c>
+    /// factory do NOT go through this helper for their lifetime — see
+    /// <see cref="EmitBehaviorListRegistration"/>, which hard-codes <see cref="TransientLifetimeFqn"/>
+    /// instead, so a Singleton-configured handler lifetime can never make a behavior a captive
+    /// dependency over a Scoped service (e.g. a FluentValidation <c>IValidator&lt;T&gt;</c>).
     /// </summary>
     private static void EmitDescriptor(CodeWriter w, string serviceTypeFqn, string implTypeFqn)
     {
@@ -452,21 +464,33 @@ internal static class RegistrationEmitter
     /// <summary>
     /// Emits the per-pair self-registration of each behavior type plus the
     /// <c>IReadOnlyList&lt;TBehaviorIface&gt;</c> factory the dispatcher resolves at dispatch time.
+    /// D3: both the self-registrations below and the list factory are pinned to
+    /// <see cref="TransientLifetimeFqn"/>, decoupled from <see cref="RogueOptions.Lifetime"/> — a
+    /// Singleton-configured handler lifetime must never make a behavior a captive dependency over a
+    /// Scoped service (e.g. a FluentValidation <c>IValidator&lt;T&gt;</c>). Handler (and event-handler,
+    /// stream-query-handler) self-registrations are unaffected and continue to honour
+    /// <c>options.Lifetime</c> via <see cref="EmitDescriptor(CodeWriter, string)"/>.
     /// </summary>
     private static void EmitBehaviorListRegistration(
         CodeWriter w, string behaviorIface, string behaviorListType, List<string> applicableBehaviors)
     {
-        // Register each behavior type individually (so DI can construct it)
+        // Register each behavior type individually (so DI can construct it). Inline (not via
+        // EmitDescriptor) because the lifetime here is hard-coded Transient (D3), not
+        // options.Lifetime — EmitDescriptor's shared helper must stay untouched for its other five
+        // call sites (handlers, event-handler self-reg, stream-query-handler self-reg).
         foreach (var bFqn in applicableBehaviors)
         {
-            EmitDescriptor(w, bFqn);
+            w.Line(
+                SCDE_FQN + ".TryAdd(services, new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(" +
+                "typeof(" + bFqn + "), typeof(" + bFqn + "), " + TransientLifetimeFqn + "));");
         }
 
-        // Register IReadOnlyList<TBehaviorIface> via an expression-bodied factory. The list itself
-        // follows the consumer's configured lifetime (options.Lifetime); its elements are resolved
-        // from the container so they keep their own registered lifetime. TryAdd (PD-38) makes the
-        // factory registration idempotent — re-invoking the registrar does not add a second factory
-        // for the same IReadOnlyList<TBehaviorIface> service type (which would duplicate the pipeline).
+        // Register IReadOnlyList<TBehaviorIface> via an expression-bodied factory. The list itself is
+        // also pinned Transient (D3, same rationale as the self-registrations above); its elements
+        // are resolved from the container so they keep their own registered lifetime. TryAdd (PD-38)
+        // makes the factory registration idempotent — re-invoking the registrar does not add a second
+        // factory for the same IReadOnlyList<TBehaviorIface> service type (which would duplicate the
+        // pipeline).
         w.Line(SCDE_FQN + ".TryAdd(services, new global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor(");
         w.Indent();
         w.Line("typeof(" + behaviorListType + "),");
@@ -483,7 +507,7 @@ internal static class RegistrationEmitter
         w.Dedent();
         w.Line("},");
         // Closes: ServiceDescriptor(...) ')', then TryAdd(services, ...) ')', plus the trailing ';'.
-        w.Line("options.Lifetime));");
+        w.Line(TransientLifetimeFqn + "));");
         w.Dedent();
         w.Line();
     }
