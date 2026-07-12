@@ -4,7 +4,18 @@ using System.Threading.Tasks;
 
 namespace SkathIO.Rogue;
 
-/// <summary>Sends commands and queries through the pipeline and returns responses.</summary>
+/// <summary>
+/// Sends commands and queries through the pipeline and returns responses.
+/// <para>
+/// <b>Resolve this from a scope, not the root <c>IServiceProvider</c>.</b> The default
+/// registration is <c>Scoped</c> (one mediator per request/scope). Resolving it from the root
+/// provider — e.g. directly in an <c>IHostedService</c>/<c>BackgroundService</c> constructor, or
+/// at startup before a scope exists — throws <see cref="System.InvalidOperationException"/>.
+/// Create a scope first with <c>IServiceScopeFactory.CreateScope()</c> and resolve from
+/// <c>scope.ServiceProvider</c> instead. See the README's "Scoped dispatch" section for the exact
+/// exception text and worked examples.
+/// </para>
+/// </summary>
 public interface ISender
 {
     /// <summary>Sends a command that produces no return value.</summary>
