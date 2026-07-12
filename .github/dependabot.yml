@@ -23,3 +23,10 @@ updates:
     groups:
       nuget:
         patterns: ["*"]
+    ignore:
+      # MediatR 13+ moved to a commercial license (Jimmy Bogard, 2025). MediatR is used only
+      # as a benchmarks-only comparison baseline (bench/SkathIO.Rogue.Benchmarks), never
+      # shipped to consumers, but this repo must not take on a commercial dependency even
+      # there. Held at 12.4.1 (Directory.Packages.props) — do not propose updates past v12.
+      - dependency-name: "MediatR"
+        versions: [">=13.0.0"]

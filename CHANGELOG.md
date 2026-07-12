@@ -22,10 +22,12 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 - Routine dependency bumps consolidating Dependabot PRs #13/#14 (superseded by this branch):
   `Microsoft.Extensions.DependencyInjection*` 10.0.0→10.0.9, `Microsoft.Extensions.Logging*`
   10.0.0→10.0.9, `FluentValidation` 11.10.0→11.12.0, `MinVer` 5.0.0→7.0.0, `Microsoft.SourceLink.GitHub`
-  8.0.0→10.0.300, `MediatR` 12.4.1→14.2.0 (benchmarks only), `BenchmarkDotNet` 0.15.2→0.15.8
-  (benchmarks only), and test-infrastructure majors (`Microsoft.NET.Test.Sdk` 17.13→18.7,
-  `xunit.runner.visualstudio` 2.8→3.1.5, `coverlet.collector` 6→10, `Verify.Xunit` 27→31) — test
-  discovery and all 239 existing tests verified passing against the new versions.
+  8.0.0→10.0.300, `BenchmarkDotNet` 0.15.2→0.15.8 (benchmarks only), and test-infrastructure majors
+  (`Microsoft.NET.Test.Sdk` 17.13→18.7, `xunit.runner.visualstudio` 2.8→3.1.5, `coverlet.collector`
+  6→10, `Verify.Xunit` 27→31) — test discovery and all 239 existing tests verified passing against
+  the new versions. `MediatR` is deliberately **not** bumped past 12.4.1: v13+ moved to a commercial
+  license, and this benchmarks-only comparison dependency must not take one on. Excluded going
+  forward via `.github/dependabot.yml`'s ignore rule.
 
 ## [1.0.2] - 2026-06-29
 

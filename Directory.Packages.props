@@ -44,7 +44,12 @@
          (".NET Core 3.0+" check fails on an unrecognized moniker). PD-18 directs "latest
          net10.0-compatible"; 0.15.2 recognizes Net10_0. See diary 2026-06-09 plan-change. -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="MediatR" Version="14.2.0" />
+    <!-- Held at 12.4.1 deliberately: MediatR 13+ moved to a commercial license (Jimmy Bogard,
+         2025). This repo uses MediatR only as a benchmarks-only comparison baseline
+         (bench/SkathIO.Rogue.Benchmarks), never shipped to consumers, but must not take on a
+         commercial dependency even there. Excluded from Dependabot's nuget group via
+         .github/dependabot.yml's ignore rule so this pin is never silently re-proposed. -->
+    <PackageVersion Include="MediatR" Version="12.4.1" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <!-- Public API surface enforcement -->
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
