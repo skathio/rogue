@@ -45,6 +45,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkathIO.Rogue.WebApi.Integr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkathIO.Rogue.MediatR.Tests", "tests\SkathIO.Rogue.MediatR.Tests\SkathIO.Rogue.MediatR.Tests.csproj", "{281B9F95-1AF8-4649-8222-A07815CAB4A6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkathIO.Rogue.Benchmarks.Validation", "bench\SkathIO.Rogue.Benchmarks.Validation\SkathIO.Rogue.Benchmarks.Validation.csproj", "{F3C236B8-DA86-4924-B862-D288FEB55BC6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -283,6 +285,18 @@ Global
 		{281B9F95-1AF8-4649-8222-A07815CAB4A6}.Release|x64.Build.0 = Release|Any CPU
 		{281B9F95-1AF8-4649-8222-A07815CAB4A6}.Release|x86.ActiveCfg = Release|Any CPU
 		{281B9F95-1AF8-4649-8222-A07815CAB4A6}.Release|x86.Build.0 = Release|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Debug|x64.Build.0 = Debug|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Debug|x86.Build.0 = Debug|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Release|x64.ActiveCfg = Release|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Release|x64.Build.0 = Release|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Release|x86.ActiveCfg = Release|Any CPU
+		{F3C236B8-DA86-4924-B862-D288FEB55BC6}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
