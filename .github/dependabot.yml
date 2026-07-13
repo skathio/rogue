@@ -27,6 +27,19 @@ updates:
       # MediatR 13+ moved to a commercial license (Jimmy Bogard, 2025). MediatR is used only
       # as a benchmarks-only comparison baseline (bench/SkathIO.Rogue.Benchmarks), never
       # shipped to consumers, but this repo must not take on a commercial dependency even
-      # there. Held at 12.4.1 (Directory.Packages.props) — do not propose updates past v12.
+      # there. Same-major bumps stay unrestricted; only v13+ is excluded (Directory.Packages.props).
       - dependency-name: "MediatR"
         versions: [">=13.0.0"]
+      # Microsoft.CodeAnalysis.CSharp/.Workspaces are compiled into the shipped generator's
+      # assembly-reference table, which the consumer's host compiler version-checks at
+      # analyzer-load time (CS9057). Verified: 5.6.0 hard-fails on an ~8-month-old SDK
+      # (10.0.109) though it loads fine on a current one (CI's 10.0.301) — Roslyn's check is
+      # one-directional, so there is no compatibility upside to a higher pin, only downside for
+      # consumers on older/pinned SDKs. Held at 5.0.0 (D8/D11, decisions.md#d11) — a Dependabot
+      # PR silently bumped this back to 5.6.0 once already (#17) before this ignore rule
+      # existed; any future bump here must go through a deliberate, empirically-verified
+      # decision, not an automated one.
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp"
+        versions: [">5.0.0"]
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp.Workspaces"
+        versions: [">5.0.0"]

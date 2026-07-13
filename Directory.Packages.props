@@ -12,11 +12,16 @@
          5.6.0 is safe and current. Microsoft.CodeAnalysis.CSharp DOES get compiled into the shipped
          SkathIO.Rogue.SourceGenerator.dll's assembly-reference table, which the host compiler
          version-checks at analyzer-load time (CS9057) — see D8 (decisions.md#d8, supersedes D4's
-         version choice): 5.6.0 requires a newer Roslyn than any currently-verified .NET 10 SDK
-         ships (confirmed empirically: CS9057 against SDK 10.0.109's bundled compiler 5.0.0.0).
-         Pinned to 5.0.0 — the newest version confirmed to load without CS9057. -->
+         version choice) and D11 (decisions.md#d11): 5.6.0 loads fine on a current SDK (verified:
+         CI's 10.0.301) but hard-fails with CS9057 on an ~8-month-old one (verified: 10.0.109's
+         bundled compiler 5.0.0.0) — and Roslyn's analyzer-load check is one-directional, so pinning
+         to the oldest version with the APIs we need costs nothing on current SDKs while staying
+         buildable on older/pinned ones. Pinned to 5.0.0 — the newest version confirmed to load
+         everywhere tested. Excluded from Dependabot's nuget group (.github/dependabot.yml) so this
+         can't be silently re-proposed — a Dependabot PR reverted this to 5.6.0 once already (#17,
+         merged without the review discipline the rest of this fix went through; see D11). -->
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.6.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
     <!-- DI -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
@@ -38,17 +43,18 @@
     <PackageVersion Include="Verify.Xunit" Version="31.12.5" />
     <!-- Companion package to Microsoft.CodeAnalysis.CSharp above (migration analyzer/test
          projects); kept in lockstep to avoid a restore/assembly-version conflict (D4/D8, F-6). -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.6.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
     <!-- Benchmarks. 0.15.2: 0.14.0 predates the net10.0 runtime moniker, so its
          ThreadingDiagnoser runtime-support validator hard-aborts the whole suite on .NET 10
          (".NET Core 3.0+" check fails on an unrecognized moniker). PD-18 directs "latest
          net10.0-compatible"; 0.15.2 recognizes Net10_0. See diary 2026-06-09 plan-change. -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <!-- Held at 12.4.1 deliberately: MediatR 13+ moved to a commercial license (Jimmy Bogard,
+    <!-- Held below v13 deliberately: MediatR 13+ moved to a commercial license (Jimmy Bogard,
          2025). This repo uses MediatR only as a benchmarks-only comparison baseline
          (bench/SkathIO.Rogue.Benchmarks), never shipped to consumers, but must not take on a
-         commercial dependency even there. Excluded from Dependabot's nuget group via
-         .github/dependabot.yml's ignore rule so this pin is never silently re-proposed. -->
+         commercial dependency even there. Same-major bumps (e.g. 12.4.1->12.5.0) are safe and
+         Dependabot may still propose them; only v13+ is excluded via .github/dependabot.yml's
+         ignore rule, so that boundary is never silently crossed. -->
     <PackageVersion Include="MediatR" Version="12.5.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <!-- Public API surface enforcement -->
