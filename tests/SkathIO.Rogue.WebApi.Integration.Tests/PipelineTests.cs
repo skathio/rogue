@@ -271,6 +271,39 @@ public sealed class PipelineTests : IClassFixture<WebApplicationFactory<Program>
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // Covers: FR-39 (success path) — ValidationBehavior lets a request through when a real
+    // AbstractValidator<T> (genuine FluentValidation rule DSL, not a hand-rolled stub) validates it
+    // successfully, and the handler's actual response is returned — proving the validator genuinely
+    // executed and passed (not merely that it was absent from the pipeline; the failure-path test
+    // above proves the short-circuit side of the same contract).
+    // Anti-vacuous-pass (code-loop pass 1 review, F-1/Major): a valid-payload → 200 assertion alone
+    // does not prove the real validator ran — Behavior_WrapsHandler_BeforeAndAfter already shows the
+    // BASE factory (no validator wired at all) returns 200 with the same echoed body for a non-empty
+    // Message. So this test also sends an INVALID payload (empty Message) through the SAME
+    // WithRealValidator-derived client and asserts 400 — that outcome is impossible unless the real
+    // AbstractValidator's NotEmpty() rule genuinely executed and rejected it. Together, the two
+    // assertions prove both "the validator ran and passed" and "the validator ran and failed
+    // correctly" through the identical wiring.
+    [Fact]
+    public async Task ValidationBehavior_PassingValidation_ReturnsHandlerResponse()
+    {
+        using var validated = WithRealValidator(_factory);
+        var client = validated.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/ping", new PingRequest("valid message"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<PingResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("valid message", body!.Echo);
+
+        // Anti-vacuous-pass: the same wiring must reject an input that violates the real rule
+        // (NotEmpty() on Message) — proving the validator, not the pipeline's absence, decided.
+        var invalidResponse = await client.PostAsJsonAsync("/ping", new PingRequest(string.Empty));
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+    }
+
     // Covers: NFR-SEC-2 — the default LoggingBehavior logs the request NAME but NEVER the request or
     // response PAYLOAD. The host uses default LoggingOptions (LogPayload off) and PingRequest carries
     // no [LogPayload], so the captured output must contain "PingRequest" but not the field values.
@@ -322,6 +355,19 @@ public sealed class PipelineTests : IClassFixture<WebApplicationFactory<Program>
     private static WebApplicationFactory<Program> WithAlwaysFailingValidator(WebApplicationFactory<Program> root) =>
         root.WithWebHostBuilder(b =>
             b.ConfigureServices(s => s.AddSingleton<IValidator<PingRequest>>(new AlwaysFailValidator())));
+
+    /// <summary>Derived factory registering a real FluentValidation validator for <see cref="PingRequest"/>.</summary>
+    private static WebApplicationFactory<Program> WithRealValidator(WebApplicationFactory<Program> root) =>
+        root.WithWebHostBuilder(b =>
+            b.ConfigureServices(s => s.AddSingleton<IValidator<PingRequest>>(new PingRequestValidator())));
+
+    /// <summary>A genuine FluentValidation rule-DSL validator, distinct from <see cref="AlwaysFailValidator"/>'s
+    /// hand-rolled stub — this test-file's proof that the FluentValidation pipeline actually runs the rule
+    /// engine, not just an <see cref="IValidator{T}"/>-shaped object.</summary>
+    private sealed class PingRequestValidator : AbstractValidator<PingRequest>
+    {
+        internal PingRequestValidator() => RuleFor(x => x.Message).NotEmpty();
+    }
 
     private sealed class AlwaysFailValidator : IValidator<PingRequest>
     {

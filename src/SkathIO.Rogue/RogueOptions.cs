@@ -7,7 +7,18 @@ namespace SkathIO.Rogue;
 /// <summary>Configuration options for SkathIO.Rogue.</summary>
 public sealed class RogueOptions
 {
-    /// <summary>Default handler/behavior lifetime. Default: <see cref="ServiceLifetime.Transient"/>.</summary>
+    /// <summary>
+    /// Default lifetime for generated <b>handler</b> (and stream handler) self-registrations.
+    /// Default: <see cref="ServiceLifetime.Transient"/>.
+    /// <para>
+    /// This setting governs handlers only. Pipeline behaviors — and the
+    /// <c>IReadOnlyList&lt;IPipelineBehavior&lt;,&gt;&gt;</c> factory that resolves them — are
+    /// always registered <see cref="ServiceLifetime.Transient"/>, regardless of this value. A
+    /// behavior pinned to this option's lifetime would let <c>Lifetime = Singleton</c> turn a
+    /// behavior that depends on a Scoped service (e.g. a FluentValidation <c>IValidator&lt;T&gt;</c>)
+    /// into a captive dependency, so behavior lifetime is deliberately decoupled from this option.
+    /// </para>
+    /// </summary>
     public ServiceLifetime Lifetime { get; set; } = ServiceLifetime.Transient;
 
     /// <summary>Event publish strategy. Default: <see cref="ForeachAwaitPublisher"/>.</summary>

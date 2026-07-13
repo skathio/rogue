@@ -8,6 +8,14 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ### Changed
 
+- **Pipeline behaviors are now always registered `Transient`, regardless of `RogueOptions.Lifetime`.**
+  Previously, setting `Lifetime = ServiceLifetime.Singleton` (to make handlers Singleton for
+  performance) also made every generated pipeline behavior Singleton — a captive-dependency trap
+  for any behavior with a Scoped dependency, such as a FluentValidation `IValidator<T>` or a
+  `DbContext`. Behaviors (and the behavior-list factory) now always resolve `Transient`, matching
+  MediatR's default and eliminating that class of DI-resolution failure. Handler and stream-handler
+  self-registrations are unaffected and continue to honor `Lifetime` as before; consumers who left
+  `Lifetime` at its default (`Transient`) see no change at all.
 - **Minimum consumer Roslyn/SDK raised.** The shipped source generator
   (`SkathIO.Rogue.SourceGenerator`) now targets `Microsoft.CodeAnalysis.CSharp` 5.0.0 (up from
   4.12.0) — consumers need a .NET SDK whose bundled compiler is Roslyn 5.0.0 or newer (any .NET 10

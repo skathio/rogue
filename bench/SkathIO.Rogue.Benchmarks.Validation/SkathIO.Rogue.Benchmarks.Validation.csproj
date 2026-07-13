@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <!-- Analyzer reference makes the Rogue generator run in this bench compilation, -->
+    <!-- discovering the benchmark handlers and emitting the dispatcher (PD-26). -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <!-- Deliberately a SEPARATE project from SkathIO.Rogue.Benchmarks (D10): referencing
+         SkathIO.Rogue.Validation.FluentValidation makes the generator's PD-17 metadata scan
+         discover ValidationBehavior<,> (an open generic IPipelineBehavior<,>) and auto-weave it
+         into EVERY non-stream request in this compilation. Landing that reference in the shared
+         bench project would perturb NoBehaviorBenchmarks/ObjectPathBenchmarks/ColdStartBenchmarks'
+         PingRequest fast path (their AC-6 0-alloc claim) exactly as D2 already documented for test
+         projects ("Referencing the FV package in an existing suite would trigger the PD-17
+         auto-weave ... perturbing those suites"). This project's own handler (CreateUserCommand)
+         is the only request type here, so the auto-weave is scoped to what this benchmark
+         actually wants to measure. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation\SkathIO.Rogue.Validation.FluentValidation.csproj" />
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+</Project>

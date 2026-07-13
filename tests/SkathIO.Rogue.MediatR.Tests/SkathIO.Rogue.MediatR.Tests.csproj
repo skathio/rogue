@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Runtime coverage for the MediatR compat shim (SkathIO.Rogue.MediatR). The shim defines no
+         IPipelineBehavior<,> itself, so — unlike Behaviors.Tests/DiResolution.Tests — referencing it
+         carries no PD-17 auto-weave risk; isolation here mirrors those projects' shape for
+         consistency, not because it's load-bearing. SkathIO.Rogue itself (ISender/IMediator/AddRogue)
+         flows in transitively via SkathIO.Rogue.MediatR's own ProjectReference. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.MediatR\SkathIO.Rogue.MediatR.csproj" />
+    <!-- Analyzer reference runs the generator in this compilation (needed for real dispatch through
+         ISender/IMediator/IPublisher, not direct handler construction). -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>

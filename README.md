@@ -134,6 +134,64 @@ await foreach (var product in sender.CreateStream(new PagedProductsQuery(50)))
 
 ---
 
+## Scoped dispatch
+
+`AddRogue()` registers `ISender` / `IMediator` (and the underlying dispatcher) as **Scoped** — one
+mediator instance per request/scope, matching the standard mediator-pattern lifetime. That means
+`ISender`/`IMediator` must be resolved from **within a scope**, not from the root `IServiceProvider`.
+
+For ASP.NET Core controllers/minimal-API handlers, constructor/parameter injection already resolves
+from the current request's scope — no extra work needed (see the [Quick start](#3-send) example
+above). The failure case is code that runs **outside** a request scope: hosted services, background
+workers, and startup/seeding code.
+
+```csharp
+// Wrong — throws at resolution time
+public class OutboxProcessor(IServiceProvider provider) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        var sender = provider.GetRequiredService<ISender>(); // throws
+        ...
+    }
+}
+
+// Right — create a scope first
+public class OutboxProcessor(IServiceScopeFactory scopeFactory) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            using var scope = scopeFactory.CreateScope();
+            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+            await sender.Send(new ProcessOutboxCommand(), ct);
+            await Task.Delay(TimeSpan.FromSeconds(30), ct);
+        }
+    }
+}
+```
+
+Resolving `ISender`/`IMediator` from the root provider throws:
+
+```
+System.InvalidOperationException: Cannot resolve scoped service 'SkathIO.Rogue.ISender' from root provider.
+```
+
+This is standard `Microsoft.Extensions.DependencyInjection` scope-validation behavior for any
+Scoped service resolved from the root container — it applies equally with or without any optional
+Rogue integration package (e.g. `SkathIO.Rogue.Validation.FluentValidation`) installed, since it's
+a property of the mediator's own Scoped registration, not of any particular pipeline behavior.
+
+**Note:** the .NET Generic Host only enables this scope validation (`ValidateScopes`) by default in
+the `Development` environment. Outside Development — the default in most deployed configurations —
+resolving from the root provider does **not** throw; it silently succeeds with an instance captured
+against the root container, effectively a singleton mediator that never sees per-request scoped
+state. That's a worse failure mode than the exception above precisely because it's silent. Create a
+scope regardless of environment; don't rely on the exception as your only signal.
+
+---
+
 ## Pipeline behaviors
 
 Behaviors wrap every request in the pipeline — use them for logging, validation, caching, or any
