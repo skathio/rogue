@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>SkathIO.Rogue.Benchmarks.ConcurrentDispatchBenchmarks-20260713-193436</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.4 LTS (Noble Numbat)
+Intel Core i7-6700HQ CPU 2.60GHz (Max: 0.80GHz) (Skylake), 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.109
+  [Host]   : .NET 10.0.9 (10.0.9, 10.0.926.27113), X64 RyuJIT x86-64-v3
+  ShortRun : .NET 10.0.9 (10.0.9, 10.0.926.27113), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  IterationCount=3  LaunchCount=1  
+WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method  </th><th>Concurrency</th><th>Mean </th><th>Error</th><th>StdDev</th><th>Completed Work Items</th><th>Lock Contentions</th><th>Gen0</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>ConcurrentSend</td><td>1</td><td>970.4 ns</td><td>501.2 ns</td><td>27.47 ns</td><td>-</td><td>-</td><td>0.8850</td><td>2.71 KB</td>
+</tr><tr><td>ConcurrentSend</td><td>4</td><td>3,625.3 ns</td><td>747.0 ns</td><td>40.95 ns</td><td>-</td><td>-</td><td>3.3607</td><td>10.3 KB</td>
+</tr><tr><td>ConcurrentSend</td><td>8</td><td>7,143.0 ns</td><td>3,410.5 ns</td><td>186.94 ns</td><td>-</td><td>-</td><td>6.6681</td><td>20.43 KB</td>
+</tr><tr><td>ConcurrentSend</td><td>16</td><td>14,323.5 ns</td><td>7,356.9 ns</td><td>403.25 ns</td><td>-</td><td>-</td><td>13.2751</td><td>40.68 KB</td>
+</tr></tbody></table>
+</body>
+</html>

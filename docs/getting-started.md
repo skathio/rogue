@@ -32,7 +32,7 @@ builder.Services.AddRogue(o =>
 {
     o.EnableObjectDispatch = true;                 // opt into the untyped Send(object)/Publish(object) path
     o.EnableTelemetry = true;                      // turn on the ActivitySource/Meter shim
-    o.Lifetime = ServiceLifetime.Transient;        // DI lifetime for discovered handlers + behaviors (default: Transient)
+    o.Lifetime = ServiceLifetime.Transient;        // DI lifetime for discovered handlers (default: Transient) — behaviors are always Transient, see "Lifetimes" below
     o.AddOpenBehavior(typeof(MyBehavior<,>));       // register an open-generic pipeline behavior
 });
 ```
@@ -87,8 +87,17 @@ in the `SkathIO.Rogue.MediatR` package (`SkathIO.Rogue.Compatibility` namespace)
 ## Lifetimes
 
 The generated **dispatcher** is registered **scoped** — per-scope, so it can resolve handlers that
-themselves depend on scoped services. **Discovered handlers and behaviors** default to **transient**
-(`RogueOptions.Lifetime`, overridable per your needs).
+themselves depend on scoped services. **Discovered handlers** default to **transient**
+(`RogueOptions.Lifetime`, overridable per your needs) — for example, set it to `Singleton` if your
+handlers are stateless and you want to avoid per-dispatch allocation.
+
+**Pipeline behaviors are always registered `Transient`**, regardless of `RogueOptions.Lifetime`.
+This is deliberate: a behavior that depends on a Scoped service (a FluentValidation `IValidator<T>`,
+a `DbContext`, etc.) would otherwise become a captive dependency the moment `Lifetime` was set to
+`Singleton` for handler-performance reasons — the classic ASP.NET Core DI footgun. Pinning behaviors
+to `Transient` matches MediatR's own default and closes that failure mode entirely; if you left
+`Lifetime` at its default (`Transient`), this changes nothing you'd notice.
+
 `IRoguePipelineInspector` and the notification publishers are stateless singletons.
 
 ## Troubleshooting

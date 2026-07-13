@@ -5,17 +5,27 @@ from committed BenchmarkDotNet runs; the raw per-class artifacts live under `ben
 
 ## Methodology
 
-- **Harness:** BenchmarkDotNet 0.15.2, ShortRun job (3 iterations, 3 warmup, 1 launch).
+- **Harness:** BenchmarkDotNet 0.15.8, ShortRun job (3 iterations, 3 warmup, 1 launch).
 - **SDK / runtime:** .NET 10.0.109 SDK, .NET 10.0.9 runtime (X64 RyuJIT AVX2).
 - **Hardware / OS:** Intel Core i7-6700HQ (Skylake), 4 physical / 8 logical cores · Ubuntu 24.04.4 LTS.
-- **Competitor:** MediatR 12.4.1 (Apache-2.0). Comparison-only; not a runtime dependency of any package.
-- **Raw artifacts:** `bench/results/2026-06-19-cb81a30/` (non-Publish scenarios) and
-  `bench/results/2026-06-20-a734d6f/` (notification fan-out).
+- **Competitor:** MediatR 12.5.0 (Apache-2.0). Comparison-only; not a runtime dependency of any
+  package. Held below v13 deliberately (MediatR 13+ moved to a commercial license) — see
+  [governance](../docs/governance.md#dependency-policy).
+- **Raw artifacts:** `bench/results/2026-07-13-1bb0b86/` (full suite, including the validation
+  comparison below). Earlier baselines (`2026-06-19-cb81a30`, `2026-06-20-a734d6f`, etc.) are
+  retained for history.
 - **Reproduce:**
 
   ```bash
   dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks -- --filter '*' --job short
+  dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks.Validation -- --filter '*' --job short
   ```
+
+  The validation comparison lives in a separate project deliberately — referencing
+  `SkathIO.Rogue.Validation.FluentValidation` from the shared benchmark project would auto-weave
+  `ValidationBehavior<,>` into every request in that compilation (the same open-generic-behavior
+  scan documented in the [behaviors guide](../docs/behaviors.md#auto-discovery-from-referenced-assemblies)),
+  silently perturbing the zero-alloc benchmarks above.
 
 > ShortRun is a fast, wide sweep with relatively large error bands; treat the means as indicative and
 > the allocation counts (deterministic, from `[MemoryDiagnoser]`) as exact. Earlier pre-optimization
@@ -27,18 +37,27 @@ Mean wall-clock and allocated bytes per operation. Lower is better. **Bold** mar
 
 | # | Scenario | Rogue | MediatR | Verdict |
 |---|----------|-------|---------|---------|
-| 1 | NoBehavior `Send` (typed, 0 behaviors), `ISender` path | **93.96 ns** / **48 B** | 114.71 ns / 224 B | Rogue faster + fewer B |
-| 1c | NoBehavior, generated concrete path (`SendPingRequest`) | **30.58 ns** / 48 B | n/a | Rogue-only fast lane |
-| 2 | Cold-start (first dispatch incl. DI build) | **20.65 µs** / **25.65 KB** | 398.98 µs / 618.34 KB | **Rogue ~19×** (no runtime scan) |
-| 3 | Object-path (untyped `Send(object)`, 1 handler) | **83.46 ns** / **48 B** | 120.98 ns / 296 B | Rogue faster + fewer B |
-| 3b | Object-path at 25 handler types | 88.09 ns / 48 B | n/a | O(1) scaling (1 vs 25 identical) |
-| 4 | Publish — 2 event handlers | **120.6 ns** / **112 B** | 209.9 ns / 464 B | Rogue faster + fewer B |
-| 5 | Publish — 5 event handlers | **258.0 ns** / **208 B** | 409.6 ns / 920 B | Rogue faster + fewer B |
-| 6 | Publish — 20 event handlers | **883.6 ns** / **688 B** | 1,459.2 ns / 3,200 B | Rogue faster + fewer B |
-| 7 | CreateStream (10 items) | 376.9 ns / 344 B | n/a | Rogue-only (MediatR v12 core has no streaming) |
+| 1 | NoBehavior `Send` (typed, 0 behaviors), `ISender` path | **91.53 ns** / **48 B** | 105.10 ns / 224 B | Rogue faster + fewer B |
+| 1c | NoBehavior, generated concrete path (`SendPingRequest`) | **32.51 ns** / 48 B | n/a | Rogue-only fast lane |
+| 2 | Cold-start (first dispatch incl. DI build) | **22.50 µs** / **26.17 KB** | 416.68 µs / 611.52 KB | **Rogue ~18.5×** (no runtime scan) |
+| 3 | Object-path (untyped `Send(object)`, 1 handler) | **80.40 ns** / **48 B** | 125.52 ns / 296 B | Rogue faster + fewer B |
+| 3b | Object-path at 25 handler types | 79.96 ns / 48 B | n/a | O(1) scaling (1 vs 25 identical) |
+| 4 | Publish — 2 event handlers | **129.9 ns** / **112 B** | 218.9 ns / 464 B | Rogue faster + fewer B |
+| 5 | Publish — 5 event handlers | **257.1 ns** / **208 B** | 404.8 ns / 920 B | Rogue faster + fewer B |
+| 6 | Publish — 20 event handlers | **1,054.5 ns** / **688 B** | 1,389.2 ns / 3,200 B | Rogue faster + fewer B |
+| 7 | CreateStream (10 items) | 386.6 ns / 344 B | n/a | Rogue-only (MediatR v12 core has no streaming) |
+| 8 | **NEW** — Validated `Send` (real `FluentValidation` rule, valid payload, steady-state) | **549.4 ns** / **1.13 KB** | 579.0 ns / 1.27 KB | Rogue faster + fewer B |
 
 Across the currently-measured head-to-head scenarios, Rogue meets or beats MediatR on **both** wall-clock
-and allocation, plus the structural ~19× cold-start lead.
+and allocation, plus the structural ~18.5× cold-start lead.
+
+Row 8 is new in this baseline: a head-to-head with a real `FluentValidation` behavior in the
+pipeline on both sides (Rogue's `ValidationBehavior<,>` vs. a hand-rolled MediatR
+`IPipelineBehavior<,>` using the same validator and rule, matching semantics as closely as possible
+— MediatR has no built-in validation). This is the scenario 1.1.0's DI-lifetime fix is about: a
+pipeline behavior with a Scoped dependency (`IValidator<T>`), exercised at steady state with a
+valid payload (the throwing/invalid path is deliberately not benchmarked —
+exception-path costs are not representative under BenchmarkDotNet).
 
 ## Allocation note
 
@@ -69,8 +88,8 @@ across depth (no per-behavior heap growth) and allocation is flat at 872 B:
 
 | Family | N=1 | N=3 | N=5 | Allocated |
 |--------|----:|----:|----:|----------:|
-| `ISender.Send` | 379.1 ns | 379.8 ns | 364.9 ns | 872 B |
-| concrete path (`SendChainPingRequest`) | 366.5 ns | 338.0 ns | 349.4 ns | 872 B |
+| `ISender.Send` | 374.9 ns | 362.0 ns | 385.8 ns | 872 B |
+| concrete path (`SendChainPingRequest`) | 353.5 ns | 357.8 ns | 345.7 ns | 872 B |
 
 The 872 B is honest: the statically-typed behavior chain removes the per-call pipeline-state boxing, but
 each chain link's forwarding lambda plus the transient handler/behavior instances still allocate.
@@ -80,10 +99,10 @@ each chain link's forwarding lambda plus the transient handler/behavior instance
 
 | Concurrency | Mean | Allocated | Lock Contentions |
 |------------:|-----:|----------:|-----------------:|
-| 1  |    871.6 ns |  2.70 KB | 0 |
-| 4  |  3,614.1 ns | 10.27 KB | 0 |
-| 8  |  7,096.8 ns | 20.37 KB | 0 |
-| 16 | 13,617.9 ns | 40.55 KB | 0 |
+| 1  |    970.4 ns |  2.71 KB | 0 |
+| 4  |  3,625.3 ns | 10.30 KB | 0 |
+| 8  |  7,143.0 ns | 20.43 KB | 0 |
+| 16 | 14,323.5 ns | 40.68 KB | 0 |
 
 Latency and allocation scale linearly, with **zero lock contention** at every level — the generated
 dispatcher holds no shared mutable state.
