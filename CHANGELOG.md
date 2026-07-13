@@ -6,36 +6,60 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-13
+
+### Fixed
+
+- **FluentValidation (and any other Scoped-dependent pipeline behavior) could fail DI resolution
+  when `RogueOptions.Lifetime` was set to `Singleton`.** Setting `Lifetime = Singleton` (typically
+  done for handler-performance reasons) also made every generated pipeline behavior Singleton — a
+  captive-dependency trap for any behavior with a Scoped dependency, such as a FluentValidation
+  `IValidator<T>` or a `DbContext`: `Cannot consume scoped service 'FluentValidation.IValidator<T>'
+  from singleton 'ValidationBehavior<T,TResponse>'`. Reproduced with a dedicated integration test
+  suite before fixing (see "Added" below). Consumers who left `Lifetime` at its default
+  (`Transient`) were never affected and see no change at all.
+
 ### Changed
 
 - **Pipeline behaviors are now always registered `Transient`, regardless of `RogueOptions.Lifetime`.**
-  Previously, setting `Lifetime = ServiceLifetime.Singleton` (to make handlers Singleton for
-  performance) also made every generated pipeline behavior Singleton — a captive-dependency trap
-  for any behavior with a Scoped dependency, such as a FluentValidation `IValidator<T>` or a
-  `DbContext`. Behaviors (and the behavior-list factory) now always resolve `Transient`, matching
-  MediatR's default and eliminating that class of DI-resolution failure. Handler and stream-handler
-  self-registrations are unaffected and continue to honor `Lifetime` as before; consumers who left
-  `Lifetime` at its default (`Transient`) see no change at all.
+  This is the fix for the defect above: behaviors (and the behavior-list factory) now always
+  resolve `Transient`, matching MediatR's default and eliminating that whole class of DI-resolution
+  failure. Handler and stream-handler self-registrations are unaffected and continue to honor
+  `Lifetime` as before.
+- **Dispatching outside a request scope** (e.g. from a `Singleton` `BackgroundService`, or at
+  startup) requires resolving `ISender`/`IMediator` from within a created scope
+  (`IServiceScopeFactory.CreateScope()`), not the root `IServiceProvider` — this is a deliberate,
+  documented requirement of the Scoped dispatcher, not a bug. See the new
+  [Scoped dispatch](README.md#scoped-dispatch) section for a wrong/right example and the exact
+  exception text.
 - **Minimum consumer Roslyn/SDK raised.** The shipped source generator
   (`SkathIO.Rogue.SourceGenerator`) now targets `Microsoft.CodeAnalysis.CSharp` 5.0.0 (up from
   4.12.0) — consumers need a .NET SDK whose bundled compiler is Roslyn 5.0.0 or newer (any .NET 10
   SDK) to load the analyzer/generator; older SDKs will see `CS9057`. This is a deliberate trade for
-  currency, accepted with the min-SDK-raise consequence explicitly acknowledged (work item
-  `fluentvalidation-di-fix`, decision D4). Note: Dependabot's original proposal bumped to 5.6.0, but
-  that version was found, during validation, to require a newer Roslyn than any currently-verified
-  .NET 10 SDK ships (confirmed via `CS9057` against a real SDK install; see decision D8) — 5.0.0 is
-  the newest version confirmed to load cleanly. The dev-time-only analyzer-authoring/API-tracking
-  tooling (`Microsoft.CodeAnalysis.Analyzers`, `Microsoft.CodeAnalysis.PublicApiAnalyzers`) moved to
-  5.6.0, which does **not** affect consumer min-SDK (never compiled into the shipped generator).
-- Routine dependency bumps consolidating Dependabot PRs #13/#14 (superseded by this branch):
-  `Microsoft.Extensions.DependencyInjection*` 10.0.0→10.0.9, `Microsoft.Extensions.Logging*`
-  10.0.0→10.0.9, `FluentValidation` 11.10.0→11.12.0, `MinVer` 5.0.0→7.0.0, `Microsoft.SourceLink.GitHub`
-  8.0.0→10.0.300, `BenchmarkDotNet` 0.15.2→0.15.8 (benchmarks only), and test-infrastructure majors
+  currency. The dev-time-only analyzer-authoring/API-tracking tooling
+  (`Microsoft.CodeAnalysis.Analyzers`, `Microsoft.CodeAnalysis.PublicApiAnalyzers`) moved to 5.6.0,
+  which does **not** affect consumer min-SDK (never compiled into the shipped generator).
+- Routine dependency bumps: `Microsoft.Extensions.DependencyInjection*` 10.0.0→10.0.9,
+  `Microsoft.Extensions.Logging*` 10.0.0→10.0.9, `FluentValidation` 11.10.0→11.12.0, `MinVer`
+  5.0.0→7.0.0, `Microsoft.SourceLink.GitHub` 8.0.0→10.0.300, `BenchmarkDotNet` 0.15.2→0.15.8
+  (benchmarks only), `MediatR` 12.4.1→12.5.0 (benchmarks only), and test-infrastructure majors
   (`Microsoft.NET.Test.Sdk` 17.13→18.7, `xunit.runner.visualstudio` 2.8→3.1.5, `coverlet.collector`
-  6→10, `Verify.Xunit` 27→31) — test discovery and all 239 existing tests verified passing against
-  the new versions. `MediatR` is deliberately **not** bumped past 12.4.1: v13+ moved to a commercial
-  license, and this benchmarks-only comparison dependency must not take one on. Excluded going
-  forward via `.github/dependabot.yml`'s ignore rule.
+  6→10, `Verify.Xunit` 27→31). `MediatR` is deliberately held below v13 (which moved to a commercial
+  license) — this repo's benchmarks-only comparison dependency must not take one on.
+
+### Added
+
+- **New DI-resolution regression suite** (`SkathIO.Rogue.DiResolution.Tests`,
+  `SkathIO.Rogue.Integration.Tests`) proving the fix above and pinning the scoped-dispatch
+  requirement as a permanent test, under the strictest DI validation ASP.NET Core applies
+  (`ValidateScopes`/`ValidateOnBuild`).
+- **New MediatR compatibility shim runtime test suite** (`SkathIO.Rogue.MediatR.Tests`) covering
+  real DI dispatch through the migration shim (adapter-mapped commands/queries, notification
+  fan-out, and the `AddMediatR(cfg => ...)` drop-in registration path).
+- **New benchmark: Rogue vs. MediatR with a real FluentValidation behavior in the pipeline**
+  (`bench/SkathIO.Rogue.Benchmarks.Validation`) — a direct, steady-state comparison of the exact
+  scenario this release's fix is about (a pipeline behavior with a Scoped dependency). See
+  [bench/RESULTS.md](bench/RESULTS.md) and [docs/benchmarks.md](docs/benchmarks.md).
 
 ## [1.0.2] - 2026-06-29
 
@@ -172,5 +196,8 @@ commit to reporting any scenario where Rogue is not fastest, honestly and in the
   linked documentation is unreachable. Confirm visibility in GitHub settings before tagging. See
   [docs/governance.md](docs/governance.md#release-readiness).
 
-[Unreleased]: https://github.com/skathio/rogue/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/skathio/rogue/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/skathio/rogue/compare/v1.0.2...v1.1.0
+[1.0.2]: https://github.com/skathio/rogue/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/skathio/rogue/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/skathio/rogue/releases/tag/v1.0.0

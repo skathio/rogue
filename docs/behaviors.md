@@ -104,6 +104,15 @@ public sealed class GreetQueryValidator : AbstractValidator<GreetQuery>
 Map the thrown `ValidationException` to your transport's error shape (e.g. HTTP 400) in your own
 middleware — the behavior does not own transport concerns.
 
+**Lifetime note (since 1.1.0):** `ValidationBehavior<,>` — like every pipeline behavior — is always
+registered `Transient`, regardless of `RogueOptions.Lifetime`. Earlier, setting `Lifetime =
+ServiceLifetime.Singleton` (e.g. for handler-performance reasons) also made behaviors Singleton, so a
+Singleton `ValidationBehavior` consuming a Scoped `IValidator<T>` (the default lifetime
+`AddValidatorsFromAssembly` registers validators at) would throw at container-build time — a
+captive-dependency trap. This is fixed: behaviors are now unconditionally `Transient`, so validators
+of any lifetime resolve correctly no matter what `Lifetime` is set to. See the
+[Lifetimes section](getting-started.md#lifetimes) for the full rationale.
+
 ## Notification publishers
 
 Notification fan-out strategy is configurable via `RogueOptions.NotificationPublisher`:

@@ -71,7 +71,7 @@ package; it lives in `SkathIO.Rogue.MediatR` for migration — see
 - `RogueOptions`:
   - `EnableObjectDispatch` (bool) — opt into untyped `Send(object)`/`Publish(object)`.
   - `EnableTelemetry` (bool) — turn on the telemetry shim.
-  - `Lifetime` (`ServiceLifetime`) — DI lifetime applied to discovered handlers and behaviors (default `Transient`). Note: this does not control the `RogueDispatcher` registration, which is `Scoped`.
+  - `Lifetime` (`ServiceLifetime`) — DI lifetime applied to discovered handlers (default `Transient`). Note: this does not control pipeline behaviors, which are **always** registered `Transient` regardless of this setting (avoids a captive-dependency trap for behaviors with a Scoped dependency — see the [behaviors guide](behaviors.md#validation-behavior)), nor the `RogueDispatcher` registration, which is `Scoped`.
   - `NotificationPublisher` (`IEventPublisher`) — fan-out strategy.
   - `AddBehavior<TBehavior>(int order = 0)`, `AddOpenBehavior(Type, int order = 0)`, `BehaviorRegistrations`.
 - `BehaviorRegistration(Type BehaviorType, int Order, bool IsOpen)` — a registered behavior.

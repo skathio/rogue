@@ -73,29 +73,46 @@ runtimes; net8.0/net10.0 get the streaming surface and the in-box `ValueTask`/di
 
 ## Release readiness
 
-Before dispatching the `v1.0.0` release:
+Before dispatching **any** release (`publish.yml` via `workflow_dispatch`):
 
-- The repository **must be public**. Benchmarks (`bench/results/`), this roadmap, and the
-  governance docs are only publicly accessible when the repo is public — a v1.0.0 release on a
-  private repo would ship packages whose linked documentation 404s for consumers. Confirm
-  visibility in the GitHub repository settings before dispatching. This is a release-process
-  check, not an automated gate.
+- **Promote `PublicAPI.Unshipped.txt` entries to `PublicAPI.Shipped.txt`** for any packable project
+  that gained new public surface since the last release (use the analyzer's "mark shipped" fixer;
+  preserve the per-TFM split — `PublicAPI/netstandard2.0/` + `PublicAPI/modern/` — for
+  `Abstractions`, `SkathIO.Rogue`, and `SkathIO.Rogue.MediatR`). This is the **one-way API freeze**:
+  once `Shipped` ships under a tag, that surface is frozen, so this must happen before — or
+  atomically with — the tag. It is irreversible and is the reason it lives on this checklist rather
+  than in an automated gate (the `public-api` CI job only fails on *undeclared* surface, not on
+  Unshipped-vs-Shipped placement). If no new public members were added, there's nothing to promote.
+- **Run the full benchmark suite and commit a fresh baseline** to `bench/results/<date>-<sha>/` so
+  the published competitive comparison is backed by committed data rather than placeholders, and
+  update `bench/RESULTS.md`/`docs/benchmarks.md` if the numbers or covered scenarios changed.
+  (Newest as of 1.1.0: `bench/results/2026-07-13-1bb0b86/`, including the validation-behavior
+  comparison added that release.)
+- **Update `CHANGELOG.md`**: move `[Unreleased]` content into a new dated `[MAJOR.MINOR.PATCH]`
+  section matching the `bump` you're about to dispatch.
+- **Verify the CHANGELOG's dependency/compatibility claims actually match what's on the branch
+  being tagged, not just what's on `main` at some earlier point.** If a fix landed via more than
+  one PR (e.g. a feature PR plus a follow-up hotfix for something a later, unrelated Dependabot
+  merge regressed), confirm the follow-up is merged *before* tagging — check the specific package
+  pins the CHANGELOG cites (`grep` `Directory.Packages.props` for the exact versions named) against
+  the commit being released, not against the CHANGELOG text alone. A CHANGELOG that states a
+  min-SDK/compatibility floor that isn't actually what ships is worse than no claim at all. (This
+  happened once: 1.1.0's Roslyn-floor claim briefly depended on a hotfix PR that hadn't merged yet
+  when the release notes were drafted — caught in review before tagging, not after.)
 - The `production` GitHub Environment must have a required reviewer configured (an Environment
-  with zero reviewers publishes without pausing). No `NUGET_API_KEY` secret is needed or set —
-  this repo publishes via OIDC trusted publishing only (`auth: oidc`, fails loud rather than
-  falling back to a token, and there is no token configured to fall back to). nuget.org's
-  trusted-publishing policy must be scoped to `skathio/rogue`, workflow `publish.yml`, environment
-  `production` (consumer responsibility per the hashira nuget flow).
-- **Promote `PublicAPI.Unshipped.txt` entries to `PublicAPI.Shipped.txt`** for all packable projects
-  (use the analyzer's "mark shipped" fixer; preserve the per-TFM split — `PublicAPI/netstandard2.0/`
-  + `PublicAPI/modern/` — for `Abstractions`, `SkathIO.Rogue`, and `SkathIO.Rogue.MediatR`). This is
-  the **one-way API freeze for v1**: once `Shipped` ships under the `v1.0.0` tag the surface is
-  frozen, so this must happen before — or atomically with — the tag. It is irreversible and is the
-  reason it lives on this checklist rather than in an automated gate (the `public-api` CI job only
-  fails on *undeclared* surface, not on Unshipped-vs-Shipped placement).
-- **Run the full benchmark suite and commit the baseline** to `bench/results/<date>-<sha>/` so the
-  published competitive comparison is backed by committed data rather than placeholders. (Satisfied for
-  v1.0.0: the committed baselines live under `bench/results/`, newest `2026-06-20-a734d6f/`.)
+  with zero reviewers publishes without pausing) — a standing repo-settings requirement, checked
+  once and not expected to change, but worth a glance if release cadence or team membership shifts.
+  No `NUGET_API_KEY` secret is needed or set — this repo publishes via OIDC trusted publishing only
+  (`auth: oidc`, fails loud rather than falling back to a token, and there is no token configured to
+  fall back to). nuget.org's trusted-publishing policy must be scoped to `skathio/rogue`, workflow
+  `publish.yml`, environment `production` (consumer responsibility per the hashira nuget flow).
+
+The following was a one-time check for the initial `v1.0.0` launch and doesn't recur on later
+releases, but is recorded here for history:
+
+- The repository had to **be public** before v1.0.0 — benchmarks (`bench/results/`), the roadmap,
+  and the governance docs are only publicly accessible once the repo is public, and a release on a
+  private repo would ship packages whose linked documentation 404s for consumers.
 
 ## Contributing
 

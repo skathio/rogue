@@ -18,6 +18,7 @@ bench/results/*
 !bench/results/2026-06-20-cb81a30-pre-d2-medium/
 !bench/results/2026-06-20-cb81a30-post-d2-medium/
 !bench/results/2026-06-20-a734d6f/
+!bench/results/2026-07-13-1bb0b86/
 # BenchmarkDotNet artifact output (local + CI)
 BenchmarkDotNet.Artifacts/
 
