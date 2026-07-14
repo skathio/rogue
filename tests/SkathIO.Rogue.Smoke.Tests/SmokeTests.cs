@@ -70,6 +70,18 @@ public sealed class SmokeTests : IClassFixture<WebApplicationFactory<Program>>
     }
 
     [Fact]
+    public async Task ShipOrder_WithEmptyOrderId_Returns400_SecondValidatorAutoDiscoveredWithNoRegistrationChange()
+    {
+        // MarkOrderShippedCommandValidator was added with zero corresponding edit to
+        // AddSmokeApplication — this proves AddValidatorsFromAssemblyContaining picked it up.
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsync($"/orders/{Guid.Empty}/ship", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ShipOrder_MarksShipped_VoidCommandDispatches()
     {
         var client = _factory.CreateClient();

@@ -38,10 +38,29 @@ that reference transitively, same as a real consumer's `PackageReference` would.
 | `IStreamQuery<T>` | `GET /orders/stream` |
 | Custom open `IPipelineBehavior<,>` + `[BehaviorOrder]` | every request (`OrderAuditBehavior`), asserted via `/_diagnostics/activity` |
 | FluentValidation `ValidationBehavior<,>` (auto-woven, PD-17) | `POST /orders` with an invalid payload → 400, handler never runs |
+| FluentValidation validator auto-discovery (`AddValidatorsFromAssemblyContaining`) | `POST /orders/{id}/ship` with an empty `OrderId` → 400, via `MarkOrderShippedCommandValidator`, added with **zero** matching change to `ApplicationServiceCollectionExtensions` |
 
 `/_diagnostics/activity` is a test-only endpoint exposing the shared `IOrderActivityLog` so internal
 pipeline/handler effects (fan-out, behavior wrapping) can be asserted through the same HTTP boundary
 as everything else, without reaching into DI from the test.
+
+### Two separate things are auto-discovered, not one
+
+- **The `ValidationBehavior<,>` pipeline behavior** is auto-woven into the request pipeline just by
+  `SkathIO.Rogue.Smoke.Application` referencing `SkathIO.Rogue.Validation.FluentValidation` — the
+  generator's PD-17 metadata scan finds it. No `AddOpenBehavior` call anywhere in this solution.
+- **Each `IValidator<T>` implementation** is auto-discovered by
+  `AddValidatorsFromAssemblyContaining<CreateOrderCommandValidator>()` in
+  `ApplicationServiceCollectionExtensions.cs`, from the separate
+  `FluentValidation.DependencyInjectionExtensions` package — a one-time startup assembly scan (not
+  per-dispatch reflection, so it doesn't touch Rogue's reflection-free dispatch path). This is what
+  keeps adding a new validator a one-file change: `MarkOrderShippedCommandValidator` was added with
+  no corresponding registration edit, and `ShipOrder_WithEmptyOrderId_Returns400_...` proves it fired.
+  (An earlier version of this project hand-registered each validator with `services.AddScoped<IValidator<T>,
+  TValidator>()` one at a time — that doesn't scale past a handful of commands and was corrected.)
+  `FluentValidation.DependencyInjectionExtensions` is referenced only by this test-only project, so
+  it is outside `.github/allowed-packages.txt`'s scope (that gate covers only the 5 *packable*
+  `src/` projects — see its header comment).
 
 ## Why this doesn't replace the generator-level regression test
 
