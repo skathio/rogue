@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- This is the "MyApp.Api" host from GitHub issue #21: it declares ZERO handlers/behaviors of
+         its own in source, references SkathIO.Rogue directly (its own PackageReference, so its own
+         generator pass runs and can independently discover metadata behaviors — the exact PD-17
+         precondition), and reaches every handler through the ProjectReference to
+         SkathIO.Rogue.Smoke.Application below — which transitively carries
+         SkathIO.Rogue.Validation.FluentValidation into THIS compilation's references, same as NuGet
+         propagates a PackageReference transitively across a ProjectReference in a real consumer
+         solution. Before the fix in .somi/plans/pd17-metadata-suppression/, this shape alone
+         defeated PD-45's module-initializer suppression for this project. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Logging\SkathIO.Rogue.Logging.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\SkathIO.Rogue.Smoke.Application\SkathIO.Rogue.Smoke.Application.csproj" />
+    <ProjectReference Include="..\SkathIO.Rogue.Smoke.Infrastructure\SkathIO.Rogue.Smoke.Infrastructure.csproj" />
+    <!-- Microsoft.Extensions.DependencyInjection comes from the Microsoft.AspNetCore.App framework
+         reference (Sdk.Web); an explicit PackageReference trips NU1510 (will-not-be-pruned). -->
+  </ItemGroup>
+</Project>
