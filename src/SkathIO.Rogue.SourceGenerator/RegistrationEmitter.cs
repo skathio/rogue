@@ -138,18 +138,43 @@ internal static class RegistrationEmitter
 
     /// <summary>
     /// Returns <c>true</c> when the compilation discovered nothing Rogue-registrable — no request
-    /// handlers, notification handlers, stream handlers, processors or behaviors. Such a compilation's
-    /// <c>RogueGeneratedRegistration.Register</c> would register only the empty dispatcher / inspector /
-    /// publisher, contributing nothing useful while actively conflicting with a populated registrar (its
-    /// empty <c>RogueDispatcherImpl</c> would shadow the real one under <c>TryAdd</c>'s first-wins — see
-    /// <see cref="EmitModuleInit"/>).
+    /// handlers, notification handlers, stream handlers, processors, and no SOURCE-declared
+    /// behaviors. Such a compilation's <c>RogueGeneratedRegistration.Register</c> would register only
+    /// the empty dispatcher / inspector / publisher, contributing nothing useful while actively
+    /// conflicting with a populated registrar (its empty <c>RogueDispatcherImpl</c> would shadow the
+    /// real one under <c>TryAdd</c>'s first-wins — see <see cref="EmitModuleInit"/>).
+    /// <para>
+    /// GitHub issue #21: a behavior discovered only via the PD-17 metadata scan
+    /// (<see cref="BehaviorModel.IsMetadata"/> == true) does NOT, by itself, count as "something to
+    /// register" here. NuGet propagates a <c>PackageReference</c> transitively across a sibling
+    /// <c>ProjectReference</c> — e.g. a host project with zero source-level Rogue declarations that
+    /// merely references a handler-bearing project which itself references
+    /// <c>SkathIO.Rogue.Validation.FluentValidation</c> ends up with that behavior DLL as one of its
+    /// own direct <c>MetadataReference</c>s too. Counting that discovery as "has something to
+    /// register" defeated this suppression for a compilation with nothing of its own to dispatch,
+    /// letting its empty dispatcher win the cross-assembly registration race non-deterministically.
+    /// Any other compilation that actually has handlers to wrap performs its own independent
+    /// metadata scan of the same directly-referenced assembly and registers the behavior for itself,
+    /// so suppressing a handler-less compilation here loses nothing. A SOURCE-declared behavior (a
+    /// project that legitimately publishes only a shared behavior type, no handlers) still counts —
+    /// see the generator test project's <c>MultiProjectBehaviorSuppressionTests</c>.
+    /// </para>
     /// </summary>
     private static bool HasNothingToRegister(DiscoveredModels models)
-        => models.Handlers.Count == 0
-        && models.EventHandlers.Count == 0
-        && models.StreamHandlers.Count == 0
-        && models.Processors.Count == 0
-        && models.Behaviors.Count == 0;
+    {
+        if (models.Handlers.Count != 0
+            || models.EventHandlers.Count != 0
+            || models.StreamHandlers.Count != 0
+            || models.Processors.Count != 0)
+            return false;
+
+        foreach (BehaviorModel behavior in models.Behaviors)
+        {
+            if (!behavior.IsMetadata) return false;
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Emits a module initializer (net5+) that appends the consumer-compilation's

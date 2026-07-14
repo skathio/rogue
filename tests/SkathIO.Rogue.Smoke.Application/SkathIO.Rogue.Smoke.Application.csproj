@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- This is the "MyApp.Application" project from GitHub issue #21: handlers live here, and
+         referencing SkathIO.Rogue.Validation.FluentValidation here auto-weaves ValidationBehavior<,>
+         into every request in THIS compilation via the generator's PD-17 metadata scan (no explicit
+         AddOpenBehavior needed — see SkathIO.Rogue.DiResolution.Tests/Fixtures.cs for the same
+         pattern). SkathIO.Rogue.Smoke.Api references this project via ProjectReference, which is
+         exactly the shape that let #21's transitive-PackageReference defect leak into the host. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation\SkathIO.Rogue.Validation.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\SkathIO.Rogue.Smoke.Infrastructure\SkathIO.Rogue.Smoke.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

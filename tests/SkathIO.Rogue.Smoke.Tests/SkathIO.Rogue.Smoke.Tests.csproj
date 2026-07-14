@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- References the host ONLY (mirrors SkathIO.Rogue.WebApi.Integration.Tests — see that
+         project's README "Host wiring" section for the rationale): this project declares zero
+         handlers/behaviors and deliberately does NOT add its own analyzer reference, so it never
+         emits a competing empty registrar. -->
+    <ProjectReference Include="..\SkathIO.Rogue.Smoke.Api\SkathIO.Rogue.Smoke.Api.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+</Project>

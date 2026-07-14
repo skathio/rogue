@@ -32,6 +32,69 @@ internal static class GeneratorTestHelper
     }
 
     /// <summary>
+    /// Runs the <see cref="RogueGenerator"/> against <paramref name="source"/> with additional
+    /// <see cref="MetadataReference"/>s beyond the base set — used to simulate a directly-referenced
+    /// assembly (e.g. a compiled behavior-only package like
+    /// <c>SkathIO.Rogue.Validation.FluentValidation.dll</c>) so the PD-17 metadata behavior scan has
+    /// something to discover without needing a real second csproj. Build the reference itself with
+    /// <see cref="EmitToMetadataReference"/>.
+    /// </summary>
+    internal static GeneratorDriverRunResult RunGenerator(string source, params MetadataReference[] extraReferences)
+    {
+        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
+        MetadataReference[] references = GetBaseReferences().Concat(extraReferences).ToArray();
+
+        CSharpCompilation compilation =
+            CSharpCompilation.Create(
+                assemblyName: "TestAssembly",
+                syntaxTrees: new[] { syntaxTree },
+                references: references,
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        CSharpGeneratorDriver driver = CreateDriver();
+        driver = (CSharpGeneratorDriver)driver.RunGenerators(compilation);
+        return driver.GetRunResult();
+    }
+
+    /// <summary>Runs the generator (with extra references) and asserts no generator exception was thrown.</summary>
+    internal static GeneratorDriverRunResult RunGeneratorAndAssertClean(string source, params MetadataReference[] extraReferences)
+    {
+        GeneratorDriverRunResult result = RunGenerator(source, extraReferences);
+        Assert.Empty(result.Results.Where(static r => r.Exception is not null));
+        return result;
+    }
+
+    /// <summary>
+    /// Compiles <paramref name="source"/> (against the base references) to an in-memory PE image and
+    /// wraps it as a <see cref="MetadataReference"/>. Simulates a directly-referenced compiled
+    /// assembly — e.g. a behavior-only package the generator's PD-17 metadata scan must walk — the
+    /// scan only cares that the type is visible via <c>MetadataReference</c>, not how the assembly was
+    /// produced, so an in-memory emit stands in for a real second csproj in tests.
+    /// </summary>
+    internal static MetadataReference EmitToMetadataReference(string source, string assemblyName)
+    {
+        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            assemblyName: assemblyName,
+            syntaxTrees: new[] { syntaxTree },
+            references: GetBaseReferences(),
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        using var ms = new MemoryStream();
+        var emitResult = compilation.Emit(ms);
+
+        Assert.True(
+            emitResult.Success,
+            "Reference-library emit failed. Diagnostics:\n" +
+            string.Join("\n", emitResult.Diagnostics
+                .Where(static d => d.Severity == DiagnosticSeverity.Error)
+                .Select(static d => d.ToString())));
+
+        ms.Seek(0, SeekOrigin.Begin);
+        return MetadataReference.CreateFromImage(ms.ToArray());
+    }
+
+    /// <summary>
     /// Creates a generator driver with incremental step tracking enabled so tests can
     /// assert on cached/unchanged steps (NFR-MAINT-4).
     /// </summary>

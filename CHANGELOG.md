@@ -6,6 +6,38 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-14
+
+### Fixed
+
+- **Multi-project solutions could throw a spurious `RogueUnregisteredRequestException` for
+  correctly-registered requests.** ([#21](https://github.com/skathio/rogue/issues/21)) When
+  handlers live in one project (e.g. `MyApp.Application`) and the DI host lives in another (e.g.
+  `MyApp.Api`) via `ProjectReference`, adding `SkathIO.Rogue.Validation.FluentValidation` (or any
+  behavior package) to the handler project made the host project's generator falsely believe it had
+  its own behaviors to register — NuGet propagates `PackageReference` transitively across
+  `ProjectReference`, so the host saw the behavior assembly too. That defeated the module-initializer
+  suppression that normally keeps a handler-less compilation from registering an empty dispatcher,
+  and the empty dispatcher could non-deterministically win the cross-assembly registration race and
+  shadow the real one. A compilation's own module initializer is no longer forced to run just because
+  it can see a behavior declared elsewhere; a project that only *transitively* sees a behavior type no
+  longer contributes a competing (empty) `RogueDispatcher` registration. Reproduced with a dedicated
+  generator-level regression test before fixing (`MultiProjectBehaviorSuppressionTests`) — see
+  `.somi/plans/pd17-metadata-suppression/rca.md` for the full root-cause record. **Note:** this is
+  unrelated to the 1.1.0 FluentValidation fix below, despite both mentioning FluentValidation — that
+  release fixed a Scoped/Singleton captive-dependency DI-resolution defect, not module-initializer
+  suppression.
+
+### Added
+
+- **Multi-project smoke test.** `SkathIO.Rogue.Smoke.{Infrastructure,Application,Api,Tests}` boot a
+  real layered ASP.NET Core solution (host / application / infrastructure, mirroring
+  [#21](https://github.com/skathio/rogue/issues/21)'s shape) via `WebApplicationFactory` and drive
+  every core dispatch kind — commands with/without a response, queries, notification fan-out,
+  streaming, a custom pipeline behavior, and FluentValidation validation — through real HTTP calls.
+  Runs on every pull request as part of the existing `ci` job (part of `SkathIO.Rogue.sln`); see
+  `tests/SkathIO.Rogue.Smoke.Tests/README.md`.
+
 ## [1.1.0] - 2026-07-13
 
 ### Fixed
@@ -196,7 +228,8 @@ commit to reporting any scenario where Rogue is not fastest, honestly and in the
   linked documentation is unreachable. Confirm visibility in GitHub settings before tagging. See
   [docs/governance.md](docs/governance.md#release-readiness).
 
-[Unreleased]: https://github.com/skathio/rogue/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/skathio/rogue/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/skathio/rogue/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/skathio/rogue/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/skathio/rogue/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/skathio/rogue/compare/v1.0.0...v1.0.1

@@ -23,6 +23,14 @@ on:
 permissions: {}
 
 jobs:
+  # The `nuget-package-ci.yml` reusable workflow's test step runs
+  # `dotnet test 'SkathIO.Rogue.sln' ...`, so this is the gate for the
+  # multi-project smoke test too (.somi/plans/pd17-metadata-suppression/):
+  # SkathIO.Rogue.Smoke.{Infrastructure,Application,Api,Tests} are ordinary
+  # projects in this solution (see tests/SkathIO.Rogue.Smoke.Tests/README.md),
+  # so they build and run on every PR here with no extra job needed. Chosen
+  # over gating in `publish.yml` because it catches a multi-project wiring
+  # regression on the PR that introduces it, not only at release time.
   ci:
     uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@v2 # rolling major tag — same ref as somi's pins
     permissions:
