@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Verify.Xunit" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <!-- Not part of the generator project's own dependency closure (it matches FluentValidation's
+         IValidator`1 by FQN string, no package reference needed there) — but this test project's
+         fixtures declare real AbstractValidator<T>/IValidator<T> types, and GeneratorTestHelper needs
+         the real FluentValidation.dll as a MetadataReference to compile them. -->
+    <PackageReference Include="FluentValidation" />
+  </ItemGroup>
+</Project>

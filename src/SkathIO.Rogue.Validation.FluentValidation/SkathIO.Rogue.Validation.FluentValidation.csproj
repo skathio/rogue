@@ -8,6 +8,33 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <!-- Validator discovery generator shipped as an analyzer asset (D1). OutputItemType="Analyzer"
+         makes the generator run while building THIS project; ReferenceOutputAssembly="false" keeps
+         the generator DLL out of the runtime closure. Packing the DLL into analyzers/dotnet/cs is a
+         separate step — see the PackFluentValidationGenerator target below — because the analyzer
+         ProjectReference feeds the build graph, not the pack. -->
+    <ProjectReference Include="..\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="FluentValidation" />
   </ItemGroup>
+
+  <!-- Pack the validator discovery generator DLL under analyzers/dotnet/cs so it runs in the
+       CONSUMER's compilation when they reference this package (mirrors SkathIO.Rogue's own
+       PackGenerator target and SkathIO.Rogue.MediatR's PackMigrationAnalyzer target). The generator
+       (netstandard2.0, single output assembly) is already built as an analyzer dependency of this
+       project, so its DLL is resolved into @(Analyzer); pack exactly that assembly. -->
+  <Target Name="PackFluentValidationGenerator" BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <_FluentValidationGeneratorDll>..\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator\bin\$(Configuration)\netstandard2.0\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator.dll</_FluentValidationGeneratorDll>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_FluentValidationGeneratorDll)')"
+           Text="Validator discovery generator DLL not found at $(_FluentValidationGeneratorDll); build SkathIO.Rogue.Validation.FluentValidation.SourceGenerator before packing." />
+    <ItemGroup>
+      <None Include="$(_FluentValidationGeneratorDll)"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
 </Project>
