@@ -32,13 +32,6 @@
     <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
     <!-- Integration packages -->
     <PackageVersion Include="FluentValidation" Version="11.12.0" />
-    <!-- Test-only (SkathIO.Rogue.Smoke.Application): the separate assembly-scanning package,
-         published in lockstep with FluentValidation from the same repo — same version, same
-         license (Apache-2.0, verified 2026-07-14 via nuget.org). Not referenced by any packable
-         src/ project, so it is outside license-check's packable_projects scope (.github/allowed-
-         packages.txt's own header limits that gate to the 5 packable projects) and needs no
-         allow-list entry. -->
-    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="11.12.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.9" />
     <!-- Test -->

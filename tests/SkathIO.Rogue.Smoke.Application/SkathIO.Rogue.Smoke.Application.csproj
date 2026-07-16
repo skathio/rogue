@@ -15,13 +15,12 @@
     <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\SkathIO.Rogue.Smoke.Infrastructure\SkathIO.Rogue.Smoke.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <!-- Auto-discovers every IValidator<T> in this assembly (AddValidatorsFromAssemblyContaining in
-         ApplicationServiceCollectionExtensions) instead of registering each one by hand — realistic
-         real-consumer usage now that this project has more than one validator. -->
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
   </ItemGroup>
 </Project>
