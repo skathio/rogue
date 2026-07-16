@@ -10,6 +10,16 @@ using System.Runtime.CompilerServices;
 // so the generator does not run over its own compilation — no generated RogueDispatcherImpl exists in
 // the test compilation to cause the CS0436 conflict the note below warns about.
 [assembly: InternalsVisibleTo("SkathIO.Rogue.Generator.Tests")]
+// SkathIO.Rogue.Validation.FluentValidation.Generator.Tests needs the same
+// SnapshotRegistrars/RestoreRegistrars isolation, for the identical reason: its RealDiDispatchTests
+// build a real DI container from a dynamically-compiled, dynamically-loaded assembly per test case,
+// and the process-global bridge registry would otherwise accumulate registrars across cases. That
+// project references THIS project directly (SkathIO.Rogue.csproj, plain ProjectReference — not an
+// analyzer), and references the FluentValidation source generator as a plain ProjectReference too
+// (not OutputItemType="Analyzer"), so neither generator runs over this test project's own
+// compilation — no generated types exist there to cause the CS0436 conflict the note below warns
+// about.
+[assembly: InternalsVisibleTo("SkathIO.Rogue.Validation.FluentValidation.Generator.Tests")]
 // Note: SkathIO.Rogue.Integration.Tests does NOT get InternalsVisibleTo — that would expose the
 // empty generated types (RogueDispatcherImpl etc.) from this DLL into the test compilation,
 // causing CS0436 conflicts when the generator re-emits those types with handlers populated.

@@ -6,6 +6,10 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator.csproj" />
+    <!-- RealDiDispatchTests.cs needs the real runtime DLL: RogueOptions, RogueRegistrationBridge,
+         AddRogue — this generator project itself takes no such reference (it emits fully-qualified
+         names as TEXT, never compiles against SkathIO.Rogue), but the test-time real-DI proof does. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

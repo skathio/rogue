@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 namespace SkathIO.Rogue.Validation.FluentValidation.SourceGenerator;
 
@@ -25,10 +27,19 @@ internal sealed class RogueFluentValidationGenerator : IIncrementalGenerator
         IncrementalValueProvider<DiscoveredValidators> discovered = allModels
             .Select(static (items, _) => BuildDiscoveredValidators(items));
 
-        // No emission yet — Iteration 1.2 replaces this no-op with the registration + module-init
-        // RegisterSourceOutput calls. Kept wired (rather than omitted) so the discovery stages above
-        // are exercised by the driver, not just the ExtractFromCompilation test seam.
-        context.RegisterSourceOutput(discovered, static (_, _) => { });
+        // Iteration 1.2: registration + module-init emission (mirrors RogueGenerator.cs:61-79's
+        // shape). Both files are always emitted (stable hint names) — EmitModuleInit's own body
+        // decides whether its content is suppressed (D2/PD-45-equivalent, see RegistrationEmitter).
+        context.RegisterSourceOutput(discovered, static (spc, models) =>
+        {
+            string fileHeader = CodeWriter.Header;
+
+            spc.AddSource("RogueFluentValidationServiceCollectionExtensions.g.cs",
+                SourceText.From(fileHeader + RegistrationEmitter.Emit(models), Encoding.UTF8));
+
+            spc.AddSource("RogueFluentValidationModuleInit.g.cs",
+                SourceText.From(fileHeader + RegistrationEmitter.EmitModuleInit(models), Encoding.UTF8));
+        });
     }
 
     // ─── Syntax predicate ───────────────────────────────────────────────────────────
