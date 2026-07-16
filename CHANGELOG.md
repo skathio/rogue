@@ -6,6 +6,37 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **FluentValidation validator auto-discovery.** `SkathIO.Rogue.Validation.FluentValidation` now
+  discovers every concrete, public-constructible `AbstractValidator<T>` (`IValidator<T>` implementor)
+  declared in a compilation that references the package, at compile time via a dedicated source
+  generator, and registers it into DI automatically (`TryAddEnumerable`, hard-pinned `Scoped`
+  lifetime, independent of `RogueOptions.Lifetime`, so a validator with a Scoped dependency such as a
+  `DbContext` stays safe even under `Lifetime = Singleton`). Referencing the package and writing a
+  validator is now the entire contract — no wiring call of any kind exists or is offered, exactly
+  matching how commands/queries/handlers are already discovered. **Note:** this is a different
+  lifetime pin than the 1.1.0 fix below, despite both mentioning Scoped/`DbContext`/`Singleton` —
+  1.1.0 pinned pipeline *behavior* registrations to `Transient`; this pins the new *validator*
+  registrations this discovery mechanism introduces to `Scoped`, one layer further down. See
+  [Validation behavior](docs/behaviors.md#validation-behavior).
+
+### Changed
+
+- **Behavior change on upgrade: validators are now discovered automatically, with no opt-in and no
+  gate.** If you already reference `SkathIO.Rogue.Validation.FluentValidation` and kept a validator
+  around deliberately unwired (e.g. for ad-hoc/manual use, never registered into DI), it is now swept
+  into the pipeline automatically after upgrading — there is no configuration call to prevent this.
+  If you already register a validator manually (`services.AddScoped<IValidator<T>, TValidator>()` or
+  `AddValidatorsFromAssemblyContaining<T>()`), remove that registration — otherwise the validator is
+  registered twice, which can duplicate its failure message in the aggregated `ValidationException`.
+  To opt a specific project out of *validator* discovery entirely while keeping `ValidationBehavior<,>`
+  itself available at runtime, add `ExcludeAssets="analyzers"` to that project's `PackageReference`
+  for `SkathIO.Rogue.Validation.FluentValidation` — this suppresses only this package's generator (an
+  `analyzers/dotnet/cs` asset); the separate `SkathIO.Rogue` package's own generator, which discovers
+  your commands/queries/handlers, is unaffected. See
+  [Validation behavior](docs/behaviors.md#validation-behavior) for the full explanation and example.
+
 ## [1.1.1] - 2026-07-14
 
 ### Fixed

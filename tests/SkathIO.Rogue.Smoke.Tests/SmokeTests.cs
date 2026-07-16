@@ -73,7 +73,8 @@ public sealed class SmokeTests : IClassFixture<WebApplicationFactory<Program>>
     public async Task ShipOrder_WithEmptyOrderId_Returns400_SecondValidatorAutoDiscoveredWithNoRegistrationChange()
     {
         // MarkOrderShippedCommandValidator was added with zero corresponding edit to
-        // AddSmokeApplication — this proves AddValidatorsFromAssemblyContaining picked it up.
+        // AddSmokeApplication — this proves the FluentValidation source generator discovered and
+        // registered it at compile time, from this project's own source, with no wiring call.
         var client = _factory.CreateClient();
 
         var response = await client.PostAsync($"/orders/{Guid.Empty}/ship", content: null);

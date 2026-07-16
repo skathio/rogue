@@ -230,6 +230,32 @@ public class TracingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, 
 public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> { ... }
 ```
 
+### Validators: zero wiring, unlike behaviors
+
+A custom behavior sometimes needs an explicit `AddOpenBehavior` call, as above. A FluentValidation
+validator never does. `SkathIO.Rogue.Validation.FluentValidation` discovers every
+`AbstractValidator<T>` at compile time and registers it into DI automatically — no `AddOpenBehavior`,
+no `AddValidatorsFromAssembly`-style scan, nothing:
+
+```csharp
+public sealed class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
+{
+    public CreateOrderCommandValidator() => RuleFor(x => x.Quantity).GreaterThan(0);
+}
+```
+
+```csharp
+// Program.cs — unchanged. Referencing the package and writing the validator above is the entire
+// contract; there is no corresponding AddRogue(o => ...) call to add.
+builder.Services.AddRogue();
+```
+
+`ValidationBehavior<TRequest, TResponse>` itself is still auto-woven into the pipeline the same way
+`LoggingBehavior` is above — referencing `SkathIO.Rogue.Validation.FluentValidation` is enough. See
+[Validation behavior](docs/behaviors.md#validation-behavior) for the full contract, an important note
+if you're upgrading from a version that predates validator auto-discovery, and the
+`ExcludeAssets="analyzers"` opt-out.
+
 ---
 
 ## Performance

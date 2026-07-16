@@ -94,12 +94,29 @@ resolves every `IValidator<TRequest>` from DI, aggregates all failures, and thro
 dotnet add package SkathIO.Rogue.Validation.FluentValidation
 ```
 
+Referencing the package and writing a validator is the entire contract — **there is no wiring call
+of any kind**, unlike `AddOpenBehavior` for a custom behavior. Every concrete, public-constructible
+`AbstractValidator<T>` in a project that references the package is discovered at compile time and
+registered into DI automatically:
+
 ```csharp
 public sealed class GreetQueryValidator : AbstractValidator<GreetQuery>
 {
     public GreetQueryValidator() => RuleFor(x => x.Name).NotEmpty();
 }
 ```
+
+```csharp
+// Program.cs — unchanged. No AddRogue(o => ...) edit accompanies the validator above, and none is
+// needed or offered.
+builder.Services.AddRogue();
+```
+
+That's the whole thing — the same zero-fuss contract commands, queries, and handlers already get.
+`ValidationBehavior<,>` itself is still auto-woven the same way any other pipeline behavior is (see
+[Auto-discovery from referenced assemblies](#auto-discovery-from-referenced-assemblies) above); what's
+new is that the *validators* it resolves no longer need a manual registration or a reflection-based
+startup scan (e.g. `AddValidatorsFromAssemblyContaining`) either.
 
 Map the thrown `ValidationException` to your transport's error shape (e.g. HTTP 400) in your own
 middleware — the behavior does not own transport concerns.
@@ -111,7 +128,43 @@ Singleton `ValidationBehavior` consuming a Scoped `IValidator<T>` (the default l
 `AddValidatorsFromAssembly` registers validators at) would throw at container-build time — a
 captive-dependency trap. This is fixed: behaviors are now unconditionally `Transient`, so validators
 of any lifetime resolve correctly no matter what `Lifetime` is set to. See the
-[Lifetimes section](getting-started.md#lifetimes) for the full rationale.
+[Lifetimes section](getting-started.md#lifetimes) for the full rationale. Discovered validator
+registrations are separately hard-pinned to `Scoped`, independent of `RogueOptions.Lifetime` — see the
+next note.
+
+**Behavior change on upgrade — read this if you already reference this package.** Validator discovery
+is fully automatic and, deliberately, has no opt-in call and no gate — there is no
+`AddFluentValidation()`-style method, and none is planned; referencing the package and writing a
+validator is the entire contract, as described above. If you already reference
+`SkathIO.Rogue.Validation.FluentValidation` and kept a validator around that you deliberately never
+wired into DI (e.g. for ad-hoc/manual invocation only), upgrading sweeps it into the pipeline
+automatically — it starts running for every matching request with no code change of your own to cause
+it. Two things to check when you upgrade:
+
+- If you already have a manual `services.AddScoped<IValidator<T>, TValidator>()` (or
+  `AddValidatorsFromAssemblyContaining<T>()`) registration for a validator that's also
+  compile-time-discovered, remove it — otherwise the validator is registered twice, which can
+  duplicate its failure message in the aggregated `ValidationException` (`TryAddEnumerable` dedups by
+  implementation type, so whether this actually happens depends on registration order). Removing the
+  old registration is exactly what this library's own smoke test does when migrating off
+  `AddValidatorsFromAssemblyContaining` — see
+  `tests/SkathIO.Rogue.Smoke.Application/ApplicationServiceCollectionExtensions.cs`.
+- To suppress *validator* discovery for a specific project entirely while keeping `ValidationBehavior<,>`
+  itself available at runtime, exclude this package's analyzer asset on that project's
+  `PackageReference`:
+
+  ```xml
+  <PackageReference Include="SkathIO.Rogue.Validation.FluentValidation" Version="x.y.z"
+                    ExcludeAssets="analyzers" />
+  ```
+
+  `analyzers` here is a standard NuGet asset-type name (alongside `compile`, `runtime`,
+  `contentfiles`, `build`, `native`) — it refers to *this package's* `analyzers/dotnet/cs` payload,
+  which is exactly where this generator ships. Excluding it drops only this generator (so no
+  *validators* in that project are source-discovered) — it has no effect on the separate `SkathIO.Rogue`
+  package's own generator, so your commands, queries, and handlers keep being discovered exactly as
+  before. `ValidationBehavior<,>` also remains usable if another project's discovery (or a manual
+  registration) supplies validators for it to resolve.
 
 ## Notification publishers
 
