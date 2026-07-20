@@ -164,7 +164,7 @@ jobs:
         with:
           fetch-depth: 0   # historically for MinVer's tag walk; harmless to keep — nuget-push's tag/Release step also resolves against this checkout (its own documented runtime contract: the caller must have checked out the repo before the composite runs).
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
