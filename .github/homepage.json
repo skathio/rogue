@@ -1,0 +1,9 @@
+{
+  "name": "Rogue",
+  "tagline": "AOT-safe, source-generated CQRS and mediator for .NET. MIT-licensed.",
+  "colour": "#6d28d9",
+  "image": "site/mark.svg",
+  "links": {
+    "NuGet": "https://www.nuget.org/packages/SkathIO.Rogue"
+  }
+}

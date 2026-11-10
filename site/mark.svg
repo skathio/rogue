@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512" role="img" aria-label="Rogue">
+  <title>Rogue</title>
+  <!-- A dagger on violet: quick, light, no ceremony. -->
+  <rect width="64" height="64" rx="14" fill="#6d28d9"/>
+  <g transform="rotate(45 32 32)">
+    <path d="M32 6L36 13V38H28V13Z" fill="#f4f0ff"/>
+    <path d="M32 9V37" stroke="#c4b5fd" stroke-width="1.5"/>
+    <rect x="21" y="38" width="22" height="5" rx="2.5" fill="#1e1530"/>
+    <rect x="29.5" y="43" width="5" height="10" rx="1.5" fill="#1e1530"/>
+    <circle cx="32" cy="56" r="3.5" fill="#1e1530"/>
+  </g>
+</svg>
