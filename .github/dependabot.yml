@@ -39,7 +39,7 @@ updates:
       # PR silently bumped this back to 5.6.0 once already (#17) before this ignore rule
       # existed; any future bump here must go through a deliberate, empirically-verified
       # decision, not an automated one.
+      # Ignored outright, not by a version range: the ">5.0.0" range form was not applied to
+      # these NuGet packages, and the grouped update kept proposing 5.9.0 (#32, #36).
       - dependency-name: "Microsoft.CodeAnalysis.CSharp"
-        versions: [">5.0.0"]
       - dependency-name: "Microsoft.CodeAnalysis.CSharp.Workspaces"
-        versions: [">5.0.0"]
