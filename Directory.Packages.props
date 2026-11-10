@@ -5,7 +5,7 @@
   <ItemGroup>
     <!-- Build tooling -->
     <PackageVersion Include="MinVer" Version="7.0.0" />
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.300" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.303" />
     <!-- Roslyn / generator. Microsoft.CodeAnalysis.Analyzers is dev-time-only analyzer-authoring
          tooling (PrivateAssets="All" everywhere it's referenced) — it never gets compiled into the
          shipped generator's assembly references, so its version doesn't affect consumer min-SDK;
