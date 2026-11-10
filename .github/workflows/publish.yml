@@ -248,6 +248,20 @@ jobs:
           auth: oidc
           version: ${{ needs.version.outputs.resolved_version }}
 
+  # Deploys the project page from the released ref, after `publish` and behind its approval
+  # (`released: true` tells site.yml not to ask again). Same gate as `publish`.
+  site:
+    name: site
+    needs: publish
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
+    uses: ./.github/workflows/site.yml
+    permissions:
+      contents: read
+      id-token: write
+      pages: write
+    with:
+      released: true
+
   # Tells the org homepage (skathio/skathio.github.io) to rebuild so Rogue's tile shows this
   # release. nuget-push creates the GitHub Release with GITHUB_TOKEN, which does not fire the
   # `release` event, so homepage.yml cannot catch it: this job sends the same ping. It runs

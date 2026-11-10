@@ -1,16 +1,22 @@
 # Deploys the project page in site/ to GitHub Pages (https://skathio.github.io/<repo>/).
+#
+# One release, one approval. publish.yml calls this after `publish`, which already passed the
+# `production` Environment's owner approval, so the page goes out after the package with no second
+# approval (`released: true` skips `gate`). Run by hand, for a page-only fix, it waits at `gate` for
+# that same approval. There is no push trigger: a deploy is always a release or an approved run.
 # site/ is plain static HTML, so there is no build step: the folder is uploaded as it is with
 # hashira's pages-upload and deployed with pages-deploy, at the same pin as the other skathio
 # sites. Deploys only from main; the github-pages environment's branch policy enforces that too.
 name: site
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'site/**'
-      - '.github/workflows/site.yml'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      released:
+        description: "true only from publish.yml's `site` job, whose `publish` job already passed the production approval."
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -19,7 +25,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # One release, one approval: this job waits for the `production` Environment's owner approval.
+  gate:
+    if: ${{ !inputs.released }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions: {}
+    steps:
+      - name: Owner approval
+        run: echo "Approved in the production environment."
+
   build:
+    needs: gate
+    # After the approval at `gate`, or from publish.yml with `gate` skipped.
+    if: ${{ always() && (needs.gate.result == 'success' || (needs.gate.result == 'skipped' && inputs.released)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,6 +55,8 @@ jobs:
 
   deploy:
     needs: build
+    # `always()` because a skipped `gate` upstream would otherwise skip this job too.
+    if: ${{ always() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
