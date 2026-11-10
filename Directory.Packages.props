@@ -5,7 +5,7 @@
   <ItemGroup>
     <!-- Build tooling -->
     <PackageVersion Include="MinVer" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.403" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="11.0.100" />
     <!-- Roslyn / generator. Microsoft.CodeAnalysis.Analyzers is dev-time-only analyzer-authoring
          tooling (PrivateAssets="All" everywhere it's referenced) — it never gets compiled into the
          shipped generator's assembly references, so its version doesn't affect consumer min-SDK;
@@ -23,20 +23,20 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
     <!-- DI -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
     <!-- netstandard2.0 polyfills -->
-    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="11.0.0" />
     <!-- Observability shim: ActivitySource + Meter (in-box on net8+; NuGet for ns2.0) -->
-    <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.14" />
+    <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="11.0.0" />
     <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
     <!-- Integration packages -->
     <PackageVersion Include="FluentValidation" Version="11.12.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="11.0.0" />
     <!-- Test -->
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
