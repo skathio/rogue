@@ -6,6 +6,18 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-10
+
+### Changed
+
+- **Dependency updates.** Build tooling and test dependencies are refreshed: MinVer 8, SourceLink
+  10.0.403 (patched for CVE-2026-62900), `Microsoft.CodeAnalysis.Analyzers` 5.9, the
+  `Microsoft.Extensions.*` 10.0.14 packages, and the test SDK and runner. `Microsoft.CodeAnalysis.CSharp`
+  deliberately stays at 5.0.0, because it is compiled into the shipped generator and a higher pin
+  breaks consumers on older SDKs. No public API or behavior change.
+
+## [1.2.0] - 2026-07-16
+
 ### Added
 
 - **FluentValidation validator auto-discovery.** `SkathIO.Rogue.Validation.FluentValidation` now
@@ -259,7 +271,9 @@ commit to reporting any scenario where Rogue is not fastest, honestly and in the
   linked documentation is unreachable. Confirm visibility in GitHub settings before tagging. See
   [docs/governance.md](docs/governance.md#release-readiness).
 
-[Unreleased]: https://github.com/skathio/rogue/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/skathio/rogue/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/skathio/rogue/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/skathio/rogue/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/skathio/rogue/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/skathio/rogue/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/skathio/rogue/compare/v1.0.1...v1.0.2
