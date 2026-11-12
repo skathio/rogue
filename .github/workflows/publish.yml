@@ -266,26 +266,30 @@ jobs:
   # release. nuget-push creates the GitHub Release with GITHUB_TOKEN, which does not fire the
   # `release` event, so homepage.yml cannot catch it: this job sends the same ping. It runs
   # only after `publish`, behind the same gate. Without HOMEPAGE_DISPATCH_TOKEN it notes that
-  # and succeeds, and the step is continue-on-error, so neither a missing nor an expired token
-  # marks a good release as failed.
+  # and succeeds, and a failed ping warns instead of failing, so a good
+  # release is never marked failed. The token is a `homepage` environment secret.
   homepage-ping:
     name: homepage-ping
     needs: publish
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
     runs-on: ubuntu-latest
+    environment: homepage
     permissions: {}
     steps:
       - name: Ask the homepage to rebuild
-        # A ping is a courtesy: an expired token or an API error must not fail the run.
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.HOMEPAGE_DISPATCH_TOKEN }}
           REPO: ${{ github.repository }}
+          EVENT: project-released
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [ -z "${GH_TOKEN}" ]; then
             echo "::notice::HOMEPAGE_DISPATCH_TOKEN is not set; the homepage picks this release up on its next scheduled build."
             exit 0
           fi
-          gh api repos/skathio/skathio.github.io/dispatches \
-            -f event_type=project-released -f "client_payload[repo]=${REPO}"
+          # A ping is a courtesy, so a failure never fails the run, but it must be seen: an expired
+          # or under-scoped token would otherwise leave the tile waiting for the scheduled build.
+          if ! gh api repos/skathio/skathio.github.io/dispatches \
+            -f "event_type=${EVENT}" -f "client_payload[repo]=${REPO}"; then
+            echo "::warning title=Homepage ping failed::The homepage was not asked to rebuild. Check or rotate HOMEPAGE_DISPATCH_TOKEN (the 'homepage' environment secret); the tile catches up on the next scheduled build."
+          fi
