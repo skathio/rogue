@@ -22,6 +22,7 @@ bench/results/*
 # BenchmarkDotNet artifact output (local + CI)
 BenchmarkDotNet.Artifacts/
 
-# Internal planning and tooling — not part of the public repo
+# Internal planning and tooling — not part of the public repo, except the agent skills
 .somi/
-.claude/
+.claude/*
+!.claude/skills/
