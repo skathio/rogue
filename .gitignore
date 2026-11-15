@@ -26,3 +26,6 @@ BenchmarkDotNet.Artifacts/
 .somi/
 .claude/*
 !.claude/skills/
+.claude/skills/*
+!.claude/skills/visual-test/
+!.claude/skills/release-prep/

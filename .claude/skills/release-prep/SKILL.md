@@ -19,8 +19,10 @@ The source of these steps is `docs/governance.md`, "Release readiness".
    `PublicAPI/modern/` in `Abstractions`, `SkathIO.Rogue` and `MediatR`). This freezes that API for
    good, so list every promoted line in the PR description.
 
-3. **Benchmarks**, when performance-relevant code changed:
-   `dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks -- --filter '*' --job short`.
+3. **Benchmarks: required before every release** (`docs/governance.md`). Run the full suite on a
+   quiet machine: `dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks -- --filter '*'`,
+   and also `bench/SkathIO.Rogue.Benchmarks.Validation` with the same arguments.
+   This takes a long time; if you cannot run it, say so in the PR and leave it to the maintainer.
    Commit the run as `bench/results/<YYYY-MM-DD>-<short-sha>/` and add a `!bench/results/<dir>/`
    line to `.gitignore`, or the run is ignored. Update `bench/RESULTS.md`, `docs/benchmarks.md`, and
    the stats in `site/index.html` and `README.md` if the numbers changed. A site change needs the
