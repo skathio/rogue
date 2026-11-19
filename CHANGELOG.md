@@ -6,6 +6,26 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking: `netstandard2.0` is no longer a target.** `SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`,
+  `SkathIO.Rogue.MediatR`, `SkathIO.Rogue.Logging` and `SkathIO.Rogue.Validation.FluentValidation`
+  now target `net8.0` and `net10.0` only. .NET Framework applications and libraries that target
+  `netstandard2.0` can no longer reference them; stay on 1.x for those. The netstandard2.0-only
+  surface is gone with it: the `ValueTask<Unit>`-returning void handler, processor, publisher and
+  `Publish` signatures (net8.0+ always returned bare `ValueTask`), and the
+  `System.Threading.Tasks.Extensions`, `Microsoft.Bcl.AsyncInterfaces` and
+  `System.Diagnostics.DiagnosticSource` package dependencies. The source generators and the
+  migration analyzer still target `netstandard2.0`, because the compiler loads analyzers only from
+  that target. Generated code no longer carries `#if !NETSTANDARD2_0` guards.
+
+### Changed
+
+- **Breaking: `SkathIO.Rogue.Validation.FluentValidation` now depends on FluentValidation 12**
+  (12.2.0, up from 11.12.0). FluentValidation 12 targets net8.0 only and removes some APIs that
+  were obsolete in 11; check FluentValidation's 12.0 upgrade notes if your validators still use
+  them.
+
 ## [1.2.1] - 2026-11-10
 
 ### Changed

@@ -30,9 +30,9 @@ public sealed class SuppressionTests
         Assert.DoesNotContain("RogueRegistrationBridge", text);
         Assert.DoesNotContain("internal static class RogueFluentValidationModuleInit", text);
 
-        // The #if/#endif shell is still present (stable hint name, empty body when suppressed).
-        Assert.Contains("#if !NETSTANDARD2_0", text);
-        Assert.Contains("#endif", text);
+        // The hint name stays stable; past the generated header the file holds no code.
+        Assert.DoesNotContain("namespace", text);
+        Assert.DoesNotContain("#if", text);
     }
 
     [Fact]

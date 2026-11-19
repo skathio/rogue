@@ -25,13 +25,8 @@
     <!-- DI -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
-    <!-- netstandard2.0 polyfills -->
-    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.14" />
-    <!-- Observability shim: ActivitySource + Meter (in-box on net8+; NuGet for ns2.0) -->
-    <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.14" />
-    <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
     <!-- Integration packages -->
-    <PackageVersion Include="FluentValidation" Version="11.12.0" />
+    <PackageVersion Include="FluentValidation" Version="12.2.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
     <!-- Test -->

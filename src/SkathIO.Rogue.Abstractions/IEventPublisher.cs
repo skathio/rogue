@@ -13,9 +13,5 @@ public interface IEventPublisher
     /// hand over its cached <see cref="IEventHandler{TEvent}"/> instances directly — no wrapper type, no
     /// per-handler closure, no boxed enumerator (publish-fanout-perf D2).
     /// </summary>
-#if NETSTANDARD2_0
-    ValueTask<Unit> Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent;
-#else
     ValueTask Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent;
-#endif
 }

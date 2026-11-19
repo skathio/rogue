@@ -23,9 +23,10 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 ## Layout
 
 - `src/SkathIO.Rogue.Abstractions`: contracts only (`IQuery`, `ICommand`, handlers, `Unit`).
-  Targets `netstandard2.0;net8.0;net10.0`.
+  Targets `net8.0;net10.0`, like every runtime package (netstandard2.0 was dropped in 2.0.0).
 - `src/SkathIO.Rogue`: runtime (`RogueDispatcher`, `PipelineExecutor`, publishers, `AddRogue`).
-  Multi-targeted; per-TFM differences use `#if NETSTANDARD2_0` in the same file.
+  The generators and the migration analyzer stay on `netstandard2.0`, because the compiler loads
+  analyzers only from that target.
 - `src/SkathIO.Rogue.SourceGenerator`: the generator (`RogueGenerator.cs`), with
   `DispatcherEmitter.cs` / `RegistrationEmitter.cs` writing C# through `CodeWriter`. The long
   `Emit*` methods with bool shape flags are deliberate: they mirror the code they emit.
@@ -44,8 +45,7 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 
 - Nullable on, `ImplicitUsings` off (write `using`s), private fields `_camelCase`, braces always.
 - Public API is tracked by PublicApiAnalyzers. A new public member needs a `///` doc comment and an
-  entry in `PublicAPI.Unshipped.txt`. `Abstractions`, `SkathIO.Rogue` and `MediatR` split it per TFM
-  under `PublicAPI/netstandard2.0/` and `PublicAPI/modern/`; update both where the member exists in both.
+  entry in `PublicAPI.Unshipped.txt` (one pair per project, at the project root).
 - Packages are pinned centrally in `Directory.Packages.props` (no versions in csproj).
 - Any new package in the restore graph of the five packable projects (build-only tools included)
   must be added to `.github/allowed-packages.txt` with a license annotation, after a human checks the

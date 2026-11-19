@@ -4,9 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-#if !NETSTANDARD2_0
 using System.Diagnostics.CodeAnalysis;
-#endif
 using Microsoft.Extensions.DependencyInjection;
 
 namespace SkathIO.Rogue.Compatibility;
@@ -35,10 +33,8 @@ namespace SkathIO.Rogue.Compatibility;
 /// </remarks>
 [Obsolete("Not AOT-safe — use the generator path (ISender / RogueDispatcher) for AOT-compatible requests. " +
           "See https://docs.skathio.io/rogue/escape-hatch")]
-#if !NETSTANDARD2_0
 [RequiresDynamicCode("ReflectionMediator uses MakeGenericType and MethodInfo.Invoke, which are not compatible with Native AOT.")]
 [RequiresUnreferencedCode("ReflectionMediator uses reflection over ICommandHandler<,>/IQueryHandler<,>/IEventHandler<> which may be trimmed.")]
-#endif
 public sealed class ReflectionMediator : global::SkathIO.Rogue.IMediator
 {
     private readonly IServiceProvider _serviceProvider;
@@ -62,11 +58,7 @@ public sealed class ReflectionMediator : global::SkathIO.Rogue.IMediator
         var handler = _serviceProvider.GetRequiredService(handlerType);
         var method = handlerType.GetMethod("Handle", BindingFlags.Instance | BindingFlags.Public)!;
 
-#if NETSTANDARD2_0
-        return IgnoreUnit((ValueTask<global::SkathIO.Rogue.Unit>)method.Invoke(handler, new object[] { command, cancellationToken })!);
-#else
         return (ValueTask)method.Invoke(handler, new object[] { command, cancellationToken })!;
-#endif
     }
 
     public ValueTask<TResponse> Send<TResponse>(
@@ -110,15 +102,9 @@ public sealed class ReflectionMediator : global::SkathIO.Rogue.IMediator
             "Object-dispatch Send(object) is not supported via the reflection escape hatch. " +
             "Use the generated RogueDispatcher object-dispatch path (EnableObjectDispatch).");
 
-#if NETSTANDARD2_0
-    public ValueTask<global::SkathIO.Rogue.Unit> Publish(
-        global::SkathIO.Rogue.IEvent @event,
-        CancellationToken cancellationToken = default)
-#else
     public ValueTask Publish(
         global::SkathIO.Rogue.IEvent @event,
         CancellationToken cancellationToken = default)
-#endif
     {
         if (@event is null)
         {
@@ -134,11 +120,7 @@ public sealed class ReflectionMediator : global::SkathIO.Rogue.IMediator
         return PublishToHandlers(@event, handlers, cancellationToken);
     }
 
-#if NETSTANDARD2_0
-    public ValueTask<global::SkathIO.Rogue.Unit> Publish(object @event, CancellationToken cancellationToken = default)
-#else
     public ValueTask Publish(object @event, CancellationToken cancellationToken = default)
-#endif
     {
         if (@event is null)
         {
@@ -155,33 +137,6 @@ public sealed class ReflectionMediator : global::SkathIO.Rogue.IMediator
             "Use the generated RogueDispatcher object-dispatch path for non-IEvent payloads.");
     }
 
-#if NETSTANDARD2_0
-    private static async ValueTask<global::SkathIO.Rogue.Unit> PublishToHandlers(
-        global::SkathIO.Rogue.IEvent @event,
-        IEnumerable<object> handlers,
-        CancellationToken cancellationToken)
-    {
-        // Resolve the MethodInfo once against the closed IEventHandler<T> interface type (not
-        // handler.GetType()) — a concrete type implementing multiple IEventHandler<> specializations
-        // would cause AmbiguousMatchException if resolved via GetType().
-        var handleMethod = typeof(global::SkathIO.Rogue.IEventHandler<>)
-            .MakeGenericType(@event.GetType())
-            .GetMethod("Handle", BindingFlags.Instance | BindingFlags.Public)!;
-
-        foreach (var handler in handlers)
-        {
-            await ((ValueTask<global::SkathIO.Rogue.Unit>)handleMethod.Invoke(handler, new object[] { @event, cancellationToken })!)
-                .ConfigureAwait(false);
-        }
-
-        return global::SkathIO.Rogue.Unit.Value;
-    }
-
-    private static async ValueTask IgnoreUnit(ValueTask<global::SkathIO.Rogue.Unit> vt)
-    {
-        await vt.ConfigureAwait(false);
-    }
-#else
     private static async ValueTask PublishToHandlers(
         global::SkathIO.Rogue.IEvent @event,
         IEnumerable<object> handlers,
@@ -200,14 +155,11 @@ public sealed class ReflectionMediator : global::SkathIO.Rogue.IMediator
                 .ConfigureAwait(false);
         }
     }
-#endif
 
-#if !NETSTANDARD2_0
     public IAsyncEnumerable<TItem> CreateStream<TItem>(
         global::SkathIO.Rogue.IStreamQuery<TItem> query,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException(
             "Streaming is not supported via the reflection escape hatch. " +
             "Use the generated RogueDispatcher.CreateStream path.");
-#endif
 }

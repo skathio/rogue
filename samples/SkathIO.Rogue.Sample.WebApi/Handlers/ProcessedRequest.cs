@@ -47,19 +47,11 @@ public sealed class RecordingPreProcessor : IRequestPreProcessor<ProcessedReques
     public RecordingPreProcessor(IHandlerCallTracker tracker) => _tracker = tracker;
 
     /// <inheritdoc />
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Process(ProcessedRequest request, CancellationToken cancellationToken)
-    {
-        _tracker.Record(Marker);
-        return Unit.Task;
-    }
-#else
     public ValueTask Process(ProcessedRequest request, CancellationToken cancellationToken)
     {
         _tracker.Record(Marker);
         return default;
     }
-#endif
 }
 
 /// <summary>
@@ -76,17 +68,9 @@ public sealed class RecordingPostProcessor : IRequestPostProcessor<ProcessedRequ
     public RecordingPostProcessor(IHandlerCallTracker tracker) => _tracker = tracker;
 
     /// <inheritdoc />
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Process(ProcessedRequest request, ProcessedResponse response, CancellationToken cancellationToken)
-    {
-        _tracker.Record(Marker);
-        return Unit.Task;
-    }
-#else
     public ValueTask Process(ProcessedRequest request, ProcessedResponse response, CancellationToken cancellationToken)
     {
         _tracker.Record(Marker);
         return default;
     }
-#endif
 }

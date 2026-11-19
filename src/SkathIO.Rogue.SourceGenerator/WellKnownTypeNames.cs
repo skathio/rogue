@@ -14,7 +14,7 @@ internal static class WellKnownTypeNames
     // ── Primary event handler (PD-42 — renamed from INotificationHandler)
     public const string IEventHandler1 = "SkathIO.Rogue.IEventHandler`1";
 
-    // ── Primary streaming (net8+ only, but the generator may encounter them in any TFM)
+    // ── Primary streaming
     public const string IStreamQueryHandler2 = "SkathIO.Rogue.IStreamQueryHandler`2";
     public const string IStreamQuery1        = "SkathIO.Rogue.IStreamQuery`1";
 

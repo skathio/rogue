@@ -8,9 +8,5 @@ public interface IEventHandler<in TEvent>
     where TEvent : IEvent
 {
     /// <summary>Handles the event.</summary>
-#if NETSTANDARD2_0
-    ValueTask<Unit> Handle(TEvent @event, CancellationToken cancellationToken);
-#else
     ValueTask Handle(TEvent @event, CancellationToken cancellationToken);
-#endif
 }

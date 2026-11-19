@@ -14,7 +14,7 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
   enforces this with a `license-check` grep gate over `src/`.
 - **No runtime reflection or assembly scanning.** Handler discovery and wiring are compile-time only.
 - **Minimal runtime dependencies.** The core depends only on
-  `Microsoft.Extensions.DependencyInjection.Abstractions` (plus netstandard2.0 polyfills). Integration
+  `Microsoft.Extensions.DependencyInjection.Abstractions`. Integration
   packages add exactly one dependency each (`Microsoft.Extensions.Logging.Abstractions`,
   `FluentValidation`).
 - **Transitive dependency allow-list.** The `license-check` CI job runs
@@ -46,8 +46,9 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
 - **Semantic versioning**, explicitly resolved from git tags + a chosen bump (not inferred from
   commit messages). A `vMAJOR.MINOR.PATCH` tag is the version source of truth.
 - **Public API is gated.** Each package tracks its surface in `PublicAPI.Shipped.txt`; the
-  `public-api` CI job fails any unintended public-surface change. Surface that differs by target
-  framework is tracked per-TFM.
+  `public-api` CI job fails any unintended public-surface change. Every runtime package exposes the
+  same surface on each target framework, so each tracks it in one `PublicAPI.Shipped.txt` /
+  `PublicAPI.Unshipped.txt` pair at the project root.
 - **Releases are dispatch-triggered.** A maintainer runs `.github/workflows/publish.yml` via
   `workflow_dispatch` and picks a `bump` (`patch`/`minor`/`major`). The `version` job resolves the
   next version (`skathio/hashira`'s `version-resolver` composite action), `dotnet-pack-version`
@@ -62,8 +63,10 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
 
 ## Supported target frameworks
 
-`netstandard2.0`, `net8.0`, `net10.0`. netstandard2.0 keeps the contracts consumable from older
-runtimes; net8.0/net10.0 get the streaming surface and the in-box `ValueTask`/diagnostics types.
+Runtime packages target `net8.0` and `net10.0` only. `netstandard2.0` was dropped in 2.0.0, so .NET
+Framework and netstandard2.0 libraries can no longer reference them; stay on 1.x for those. The
+source generators and the migration analyzer still target `netstandard2.0`, because the compiler
+loads analyzers only from that target.
 
 ## Quality bar
 
@@ -76,9 +79,8 @@ runtimes; net8.0/net10.0 get the streaming surface and the in-box `ValueTask`/di
 Before dispatching **any** release (`publish.yml` via `workflow_dispatch`):
 
 - **Promote `PublicAPI.Unshipped.txt` entries to `PublicAPI.Shipped.txt`** for any packable project
-  that gained new public surface since the last release (use the analyzer's "mark shipped" fixer;
-  preserve the per-TFM split — `PublicAPI/netstandard2.0/` + `PublicAPI/modern/` — for
-  `Abstractions`, `SkathIO.Rogue`, and `SkathIO.Rogue.MediatR`). This is the **one-way API freeze**:
+  that gained new public surface since the last release (use the analyzer's "mark shipped" fixer).
+  This is the **one-way API freeze**:
   once `Shipped` ships under a tag, that surface is frozen, so this must happen before — or
   atomically with — the tag. It is irreversible and is the reason it lives on this checklist rather
   than in an automated gate (the `public-api` CI job only fails on *undeclared* surface, not on

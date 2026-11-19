@@ -1,9 +1,8 @@
 # API reference
 
 The authoritative public surface is tracked per package in `PublicAPI.Shipped.txt` (enforced by the
-`public-api` CI gate). This page is a human-readable map of it. Types whose shape differs by target
-framework (the void path returns `ValueTask<Unit>` on `netstandard2.0` vs `ValueTask` on net8.0+, and
-the streaming types are net8.0+ only) are noted inline.
+`public-api` CI gate). This page is a human-readable map of it. Every package targets `net8.0` and
+`net10.0` and exposes the same surface on both.
 
 ## Packages
 

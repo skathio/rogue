@@ -1,4 +1,3 @@
-#if !NETSTANDARD2_0
 using System.Collections.Generic;
 using System.Threading;
 
@@ -14,4 +13,3 @@ public interface IStreamPipelineBehavior<in TRequest, TResponse>
 
 /// <summary>Delegate representing the next step in the streaming pipeline.</summary>
 public delegate IAsyncEnumerable<TResponse> StreamHandlerDelegate<TResponse>();
-#endif

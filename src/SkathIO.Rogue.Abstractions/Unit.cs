@@ -11,11 +11,7 @@ public readonly struct Unit : IEquatable<Unit>
 
     /// <summary>Returns a completed <see cref="System.Threading.Tasks.ValueTask{Unit}"/> with the <see cref="Unit"/> value.</summary>
     /// <remarks>Implemented as a property (not a field) to avoid a JIT circular-init issue with ValueTask&lt;Unit&gt;.</remarks>
-#if NETSTANDARD2_0
-    public static System.Threading.Tasks.ValueTask<Unit> Task => new System.Threading.Tasks.ValueTask<Unit>(default(Unit));
-#else
     public static System.Threading.Tasks.ValueTask<Unit> Task => System.Threading.Tasks.ValueTask.FromResult(Value);
-#endif
 
     /// <inheritdoc/>
     public bool Equals(Unit other) => true;

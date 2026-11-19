@@ -67,17 +67,15 @@ internal static class DispatcherEmitter
         w.Line();
 
         // ── void-path async helper ────────────────────────────────────────────────────
-        // Used when ICommandHandler<TCommand> returns bare ValueTask on net8+ and we need ValueTask<Unit>.
-        w.Line("#if !NETSTANDARD2_0");
+        // Used when ICommandHandler<TCommand> returns bare ValueTask and we need ValueTask<Unit>.
         w.Open("private static async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> AwaitVoidThenUnit(global::System.Threading.Tasks.ValueTask vt)");
         w.Line("await vt.ConfigureAwait(false);");
         w.Line("return global::SkathIO.Rogue.Unit.Value;");
         w.Close(); // AwaitVoidThenUnit
-        w.Line("#endif");
         w.Line();
 
         // ── Unit-discarding helper for the void Send(ICommand) override ─────────────────
-        // The concrete Send_X methods return ValueTask<Unit> on every TFM; the ISender void-command
+        // The concrete Send_X methods return ValueTask<Unit>; the ISender void-command
         // overload returns bare ValueTask. Discard the Unit. (The void-command path is not the AC-C
         // 0-alloc target — that is the typed Send command/query path, re-established in 11.3.)
         w.Open("private static async global::System.Threading.Tasks.ValueTask IgnoreUnit(global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> vt)");
@@ -117,15 +115,13 @@ internal static class DispatcherEmitter
         EmitSendObjectOverride(w, models.Handlers);
         w.Line();
 
-        // ── Streaming dispatch (net8+ only) ───────────────────────────────────────────
-        w.Line("#if !NETSTANDARD2_0");
+        // ── Streaming dispatch ────────────────────────────────────────────────────────
         foreach (var sh in models.StreamHandlers)
         {
             EmitCreateStreamMethod(w, sh);
             w.Line();
         }
         EmitCreateStreamOverride(w, models.StreamHandlers);
-        w.Line("#endif");
         w.Line();
 
         // ── Per-event Publish helper methods ──────────────────────────────────────────
@@ -327,7 +323,7 @@ internal static class DispatcherEmitter
             //
             // The direct call is factored into {methodName}_Direct (one source of truth for the
             // handler-call shape, shared by the telemetry-off return below and the telemetry-on
-            // companion) so EmitDirectHandlerReturn — with its #if TFM split and void/adapter wrapping —
+            // companion) so EmitDirectHandlerReturn — with its void wrapping —
             // is emitted exactly once. _Direct has no captured locals, so it allocates no closure.
             w.Line("var __scope = " + RT + ".StartDispatch<" + requestFqn + ">();");
             w.Open("if (__scope is null)");
@@ -339,7 +335,7 @@ internal static class DispatcherEmitter
             w.Close(); // method
 
             w.Line();
-            EmitSendDirectMethod(w, methodName, handlerIface, requestFqn, responseFqn, isVoid, handler.IsAdapterMapped);
+            EmitSendDirectMethod(w, methodName, handlerIface, requestFqn, responseFqn, isVoid);
             w.Line();
             EmitSendDirectWithTelemetryMethod(w, methodName, handlerIface, requestFqn, responseFqn);
             return;
@@ -383,7 +379,7 @@ internal static class DispatcherEmitter
             w.Open("if (__scope is null)");
 
             w.Open("if (behaviors.Count == 0)");
-            EmitDirectHandlerReturn(w, isVoid, handler.IsAdapterMapped);
+            EmitDirectHandlerReturn(w, isVoid);
             w.Close(); // if (behaviors.Count == 0)
             w.Line();
 
@@ -408,7 +404,7 @@ internal static class DispatcherEmitter
             // by the PD-31 fast-path bypass above). Every dispatch to a processor-bearing request goes
             // through this wrap regardless of behavior count, so there is no fast path here to protect
             // from the closure — the allocation is an intrinsic, by-design cost of FR-25/26/27.
-            EmitHandlerCallDelegate(w, isVoid, responseFqn, handler.IsAdapterMapped);
+            EmitHandlerCallDelegate(w, isVoid, responseFqn);
             EmitProcessorPath(w, requestFqn, responseFqn, "handlerCall", pre, post, exHandlers, exActions);
         }
 
@@ -417,7 +413,7 @@ internal static class DispatcherEmitter
         if (!hasProcessors)
         {
             w.Line();
-            EmitSendWithBehaviorsMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType, isVoid, handler.IsAdapterMapped, useStaticChain);
+            EmitSendWithBehaviorsMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType, isVoid, useStaticChain);
             w.Line();
             EmitSendWithTelemetryMethod(w, methodName, handlerIface, requestFqn, responseFqn, behaviorListType);
 
@@ -428,7 +424,7 @@ internal static class DispatcherEmitter
             if (useStaticChain)
             {
                 w.Line();
-                EmitChainMethods(w, methodName, handlerIface, behaviorIface, requestFqn, responseFqn, isVoid, handler.IsAdapterMapped);
+                EmitChainMethods(w, methodName, handlerIface, behaviorIface, requestFqn, responseFqn, isVoid);
             }
         }
     }
@@ -502,7 +498,7 @@ internal static class DispatcherEmitter
     /// </summary>
     private static void EmitSendDirectMethod(
         CodeWriter w, string methodName, string handlerIface, string requestFqn, string responseFqn,
-        bool isVoid, bool isAdapter)
+        bool isVoid)
     {
         w.Open(
             "private static global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
@@ -510,7 +506,7 @@ internal static class DispatcherEmitter
             handlerIface + " handler, " + requestFqn + " request, " +
             "global::System.Threading.CancellationToken cancellationToken)");
 
-        EmitDirectHandlerReturn(w, isVoid, isAdapter);
+        EmitDirectHandlerReturn(w, isVoid);
 
         w.Close(); // method
     }
@@ -558,7 +554,7 @@ internal static class DispatcherEmitter
     /// </summary>
     private static void EmitSendWithBehaviorsMethod(
         CodeWriter w, string methodName, string handlerIface, string requestFqn, string responseFqn,
-        string behaviorListType, bool isVoid, bool isAdapter, bool useStaticChain)
+        string behaviorListType, bool isVoid, bool useStaticChain)
     {
         w.Open(
             "private static global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
@@ -578,7 +574,7 @@ internal static class DispatcherEmitter
             w.Open("switch (behaviors.Count)");
             w.Line("case 0:");
             w.Indent();
-            EmitDirectHandlerReturn(w, isVoid, isAdapter);
+            EmitDirectHandlerReturn(w, isVoid);
             w.Dedent();
             for (int n = 1; n <= MAX_STATIC_CHAIN_DEPTH; n++)
             {
@@ -590,7 +586,7 @@ internal static class DispatcherEmitter
             }
             w.Line("default:");
             w.Indent();
-            EmitHandlerCallDelegate(w, isVoid, responseFqn, isAdapter);
+            EmitHandlerCallDelegate(w, isVoid, responseFqn);
             w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
             w.Line("    request, behaviors, handlerCall, cancellationToken);");
             w.Dedent();
@@ -598,7 +594,7 @@ internal static class DispatcherEmitter
         }
         else
         {
-            EmitHandlerCallDelegate(w, isVoid, responseFqn, isAdapter);
+            EmitHandlerCallDelegate(w, isVoid, responseFqn);
             w.Line("return global::SkathIO.Rogue.PipelineExecutor.Execute<" + requestFqn + ", " + responseFqn + ">(");
             w.Line("    request, behaviors, handlerCall, cancellationToken);");
         }
@@ -636,7 +632,7 @@ internal static class DispatcherEmitter
     /// </summary>
     private static void EmitChainMethods(
         CodeWriter w, string methodName, string handlerIface, string behaviorIface,
-        string requestFqn, string responseFqn, bool isVoid, bool isAdapter)
+        string requestFqn, string responseFqn, bool isVoid)
     {
         for (int n = 1; n <= MAX_STATIC_CHAIN_DEPTH; n++)
         {
@@ -659,9 +655,9 @@ internal static class DispatcherEmitter
             if (n == 1)
             {
                 // Innermost link: next() invokes the handler directly. Build it as the same
-                // RequestHandlerDelegate<TResponse> EmitHandlerCallDelegate emits (handles the void/adapter
-                // TFM split), then hand it to b0.Handle as `next`.
-                EmitChainInnermostNext(w, isVoid, responseFqn, isAdapter);
+                // RequestHandlerDelegate<TResponse> EmitHandlerCallDelegate emits (handles the void
+                // wrapping), then hand it to b0.Handle as `next`.
+                EmitChainInnermostNext(w, isVoid, responseFqn);
                 w.Line("return b0.Handle(request, next, ct);");
             }
             else
@@ -685,36 +681,21 @@ internal static class DispatcherEmitter
     /// <summary>
     /// D5 (PD-2): emits the innermost <c>next</c> delegate for <c>Send_X_Chain_1</c> — a
     /// <c>RequestHandlerDelegate&lt;TResponse&gt; next = () =&gt; handler.Handle(request, ct)</c> with the
-    /// SAME void/adapter/TFM wrapping <see cref="EmitHandlerCallDelegate"/> produces (the chain's handler
+    /// SAME void wrapping <see cref="EmitHandlerCallDelegate"/> produces (the chain's handler
     /// parameter is named <c>handler</c> and its cancellation token <c>ct</c>, matching this body). The
     /// delegate is named <c>next</c> so the caller can pass it straight to <c>b0.Handle(request, next, ct)</c>.
     /// </summary>
-    private static void EmitChainInnermostNext(CodeWriter w, bool isVoid, string responseFqn, bool isAdapter)
+    private static void EmitChainInnermostNext(CodeWriter w, bool isVoid, string responseFqn)
     {
         if (isVoid)
         {
-            if (isAdapter)
-            {
-                // PD-48: adapter void handler returns bare ValueTask on every TFM — wrap to ValueTask<Unit>.
-                w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> next = () =>");
-                w.Line("{");
-                w.Line("    var voidVt = handler.Handle(request, ct);");
-                w.Line("    if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
-                w.Line("    return AwaitVoidThenUnit(voidVt);");
-                w.Line("};");
-                return;
-            }
-
-            w.Line("#if NETSTANDARD2_0");
-            w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> next = () => handler.Handle(request, ct);");
-            w.Line("#else");
+            // Void handlers (core and adapter alike) return bare ValueTask — wrap to ValueTask<Unit>.
             w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> next = () =>");
             w.Line("{");
             w.Line("    var voidVt = handler.Handle(request, ct);");
             w.Line("    if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
             w.Line("    return AwaitVoidThenUnit(voidVt);");
             w.Line("};");
-            w.Line("#endif");
         }
         else
         {
@@ -727,35 +708,18 @@ internal static class DispatcherEmitter
     /// <c>return handler.Handle(...)</c> for the no-behavior fast path — no
     /// <see cref="global::SkathIO.Rogue.RequestHandlerDelegate{TResponse}"/> is constructed, so no
     /// per-dispatch display-class closure is allocated. Mirrors the void-wrapping shape of
-    /// <see cref="EmitHandlerCallDelegate"/> exactly (same TFM split, same <c>AwaitVoidThenUnit</c>
+    /// <see cref="EmitHandlerCallDelegate"/> exactly (same <c>AwaitVoidThenUnit</c>
     /// fast-completion check) — only the *shape* differs (an immediate <c>return</c> vs. a deferred
     /// delegate assignment).
     /// </summary>
-    private static void EmitDirectHandlerReturn(CodeWriter w, bool isVoid, bool isAdapter)
+    private static void EmitDirectHandlerReturn(CodeWriter w, bool isVoid)
     {
         if (isVoid)
         {
-            if (isAdapter)
-            {
-                // PD-48: the adapter's Compatibility.IRequestHandler<TReq>.Handle returns BARE ValueTask
-                // on EVERY TFM (it declares its own `ValueTask Handle`, unlike the core void handler whose
-                // ns2.0 variant returns ValueTask<Unit>). So the ValueTask -> ValueTask<Unit> wrap is
-                // unconditional here — no #if split.
-                w.Line("var voidVt = handler.Handle(request, cancellationToken);");
-                w.Line("if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
-                w.Line("return AwaitVoidThenUnit(voidVt);");
-                return;
-            }
-
-            // ICommandHandler<TCommand>.Handle returns ValueTask<Unit> on netstandard2.0 (no bare
-            // ValueTask-returning handler interface there) and bare ValueTask on net8+.
-            w.Line("#if NETSTANDARD2_0");
-            w.Line("return handler.Handle(request, cancellationToken);");
-            w.Line("#else");
+            // Void handlers (core and adapter alike) return bare ValueTask — wrap to ValueTask<Unit>.
             w.Line("var voidVt = handler.Handle(request, cancellationToken);");
             w.Line("if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
             w.Line("return AwaitVoidThenUnit(voidVt);");
-            w.Line("#endif");
         }
         else
         {
@@ -773,33 +737,17 @@ internal static class DispatcherEmitter
     /// no-behavior, no-processor fast path bypasses it entirely via
     /// <see cref="EmitDirectHandlerReturn"/>.
     /// </summary>
-    private static void EmitHandlerCallDelegate(CodeWriter w, bool isVoid, string responseFqn, bool isAdapter)
+    private static void EmitHandlerCallDelegate(CodeWriter w, bool isVoid, string responseFqn)
     {
         if (isVoid)
         {
-            if (isAdapter)
-            {
-                // PD-48: adapter void handler returns bare ValueTask on every TFM (see
-                // EmitDirectHandlerReturn) — the ValueTask -> ValueTask<Unit> wrap is unconditional.
-                w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () =>");
-                w.Line("{");
-                w.Line("    var voidVt = handler.Handle(request, cancellationToken);");
-                w.Line("    if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
-                w.Line("    return AwaitVoidThenUnit(voidVt);");
-                w.Line("};");
-                return;
-            }
-
-            w.Line("#if NETSTANDARD2_0");
-            w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () => handler.Handle(request, cancellationToken);");
-            w.Line("#else");
+            // Void handlers (core and adapter alike) return bare ValueTask — wrap to ValueTask<Unit>.
             w.Line("global::SkathIO.Rogue.RequestHandlerDelegate<" + responseFqn + "> handlerCall = () =>");
             w.Line("{");
             w.Line("    var voidVt = handler.Handle(request, cancellationToken);");
             w.Line("    if (voidVt.IsCompletedSuccessfully) return global::SkathIO.Rogue.Unit.Task;");
             w.Line("    return AwaitVoidThenUnit(voidVt);");
             w.Line("};");
-            w.Line("#endif");
         }
         else
         {
@@ -840,8 +788,6 @@ internal static class DispatcherEmitter
         // FR-25: pre-processors run before the behavior pipeline, in deterministic (registration) order.
         if (pre.Count > 0)
         {
-            // IRequestPreProcessor.Process returns ValueTask<Unit> on ns2.0 and ValueTask on net8+;
-            // both are awaitable identically, so no #if split is needed here.
             w.Open("foreach (var pre in preProcessors)");
             w.Line("await pre.Process(request, cancellationToken).ConfigureAwait(false);");
             w.Close(); // foreach
@@ -1221,7 +1167,7 @@ internal static class DispatcherEmitter
     }
 
     // ────────────────────────────────────────────────────────────────────────────────────
-    // Streaming dispatch (net8+ only — IAsyncEnumerable)
+    // Streaming dispatch (IAsyncEnumerable)
     //
     // Fix 5 / FR-23: emits CreateStream<TItem> as a switch over discovered IStreamQueryHandler<,>
     // implementations (PD-40 clean break — keyed on the core IStreamQuery<T> family), each delegating to
@@ -1374,51 +1320,32 @@ internal static class DispatcherEmitter
         string fieldName  = HandlerFieldName(eventFqn);
 
         // ── Entry point: Publish_X (telemetry gate) ──
-        // ns2.0: ValueTask<Unit>; net8+: ValueTask. On the disabled/unsubscribed path StartDispatch
-        // returns null and we return _Direct's ValueTask straight through — no async state machine,
-        // no try/finally — mirroring EmitSendMethod's `if (__scope is null) return ..._Direct(...)`.
-        w.Line("#if NETSTANDARD2_0");
-        w.Open("private global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
-        EmitPublishEntryBody(w, eventType, methodName);
-        w.Close();
-        w.Line("#else");
+        // On the disabled/unsubscribed path StartDispatch returns null and we return _Direct's
+        // ValueTask straight through — no async state machine, no try/finally — mirroring
+        // EmitSendMethod's `if (__scope is null) return ..._Direct(...)`.
         w.Open("private global::System.Threading.Tasks.ValueTask " + methodName + "(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
         EmitPublishEntryBody(w, eventType, methodName);
         w.Close();
-        w.Line("#endif");
 
         w.Line();
 
         // ── Publish_X_Direct (non-async, shared handler-array build) ──
-        w.Line("#if NETSTANDARD2_0");
-        w.Open("private global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "_Direct(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
-        EmitPublishDirectBody(w, eventType, fieldName);
-        w.Close();
-        w.Line("#else");
         w.Open("private global::System.Threading.Tasks.ValueTask " + methodName + "_Direct(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken)");
         EmitPublishDirectBody(w, eventType, fieldName);
         w.Close();
-        w.Line("#endif");
 
         w.Line();
 
         // ── Publish_X_DirectWithTelemetry (async, wraps _Direct in the observe try/catch/finally) ──
-        w.Line("#if NETSTANDARD2_0");
-        w.Open("private async global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> " + methodName + "_DirectWithTelemetry(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken, global::SkathIO.Rogue.DispatchScope scope)");
-        EmitPublishDirectWithTelemetryBody(w, methodName, returnsUnit: true);
-        w.Close();
-        w.Line("#else");
         w.Open("private async global::System.Threading.Tasks.ValueTask " + methodName + "_DirectWithTelemetry(" + eventType + " ev, global::System.Threading.CancellationToken cancellationToken, global::SkathIO.Rogue.DispatchScope scope)");
-        EmitPublishDirectWithTelemetryBody(w, methodName, returnsUnit: false);
+        EmitPublishDirectWithTelemetryBody(w, methodName);
         w.Close();
-        w.Line("#endif");
     }
 
     /// <summary>
     /// D3: the entry-point body — start a dispatch scope, take the zero-state-machine
     /// <c>_Direct</c> path when telemetry is off/unsubscribed, otherwise delegate to the async
-    /// telemetry companion. TFM-agnostic: both <c>ValueTask&lt;Unit&gt;</c> and bare <c>ValueTask</c>
-    /// returns flow through the same `return ...` shape (the scope is non-generic).
+    /// telemetry companion.
     /// </summary>
     private static void EmitPublishEntryBody(CodeWriter w, string eventTypeFqn, string methodName)
     {
@@ -1467,14 +1394,11 @@ internal static class DispatcherEmitter
     /// handler build to <c>_Direct</c> instead of duplicating it. Mirrors
     /// <see cref="EmitSendDirectWithTelemetryMethod"/>.
     /// </summary>
-    private static void EmitPublishDirectWithTelemetryBody(CodeWriter w, string methodName, bool returnsUnit)
+    private static void EmitPublishDirectWithTelemetryBody(CodeWriter w, string methodName)
     {
         w.Line("global::System.Exception? __exc = null;");
         w.Open("try");
-        if (returnsUnit)
-            w.Line("return await " + methodName + "_Direct(ev, cancellationToken).ConfigureAwait(false);");
-        else
-            w.Line("await " + methodName + "_Direct(ev, cancellationToken).ConfigureAwait(false);");
+        w.Line("await " + methodName + "_Direct(ev, cancellationToken).ConfigureAwait(false);");
         w.Close(); // try
         w.Open("catch (global::System.Exception __ex)");
         w.Line("__exc = __ex;");
@@ -1491,28 +1415,17 @@ internal static class DispatcherEmitter
 
     private static void EmitPublishOverride(CodeWriter w, Dictionary<string, List<string>> handlersByEvent)
     {
-        // ns2.0: returns ValueTask<Unit>
-        w.Line("#if NETSTANDARD2_0");
-        w.Open("public override global::System.Threading.Tasks.ValueTask<global::SkathIO.Rogue.Unit> Publish(global::SkathIO.Rogue.IEvent ev, global::System.Threading.CancellationToken cancellationToken = default)");
-        EmitPublishSwitchBody(w, handlersByEvent, returnsUnit: true);
-        w.Close();
-
-        w.Line("#else");
         w.Open("public override global::System.Threading.Tasks.ValueTask Publish(global::SkathIO.Rogue.IEvent ev, global::System.Threading.CancellationToken cancellationToken = default)");
-        EmitPublishSwitchBody(w, handlersByEvent, returnsUnit: false);
+        EmitPublishSwitchBody(w, handlersByEvent);
         w.Close();
-        w.Line("#endif");
     }
 
-    private static void EmitPublishSwitchBody(CodeWriter w, Dictionary<string, List<string>> handlersByEvent, bool returnsUnit)
+    private static void EmitPublishSwitchBody(CodeWriter w, Dictionary<string, List<string>> handlersByEvent)
     {
         if (handlersByEvent.Count == 0)
         {
             // FR-13: events may have zero handlers — return completed task
-            if (returnsUnit)
-                w.Line("return global::SkathIO.Rogue.Unit.Task;");
-            else
-                w.Line("return default;");
+            w.Line("return default;");
             return;
         }
 
@@ -1532,10 +1445,7 @@ internal static class DispatcherEmitter
         // Default: no handlers for this event type — return completed (FR-13)
         w.Line("default:");
         w.Indent();
-        if (returnsUnit)
-            w.Line("return global::SkathIO.Rogue.Unit.Task;");
-        else
-            w.Line("return default;");
+        w.Line("return default;");
         w.Dedent();
 
         w.Close(); // switch
@@ -1620,7 +1530,7 @@ internal static class DispatcherEmitter
         // sanitise any generic/nested arity decoration into an identifier.
         string extMethod   = "Send" + MakeSafeName(SimpleName(handler.RequestFqn));
 
-        // Void commands: Send_X returns ValueTask<Unit> on every TFM. We expose it AS ValueTask<Unit>
+        // Void commands: Send_X returns ValueTask<Unit>. We expose it AS ValueTask<Unit>
         // (Unit is already public API) rather than unwrapping to ValueTask, because unwrapping the
         // generic value task to a non-generic one cannot be done without either an allocation (AsTask)
         // or access to the impl's private IgnoreUnit helper — and this is the 0-alloc fast path, so we

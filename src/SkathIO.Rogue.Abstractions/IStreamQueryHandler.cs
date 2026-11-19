@@ -1,4 +1,3 @@
-#if !NETSTANDARD2_0
 using System.Collections.Generic;
 using System.Threading;
 
@@ -16,4 +15,3 @@ public interface IStreamQueryHandler<in TQuery, out TItem>
     /// <summary>Handles the streaming query.</summary>
     IAsyncEnumerable<TItem> Handle(TQuery query, CancellationToken cancellationToken);
 }
-#endif

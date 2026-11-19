@@ -62,9 +62,8 @@ public class PingHandler : ICommandHandler<Ping, string>
         var moduleInit = sources.First(s => s.HintName == "RogueModuleInit.g.cs");
         var text = moduleInit.SourceText.ToString();
 
-        // net5+ only — ns2.0 has no ModuleInitializer
-        Assert.Contains("#if !NETSTANDARD2_0", text);
-        Assert.Contains("#endif", text);
+        // Every consumer is net8.0+, so the initializer is emitted unconditionally.
+        Assert.DoesNotContain("#if", text);
         Assert.Contains("[global::System.Runtime.CompilerServices.ModuleInitializer]", text);
 
         // Appends via the public, non-obsolete Register(...) entry point (PD-16: bridge is public;
@@ -218,11 +217,7 @@ using System.Threading.Tasks;
 public class DeleteUser : ICommand { }
 public class DeleteUserHandler : ICommandHandler<DeleteUser>
 {
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(DeleteUser request, System.Threading.CancellationToken ct) => Unit.Task;
-#else
     public ValueTask Handle(DeleteUser request, System.Threading.CancellationToken ct) => ValueTask.CompletedTask;
-#endif
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
@@ -256,11 +251,7 @@ using System.Threading.Tasks;
 public class DeleteUser : ICommand { }
 public class DeleteUserHandler : ICommandHandler<DeleteUser>
 {
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(DeleteUser request, System.Threading.CancellationToken ct) => Unit.Task;
-#else
     public ValueTask Handle(DeleteUser request, System.Threading.CancellationToken ct) => ValueTask.CompletedTask;
-#endif
 }";
         var assembly = GeneratorTestHelper.EmitAndLoadAssembly(source);
         var provider = GeneratorTestHelper.BuildProviderFromGenerated(assembly);
@@ -333,11 +324,7 @@ using System.Threading.Tasks;
 public class UserCreated : IEvent { }
 public class UserCreatedHandler : IEventHandler<UserCreated>
 {
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(UserCreated n, System.Threading.CancellationToken ct) => Unit.Task;
-#else
     public ValueTask Handle(UserCreated n, System.Threading.CancellationToken ct) => ValueTask.CompletedTask;
-#endif
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var dispatcher = result.Results.SelectMany(r => r.GeneratedSources)
@@ -374,19 +361,11 @@ namespace My
     public class PingEvent : IEvent { }
     public class Handler1 : IEventHandler<PingEvent>
     {
-#if NETSTANDARD2_0
-        public ValueTask<Unit> Handle(PingEvent e, CancellationToken ct) => Unit.Task;
-#else
         public ValueTask Handle(PingEvent e, CancellationToken ct) => ValueTask.CompletedTask;
-#endif
     }
     public class Handler2 : IEventHandler<PingEvent>
     {
-#if NETSTANDARD2_0
-        public ValueTask<Unit> Handle(PingEvent e, CancellationToken ct) => Unit.Task;
-#else
         public ValueTask Handle(PingEvent e, CancellationToken ct) => ValueTask.CompletedTask;
-#endif
     }
 }";
 
@@ -577,11 +556,7 @@ using System.Threading.Tasks;
 public class Cmd : ICommand { }
 public class CmdHandler : ICommandHandler<Cmd>
 {
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(Cmd request, System.Threading.CancellationToken ct) => Unit.Task;
-#else
     public ValueTask Handle(Cmd request, System.Threading.CancellationToken ct) => ValueTask.CompletedTask;
-#endif
 }";
         var result = GeneratorTestHelper.RunGeneratorAndAssertClean(source);
         var sources = result.Results.SelectMany(r => r.GeneratedSources).ToList();
@@ -799,8 +774,8 @@ public class StreamLogBehavior<TReq, TRes> : IStreamPipelineBehavior<TReq, TRes>
         // Closed construction of the open stream behavior for this stream request.
         Assert.Contains("StreamLogBehavior<global::Tick, global::System.Int32>", text);
 
-        // Stream registration is net8+-only (IStreamPipelineBehavior does not exist on ns2.0).
-        Assert.Contains("#if !NETSTANDARD2_0", text);
+        // Every consumer is net8.0+, so stream registration is not wrapped in a TFM guard.
+        Assert.DoesNotContain("NETSTANDARD2_0", text);
     }
 
     [Fact]
@@ -1386,11 +1361,7 @@ using System.Threading.Tasks;
 public class DoThing : ICommand { }
 public class DoThingHandler : ICommandHandler<DoThing>
 {
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(DoThing request, CancellationToken ct) => Unit.Task;
-#else
     public ValueTask Handle(DoThing request, CancellationToken ct) => ValueTask.CompletedTask;
-#endif
 }
 public sealed class DoThingBehavior : IPipelineBehavior<DoThing, Unit>
 {

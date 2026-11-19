@@ -76,7 +76,7 @@ internal static class RegistrationEmitter
     internal static bool HasNothingToRegister(DiscoveredValidators models) => models.Validators.Count == 0;
 
     /// <summary>
-    /// Emits a module initializer (net5+) that appends this compilation's
+    /// Emits a module initializer that appends this compilation's
     /// <c>RogueFluentValidationRegistration.Register</c> to the DLL's append-only
     /// <c>RogueRegistrationBridge</c> registry — a SECOND, independent registrar appended to the same
     /// public, append-only bridge the core generator's own module initializer also appends to. The
@@ -84,25 +84,18 @@ internal static class RegistrationEmitter
     /// <c>RogueRegistrationBridge.cs:16-24</c>), so two independent generators both appending to it is
     /// a supported, safe shape — confirmed by Iteration 1.1's review.
     /// <para>
-    /// Suppressed (empty <c>#if !NETSTANDARD2_0 #endif</c> shell) when
-    /// <see cref="HasNothingToRegister"/> is true — mirrors the core generator's PD-45 suppression
-    /// intent (<c>RegistrationEmitter.cs:206-212</c>), simplified per D2: a zero-validator compilation
-    /// has nothing to contribute, so no empty registrar is appended. On ns2.0 (no
-    /// <c>ModuleInitializer</c>) there is no explicit fallback call here (unlike the core generator) —
-    /// D5 removed the only call that could have invoked one; a ns2.0 consumer's validators are
-    /// discovered by referencing the package the same as any other TFM, but registration itself
-    /// requires a net5+ host process for the module initializer to run.
+    /// Suppressed (empty output) when <see cref="HasNothingToRegister"/> is true — mirrors the core
+    /// generator's PD-45 suppression intent, simplified per D2: a zero-validator compilation has
+    /// nothing to contribute, so no empty registrar is appended.
     /// </para>
     /// Output: <c>RogueFluentValidationModuleInit.g.cs</c> (empty when suppressed).
     /// </summary>
     internal static string EmitModuleInit(DiscoveredValidators models)
     {
         var w = new CodeWriter();
-        w.Line("#if !NETSTANDARD2_0");
 
         if (HasNothingToRegister(models))
         {
-            w.Line("#endif");
             return w.ToString();
         }
 
@@ -118,7 +111,6 @@ internal static class RegistrationEmitter
         w.Close(); // class RogueFluentValidationModuleInit
         w.Dedent();
         w.Line("}");
-        w.Line("#endif");
         return w.ToString();
     }
 

@@ -24,9 +24,5 @@ public interface ICommandHandler<in TCommand>
     where TCommand : ICommand
 {
     /// <summary>Handles the command.</summary>
-#if NETSTANDARD2_0
-    ValueTask<Unit> Handle(TCommand command, CancellationToken cancellationToken);
-#else
     ValueTask Handle(TCommand command, CancellationToken cancellationToken);
-#endif
 }

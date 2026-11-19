@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
     <PackageId>SkathIO.Rogue</PackageId>
     <Description>SkathIO.Rogue — AOT-safe, source-generated CQRS/mediator for .NET.</Description>
@@ -23,13 +23,17 @@
   <!-- Pack the source generator DLL under analyzers/dotnet/cs so it runs in the CONSUMER's
        compilation when they reference the SkathIO.Rogue package (resolves the Phase 4 consumption
        blocker for package consumers; project-reference consumers still need the explicit analyzer
-       ProjectReference). The generator (netstandard2.0, single output assembly) is already built as
+       ProjectReference). The generator (single output assembly) is already built as
        an analyzer dependency of this project, so its DLL is resolved into @(Analyzer); pack exactly
        the SkathIO.Rogue.SourceGenerator assembly from that set. -->
   <Target Name="PackGenerator" BeforeTargets="_GetPackageFiles">
-    <PropertyGroup>
-      <_GeneratorDll>..\SkathIO.Rogue.SourceGenerator\bin\$(Configuration)\netstandard2.0\SkathIO.Rogue.SourceGenerator.dll</_GeneratorDll>
-    </PropertyGroup>
+    <!-- Ask the Roslyn component for its own output path, so this package does not repeat the
+         component's target framework. -->
+    <MSBuild Projects="..\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" PropertyName="_GeneratorDll" />
+    </MSBuild>
     <Error Condition="!Exists('$(_GeneratorDll)')"
            Text="Generator DLL not found at $(_GeneratorDll); build SkathIO.Rogue.SourceGenerator before packing." />
     <ItemGroup>
@@ -41,20 +45,5 @@
   </Target>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-  </ItemGroup>
-  <!-- IAsyncEnumerable<T> polyfill + ActivitySource/Meter for netstandard2.0 (in-box on net8+) -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
-    <PackageReference Include="System.Diagnostics.DiagnosticSource" />
-  </ItemGroup>
-  <!-- Public API surface differs by TFM (stream/object paths + ValueTask vs ValueTask<Unit>), -->
-  <!-- so PublicAPI.Shipped.txt and PublicAPI.Unshipped.txt are both supplied per TFM (PD-36). -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Shipped.txt" />
-    <AdditionalFiles Include="PublicAPI\netstandard2.0\PublicAPI.Unshipped.txt" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.0'">
-    <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Shipped.txt" />
-    <AdditionalFiles Include="PublicAPI\modern\PublicAPI.Unshipped.txt" />
   </ItemGroup>
 </Project>

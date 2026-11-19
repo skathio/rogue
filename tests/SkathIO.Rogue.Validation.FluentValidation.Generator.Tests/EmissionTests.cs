@@ -191,8 +191,8 @@ namespace MyApp.Orders
     {
         var text = ModuleInitText(SingleValidatorSource);
 
-        Assert.Contains("#if !NETSTANDARD2_0", text);
-        Assert.Contains("#endif", text);
+        // Every consumer is net8.0+, so the initializer is emitted unconditionally.
+        Assert.DoesNotContain("#if", text);
         Assert.Contains("[global::System.Runtime.CompilerServices.ModuleInitializer]", text);
 
         // Appends via the public, non-obsolete Register(...) entry point — a second, independent

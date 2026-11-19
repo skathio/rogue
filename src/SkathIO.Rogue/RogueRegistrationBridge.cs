@@ -3,7 +3,7 @@ namespace SkathIO.Rogue;
 /// <summary>
 /// Bridge between the DLL's <see cref="RogueServiceCollectionExtensions.AddRogue"/> and the
 /// source-generated registration in the consumer's compilation. The generator wires its
-/// registrar via a module initializer on net5+ (PD-15), calling <see cref="Register"/>.
+/// registrar via a module initializer (PD-15), calling <see cref="Register"/>.
 /// <para>
 /// This type and its <see cref="Register"/> method are <c>public</c> by necessity: the module
 /// initializer that calls <see cref="Register"/> is emitted into the <em>consumer's</em>
@@ -29,8 +29,7 @@ public static class RogueRegistrationBridge
     // IPipelineBehavior<,> order is deterministic and the obsolete getter can return a *defined*
     // value (the last appended registrar). Module initializers run during assembly load —
     // single-threaded per assembly, but multiple assemblies can load concurrently in some hosts —
-    // so the append must be thread-safe. List + lock ship on every TFM (incl. netstandard2.0), so
-    // no TFM split is needed.
+    // so the append must be thread-safe.
     private static readonly object Gate = new object();
 
     private static readonly System.Collections.Generic.List<System.Action<
@@ -41,8 +40,7 @@ public static class RogueRegistrationBridge
 
     /// <summary>
     /// Appends a generator-wired registrar to the append-only registry. Called once by each
-    /// consumer-compilation module initializer (net5+, PD-15); on netstandard2.0 the consumer calls
-    /// <c>RogueGeneratedRegistration.Register</c> explicitly. <see cref="RogueServiceCollectionExtensions.AddRogue"/>
+    /// consumer-compilation module initializer (PD-15). <see cref="RogueServiceCollectionExtensions.AddRogue"/>
     /// invokes every registered registrar, in append order. A <c>null</c> <paramref name="registrar"/>
     /// is ignored, and a registrar already present (by delegate identity) is not appended again
     /// (deduplication — a re-entrant or duplicate module-init append is a no-op). Not for direct

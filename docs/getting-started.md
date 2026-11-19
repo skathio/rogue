@@ -4,7 +4,7 @@ SkathIO.Rogue is an AOT-safe, source-generated CQRS/mediator for .NET. Handlers 
 wired at **compile time** — there is no runtime reflection or assembly scanning, so the whole thing
 works under Native AOT and IL trimming.
 
-Target frameworks: `netstandard2.0`, `net8.0`, `net10.0`.
+Target frameworks: `net8.0`, `net10.0`.
 
 ## Install
 
@@ -73,7 +73,7 @@ The core is CQS-explicit — each contract is independent (a type implementing t
 |-----------|---------|----------|-------|
 | `IQuery<T>` | `IQueryHandler<TQuery, T>` | `ISender.Send` | A read; one handler per query. |
 | `ICommand<T>` | `ICommandHandler<TCommand, T>` | `ISender.Send` | A write with a response; one handler. |
-| `ICommand` | `ICommandHandler<TCommand>` | `ISender.Send` | A write, void; returns `ValueTask` (`ValueTask<Unit>` on netstandard2.0). |
+| `ICommand` | `ICommandHandler<TCommand>` | `ISender.Send` | A write, void; returns `ValueTask`. |
 | `IEvent` | `IEventHandler<TEvent>` | `IPublisher.Publish` | Zero-to-many handlers, fan-out. |
 | `IStreamQuery<T>` | `IStreamQueryHandler<TQuery, T>` | `ISender.CreateStream` | Returns `IAsyncEnumerable<T>` (net8.0+). |
 
