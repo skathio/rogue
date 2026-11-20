@@ -25,6 +25,21 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. Register it
   with `AddRogueJobs()` next to `AddRogue()`; it registers a hosted service that runs the worker
   while the host runs (the package depends on `Microsoft.Extensions.Hosting.Abstractions`). Targets `net8.0` and `net10.0`; no reflection, AOT-safe.
+- **New package: `SkathIO.Rogue.Jobs.Postgres`**, a durable PostgreSQL job store. Register it with
+  `AddRoguePostgresJobs(dataSource)` next to `AddRogueJobs()`. `IPostgresJobScheduler.Enqueue` and
+  `EnqueueMany` take your own `NpgsqlTransaction` or `NpgsqlConnection`, so jobs commit or roll back
+  with your data. A batch is stored with one binary COPY, workers claim batches with
+  `FOR UPDATE SKIP LOCKED`, and each enqueue sends a NOTIFY on commit that wakes idle workers in
+  every process, with the poll interval as the fallback when the LISTEN connection is down. Jobs whose
+  worker stopped are claimed again once their lease runs out. Concurrent completions are written
+  together in one statement, and a pruner deletes finished jobs past their retention
+  (`PostgresJobsOptions`). The store creates and upgrades its own schema (`rogue_jobs` by default)
+  under an advisory lock, or you call `PostgresJobStore.MigrateAsync()` yourself with
+  `AutoMigrate = false`. The store passes the same contract tests as the in-memory store. Targets
+  `net8.0` and `net10.0`; depends on Npgsql; no reflection, AOT-safe.
+- `IJobScheduler.CreateJob(command)` serializes a command into a `NewJob` without storing it, for a
+  store's own enqueue; `JobSignal.Pulse()` lets a store wake the worker; `JobLimits.CheckQueue`
+  checks a queue name against the store contract.
 - `ROGUE019` warning, with a code fix: a `[Job]` type is not covered by a `[JsonSerializable]`
   attribute on the project's `JsonSerializerContext`. The fix adds the attribute.
 - **New package: `SkathIO.Rogue.Validation`**, source-generated request validation next to the

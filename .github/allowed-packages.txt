@@ -15,6 +15,7 @@
 #   src/SkathIO.Rogue.Validation.FluentValidation/SkathIO.Rogue.Validation.FluentValidation.csproj
 #   src/SkathIO.Rogue.Validation/SkathIO.Rogue.Validation.csproj
 #   src/SkathIO.Rogue.Jobs/SkathIO.Rogue.Jobs.csproj
+#   src/SkathIO.Rogue.Jobs.Postgres/SkathIO.Rogue.Jobs.Postgres.csproj
 #
 # Adding a new id to this file requires FIRST verifying that the package's
 # license is permissive (MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, MS-PL,
@@ -64,6 +65,8 @@ Microsoft.SourceLink.Common
 Microsoft.SourceLink.GitHub
 # MinVer — Apache-2.0 — verified 2026-06-12
 MinVer
+# Npgsql — PostgreSQL — verified 2026-11-20
+Npgsql
 # NETStandard.Library — MIT (.NET Foundation and Contributors, dotnet/standard LICENSE.TXT) — verified 2026-06-12
 NETStandard.Library
 # System.Buffers — MIT — verified 2026-06-12

@@ -153,3 +153,7 @@ static SkathIO.Rogue.Jobs.JobLease.operator ==(SkathIO.Rogue.Jobs.JobLease left,
 static SkathIO.Rogue.Jobs.JobLimits.TrimError(string! error) -> string!
 static SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions.AddJobDefinition(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, SkathIO.Rogue.Jobs.JobDefinition! definition) -> void
 static SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions.AddRogueJobs(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<SkathIO.Rogue.Jobs.JobsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+SkathIO.Rogue.Jobs.IJobScheduler.CreateJob<TCommand>(TCommand command) -> SkathIO.Rogue.Jobs.NewJob!
+SkathIO.Rogue.Jobs.JobSignal
+SkathIO.Rogue.Jobs.JobSignal.Pulse() -> void
+static SkathIO.Rogue.Jobs.JobLimits.CheckQueue(string! queue, string! parameter) -> void

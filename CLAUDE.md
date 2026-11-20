@@ -1,6 +1,6 @@
 # SkathIO.Rogue
 
-AOT-safe, source-generated CQRS/mediator for .NET, published to NuGet as seven packages. Handler
+AOT-safe, source-generated CQRS/mediator for .NET, published to NuGet as eight packages. Handler
 discovery and dispatch wiring happen at compile time in a Roslyn incremental generator: no runtime
 reflection, no assembly scanning. A static project site lives in `site/` (GitHub Pages).
 

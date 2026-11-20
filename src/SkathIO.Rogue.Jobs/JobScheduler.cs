@@ -54,6 +54,13 @@ internal sealed class JobScheduler : IJobScheduler
         return ids;
     }
 
+    public NewJob CreateJob<TCommand>(TCommand command)
+        where TCommand : notnull
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return Create(_registry.Get<TCommand>(), command);
+    }
+
     private NewJob Create<TCommand>(JobBinding<TCommand> binding, TCommand command)
         where TCommand : notnull
     {

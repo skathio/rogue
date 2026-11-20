@@ -11,7 +11,8 @@ namespace SkathIO.Rogue.Jobs.StoreContract;
 /// <summary>
 /// The behaviour every <see cref="IJobStore"/> must show, written once and run against each store: a
 /// store's test project derives from this class and creates its store on the given clock. Every test
-/// uses queues of its own, so a database store may share one database across the suite.
+/// uses queues of its own, so a database store may share one database across the suite. A store whose
+/// database runs in a container marks its class [RequiresDocker], so the suite skips without Docker.
 /// </summary>
 public abstract class JobStoreContract
 {
@@ -28,7 +29,7 @@ public abstract class JobStoreContract
 
     private static CancellationToken None => CancellationToken.None;
 
-    [Fact]
+    [StoreFact]
     public async Task EnqueuedJob_IsClaimedOnce_AsAttemptOne_WithItsPayload()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -49,7 +50,7 @@ public abstract class JobStoreContract
         Assert.Equal(JobState.Processing, (await store.GetAsync(job.Id, None))!.State);
     }
 
-    [Fact]
+    [StoreFact]
     public async Task Claim_TakesNothing_FromAnEmptyOrAnotherQueue()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -60,7 +61,7 @@ public abstract class JobStoreContract
         Assert.Empty(await store.ClaimAsync(Queue, 10, _lease, None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task Claim_TakesAtMostMaxCount_InEnqueueOrder()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -74,7 +75,7 @@ public abstract class JobStoreContract
         Assert.Equal(jobs.Skip(2).Select(static j => j.Id), rest.Select(static j => j.Id));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task ConcurrentClaims_NeverReturnTheSameJob()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -89,7 +90,7 @@ public abstract class JobStoreContract
         Assert.Equal(jobs.Select(static j => j.Id).OrderBy(static id => id), claimedIds.OrderBy(static id => id));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task Complete_MarksTheJobSucceeded_OnlyForTheClaimThatHoldsIt()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -108,7 +109,7 @@ public abstract class JobStoreContract
         Assert.Empty(await store.ClaimAsync(Queue, 10, _lease, None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task Retry_WaitsOutItsDelay_CountsTheNextAttempt_AndRecordsTheError()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -131,7 +132,7 @@ public abstract class JobStoreContract
         Assert.False(await store.RetryAsync(first.Lease, TimeSpan.Zero, "stale", None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task Retry_WithNoDelay_IsDueAtOnce_AndANegativeDelayIsRejected()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -143,7 +144,7 @@ public abstract class JobStoreContract
         Assert.Single(await store.ClaimAsync(Queue, 1, _lease, None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task DeadLetteredJob_IsNeverClaimedAgain()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -161,7 +162,7 @@ public abstract class JobStoreContract
         Assert.False(await store.DeadLetterAsync(claimed.Lease, "again", None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task ExpiredLease_IsClaimedAgain_AndTheEarlierClaimNoLongerCounts()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -181,7 +182,7 @@ public abstract class JobStoreContract
         Assert.Equal(1, await store.CompleteAsync(new[] { second.Lease }, None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task ExpiredLease_OnTheLastAttempt_DeadLettersTheJob()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -197,7 +198,7 @@ public abstract class JobStoreContract
         Assert.False(string.IsNullOrEmpty(snapshot.LastError));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task ExtendedLease_KeepsTheJobFromBeingClaimedAgain()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -214,7 +215,7 @@ public abstract class JobStoreContract
         Assert.Equal(1, await store.CompleteAsync(new[] { claimed.Lease }, None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task Release_PutsTheJobBack_WithoutCountingTheAttempt()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -229,7 +230,7 @@ public abstract class JobStoreContract
         Assert.False(await store.ReleaseAsync(claimed.Lease with { Attempt = 5 }, None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task LargeBatch_IsStoredWhole_AndClaimable()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -245,7 +246,7 @@ public abstract class JobStoreContract
         Assert.Equal(1000, claimed);
     }
 
-    [Fact]
+    [StoreFact]
     public async Task DuplicateId_FailsTheWholeBatch()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -262,7 +263,7 @@ public abstract class JobStoreContract
         Assert.Null(await store.GetAsync(twin.Id, None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task UnknownId_HasNoSnapshot()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -270,7 +271,7 @@ public abstract class JobStoreContract
         Assert.Null(await store.GetAsync(Guid.NewGuid(), None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task RecordedError_IsCutToTheLimit()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -284,7 +285,7 @@ public abstract class JobStoreContract
         Assert.Equal(new string('y', JobLimits.MaxErrorLength), (await store.GetAsync(claimed[1].Id, None))!.LastError);
     }
 
-    [Fact]
+    [StoreFact]
     public async Task Claim_RejectsAnOutOfRangeArgument_AndAcceptsTheSmallestValid()
     {
         IJobStore store = await CreateStoreAsync(Clock);
@@ -299,7 +300,7 @@ public abstract class JobStoreContract
         Assert.Single(await store.ClaimAsync(Queue, 1, TimeSpan.FromTicks(1), None));
     }
 
-    [Fact]
+    [StoreFact]
     public async Task Enqueue_RejectsANullBatch_AndAcceptsAnEmptyOne()
     {
         IJobStore store = await CreateStoreAsync(Clock);

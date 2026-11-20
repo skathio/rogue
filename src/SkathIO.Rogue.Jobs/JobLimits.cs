@@ -26,7 +26,13 @@ public static class JobLimits
 
     internal static void CheckKind(string kind, string parameter) => CheckName(kind, MaxKindLength, parameter);
 
-    internal static void CheckQueue(string queue, string parameter) => CheckName(queue, MaxQueueLength, parameter);
+    /// <summary>
+    /// Checks a queue name against the store contract: 1 to <see cref="MaxQueueLength"/> characters,
+    /// with no white space or control characters. Stores call it on the queue a claim names.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="queue"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="queue"/> is empty, too long or has white space.</exception>
+    public static void CheckQueue(string queue, string parameter) => CheckName(queue, MaxQueueLength, parameter);
 
     private static void CheckName(string value, int maxLength, string parameter)
     {

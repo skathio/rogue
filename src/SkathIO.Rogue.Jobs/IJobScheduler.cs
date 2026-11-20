@@ -22,4 +22,13 @@ public interface IJobScheduler
     /// <exception cref="ArgumentException">A serialized command is larger than <see cref="JobsOptions.MaxPayloadBytes"/>.</exception>
     ValueTask<IReadOnlyList<Guid>> EnqueueMany<TCommand>(IReadOnlyList<TCommand> commands, CancellationToken cancellationToken = default)
         where TCommand : notnull;
+
+    /// <summary>
+    /// Serializes <paramref name="command"/> into a job ready to store, without storing it: for a
+    /// store's own enqueue, such as one that joins the caller's database transaction.
+    /// </summary>
+    /// <exception cref="InvalidOperationException"><typeparamref name="TCommand"/> is not a job.</exception>
+    /// <exception cref="ArgumentException">The serialized command is larger than <see cref="JobsOptions.MaxPayloadBytes"/>.</exception>
+    NewJob CreateJob<TCommand>(TCommand command)
+        where TCommand : notnull;
 }
