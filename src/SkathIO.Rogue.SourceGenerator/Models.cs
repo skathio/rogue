@@ -147,7 +147,12 @@ internal sealed record DiscoveredModels(
     EquatableArray<EventHandlerModel> EventHandlers,
     EquatableArray<ProcessorModel> Processors,
     EquatableArray<StreamHandlerModel> StreamHandlers,
-    EquatableArray<RequestMessageModel> RequestMessages
+    EquatableArray<RequestMessageModel> RequestMessages,
+    /// <summary>
+    /// True when the SkathIO.Rogue.Validation package is referenced, so validated requests get their
+    /// <c>IAsyncRules&lt;T&gt;</c> step. A compilation with the marker attribute alone keeps only the hook.
+    /// </summary>
+    bool ValidationRuntime = false
 );
 
 /// <summary>The version of a referenced SkathIO.Rogue package, read from its assembly (ROGUE013).</summary>

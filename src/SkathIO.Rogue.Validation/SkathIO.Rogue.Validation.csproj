@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.Validation</PackageId>
+    <Description>Source-generated request validation for SkathIO.Rogue: rule attributes, a static Rules hook and DI-resolved async rules, checked inside the generated dispatch with no reflection.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The validation code is emitted by the core source generator, which this package brings in
+         through its SkathIO.Rogue dependency; the package itself carries only the contracts. -->
+    <ProjectReference Include="..\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+  </ItemGroup>
+</Project>

@@ -321,7 +321,7 @@ internal static class DispatcherEmitter
             methodName + "(" + requestFqn + " request, global::System.Threading.CancellationToken cancellationToken)");
 
         // Feature-module pre-handler steps run before the handler is resolved, on every path below.
-        FeatureModules.EmitPreHandlerSteps(w, handler, methodName);
+        FeatureModules.EmitPreHandlerSteps(w, handler, methodName, models.ValidationRuntime);
 
         // Resolve handler
         w.Line("var handler = " + SP + ".GetRequiredService<" + handlerIface + ">(" + SVC + ");");

@@ -11,6 +11,7 @@ The authoritative public surface is tracked per package in `PublicAPI.Shipped.tx
 | `SkathIO.Rogue` | Runtime: `AddRogue`, dispatcher, options, telemetry, publishers. Bundles the source generator as an analyzer asset. |
 | `SkathIO.Rogue.Abstractions` | Contracts only: the message/handler/behavior interfaces, `Unit`, marker types. Depend on this from layers that define messages but should not pull the runtime. |
 | `SkathIO.Rogue.Logging` | `LoggingBehavior`, `LoggingOptions`, `[LogPayload]`. |
+| `SkathIO.Rogue.Validation` | Source-generated validation for `[Validate]` requests: `ValidateAttribute`, the rule attributes and `RuleAttribute`, `ValidationErrors`, `IAsyncRules<T>`, `RogueValidationException` with `ToProblemDictionary()`. See [validation](validation.md). |
 | `SkathIO.Rogue.Validation.FluentValidation` | `ValidationBehavior` over FluentValidation. |
 | `SkathIO.Rogue.MediatR` | MediatR compatibility shim + migration analyzer (ROGM001–006) bundled as an analyzer asset. |
 
@@ -152,7 +153,8 @@ Migration analyzer diagnostics `ROGM001`–`ROGM006` — see [migration-guide](m
 
 ## Diagnostics
 
-Compile-time generator diagnostics: `ROGUE001`–`ROGUE006` + `ROGUE010`–`ROGUE013`
+Compile-time generator diagnostics: `ROGUE001`–`ROGUE006` + `ROGUE010`–`ROGUE018`
 (`ROGUE007` is intentionally unused) — see
-[getting-started](getting-started.md#troubleshooting). Migration analyzer diagnostics:
+[getting-started](getting-started.md#troubleshooting); `ROGUE014`–`ROGUE018` cover validation
+misuse (see [validation](validation.md#diagnostics)). Migration analyzer diagnostics:
 `ROGM001`–`ROGM006` (see [migration-guide](migration-guide.md)).

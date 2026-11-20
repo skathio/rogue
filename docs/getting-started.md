@@ -117,6 +117,11 @@ runtime exceptions:
 | `ROGUE011` | A type implements multiple CQS contracts (ambiguous under the CQS-explicit core). |
 | `ROGUE012` | A MediatR-adapter request has a command-vs-query mapping conflict. |
 | `ROGUE013` | A feature package (`SkathIO.Rogue.Validation`, `.Jobs`, `.Messaging`) has a different major.minor version than the core `SkathIO.Rogue` package. |
+| `ROGUE014` | A `[Validate]` type, or a type containing it, is not `partial` ([validation](validation.md#diagnostics)). |
+| `ROGUE015` | A validation rule attribute cannot check the property it is placed on. |
+| `ROGUE016` | A `Rules` method on a `[Validate]` type does not have the hook's signature. |
+| `ROGUE017` | A `[Validate]` type comes from an assembly built without the generator, so it cannot be validated. |
+| `ROGUE018` | Validation rules are declared for a type without `[Validate]`, so they never run (warning). |
 
 (`ROGUE007` is intentionally unused — a removed-from-scope id, never reissued.)
 

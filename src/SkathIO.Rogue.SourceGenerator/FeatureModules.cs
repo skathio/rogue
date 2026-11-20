@@ -21,9 +21,11 @@ internal sealed record FeatureModule(
 /// </summary>
 internal static class FeatureModules
 {
+    internal const string ValidationModule = "Validation";
+
     internal static readonly FeatureModule[] All =
     {
-        new FeatureModule("Validation", WellKnownTypeNames.ValidateAttribute, "SkathIO.Rogue.Validation"),
+        new FeatureModule(ValidationModule, WellKnownTypeNames.ValidateAttribute, "SkathIO.Rogue.Validation"),
         new FeatureModule("Jobs", WellKnownTypeNames.JobAttribute, "SkathIO.Rogue.Jobs"),
         new FeatureModule("Messaging", WellKnownTypeNames.MessageAttribute, "SkathIO.Rogue.Messaging"),
     };
@@ -34,6 +36,18 @@ internal static class FeatureModules
     /// </summary>
     internal static string PreHandlerHookName(string module, string sendMethodName)
         => "PreHandle_" + module + "_" + sendMethodName;
+
+    internal static bool Marks(HandlerModel handler, string module)
+    {
+        foreach (string marked in handler.MarkedModules)
+        {
+            if (marked == module)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     internal static bool HasMarkedRequest(DiscoveredModels models)
     {
@@ -55,11 +69,52 @@ internal static class FeatureModules
         }
     }
 
-    internal static void EmitPreHandlerSteps(CodeWriter w, HandlerModel handler, string methodName)
+    /// <summary>
+    /// Emits the pre-handler steps at the top of a marked request's <c>Send_X</c>: one hook call per
+    /// module, then, for a validated request when the validation package is referenced, the
+    /// <c>IAsyncRules&lt;T&gt;</c> step. That step can complete asynchronously, so it splits the method:
+    /// <c>Send_X</c> ends by calling <c>Send_X_Handle</c>, which this method opens and whose body (the
+    /// unchanged handler dispatch) the caller goes on to write.
+    /// </summary>
+    internal static void EmitPreHandlerSteps(CodeWriter w, HandlerModel handler, string methodName, bool validationRuntime)
     {
         foreach (string module in handler.MarkedModules)
         {
             w.Line(PreHandlerHookName(module, methodName) + "(request, cancellationToken);");
         }
+
+        if (validationRuntime && Marks(handler, ValidationModule))
+        {
+            EmitAsyncRulesStep(w, handler, methodName);
+        }
+    }
+
+    private static void EmitAsyncRulesStep(CodeWriter w, HandlerModel handler, string methodName)
+    {
+        string requestFqn = DispatcherEmitter.ToGlobalFqn(handler.RequestFqn);
+        string responseFqn = handler.ResponseFqn is null ? "global::SkathIO.Rogue.Unit" : DispatcherEmitter.ToGlobalFqn(handler.ResponseFqn);
+        string valueTask = "global::System.Threading.Tasks.ValueTask<" + responseFqn + ">";
+        string parameters = "(" + requestFqn + " request, global::System.Threading.CancellationToken cancellationToken)";
+
+        // With no IAsyncRules<T> registered, DI hands back its cached empty array and the runner returns
+        // a completed task, so the valid path stays synchronous and allocation-free.
+        w.Line("var asyncRules = global::SkathIO.Rogue.Validation.AsyncRulesRunner.CheckAsync(");
+        w.Line("    global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<global::System.Collections.Generic.IEnumerable<global::SkathIO.Rogue.Validation.IAsyncRules<" + requestFqn + ">>>(_serviceProvider),");
+        w.Line("    request, cancellationToken);");
+        w.Open("if (!asyncRules.IsCompletedSuccessfully)");
+        w.Line("return " + methodName + "_AfterAsyncRules(asyncRules, request, cancellationToken);");
+        w.Close();
+        w.Line("asyncRules.GetAwaiter().GetResult();");
+        w.Line("return " + methodName + "_Handle(request, cancellationToken);");
+        w.Close();
+        w.Line();
+
+        w.Open("private async " + valueTask + " " + methodName + "_AfterAsyncRules(global::System.Threading.Tasks.ValueTask asyncRules, " + parameters.Substring(1));
+        w.Line("await asyncRules.ConfigureAwait(false);");
+        w.Line("return await " + methodName + "_Handle(request, cancellationToken).ConfigureAwait(false);");
+        w.Close();
+        w.Line();
+
+        w.Open("private " + valueTask + " " + methodName + "_Handle" + parameters);
     }
 }

@@ -58,6 +58,25 @@ The generated concrete fast path (`RogueDispatcher.Send{Request}`) is the fastes
 handler resolution, not dispatch overhead. `bench/RESULTS.md` states this plainly — do not read the
 published interface-path number as the concrete-path number.
 
+## Validation engines
+
+`InHouseValidationBenchmarks` in `bench/SkathIO.Rogue.Benchmarks.Validation` checks the same order
+(a nested customer and three lines) with `SkathIO.Rogue.Validation`'s generated validator and with
+FluentValidation 12's `Validate`, outside dispatch, on a valid order and on one with two broken lines.
+One local ShortRun (BenchmarkDotNet, .NET 10, 2026-11-20; not yet a committed baseline, so treat the
+figures as indicative):
+
+| Method | Mean | Allocated |
+|--------|-----:|----------:|
+| FluentValidation, valid | 2,506 ns | 4,064 B |
+| SkathIO.Rogue.Validation, valid | 25 ns | 0 B |
+| FluentValidation, two broken lines | 5,834 ns | 8,536 B |
+| SkathIO.Rogue.Validation, two broken lines | 303 ns | 888 B |
+
+```bash
+dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks.Validation -- --filter '*InHouseValidation*' --job short
+```
+
 ## Honesty: reporting where Rogue is not fastest
 
 We commit to documenting — honestly and in the open — any realistic scenario where Rogue does **not**

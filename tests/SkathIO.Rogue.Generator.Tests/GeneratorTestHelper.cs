@@ -302,7 +302,7 @@ internal static class GeneratorTestHelper
     /// <c>RogueDispatcher</c>, and resolves services via <c>ServiceProviderServiceExtensions</c> —
     /// has every type it references available at compile time.
     /// </summary>
-    private static MetadataReference[] GetRuntimeReferences()
+    internal static MetadataReference[] GetRuntimeReferences()
     {
         string runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
 

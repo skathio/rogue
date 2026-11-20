@@ -24,36 +24,15 @@ public sealed class RogueGenerator : IIncrementalGenerator
         // Collect all candidate models into a single stable array
         IncrementalValueProvider<ImmutableArray<DiscoveredItem?>> allModels = candidates.Collect();
 
-        // ── Metadata behavior scan (PD-17) ──────────────────────────────────────────────
-        // Discover IPipelineBehavior<,> / IStreamPipelineBehavior<,> implementors in DIRECTLY
-        // referenced assemblies. Uses MetadataReferencesProvider (NOT CompilationProvider) so this
-        // stage re-fires only when the reference set changes, not on every source keystroke.
-        //
-        // v1 Known Limitation (PD-17 "Transitive assembly scan"): only directly-referenced
-        // assemblies are walked. Behaviors in transitively-referenced assemblies are not discovered.
-        IncrementalValuesProvider<BehaviorModel?> metadataBehaviors = context.MetadataReferencesProvider
-            .Combine(context.CompilationProvider)
-            .SelectMany(static (pair, ct) =>
-            {
-                (MetadataReference reference, Compilation compilation) = pair;
-                if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol asm)
-                    return ImmutableArray<BehaviorModel?>.Empty;
-
-                ImmutableArray<BehaviorModel?>.Builder results =
-                    ImmutableArray.CreateBuilder<BehaviorModel?>();
-                WalkNamespaceForBehaviors(asm.GlobalNamespace, results, ct);
-                return results.ToImmutable();
-            })
-            .Where(static b => b is not null);
-
-        IncrementalValueProvider<ImmutableArray<BehaviorModel?>> allMetadataBehaviors =
-            metadataBehaviors.Collect();
+        IncrementalValueProvider<ImmutableArray<BehaviorModel?>> allMetadataBehaviors = MetadataBehaviors(context);
 
         // Stage 3: combine source-discovered items and metadata-discovered behaviors into a single
         // DiscoveredModels value (pure transformation, no Roslyn objects survive past this point).
         IncrementalValueProvider<DiscoveredModels> discovered = allModels
             .Combine(allMetadataBehaviors)
-            .Select(static (pair, _) => BuildDiscoveredModels(pair.Left, pair.Right));
+            .Select(static (pair, _) => BuildDiscoveredModels(pair.Left, pair.Right))
+            .Combine(ValidationModule.RuntimeAvailable(context))
+            .Select(static (pair, _) => pair.Left with { ValidationRuntime = pair.Right });
 
         // Phase 3.2: real diagnostic emission.
         context.RegisterSourceOutput(discovered, static (spc, models) => EmitDiagnostics(spc, models));
@@ -88,6 +67,36 @@ public sealed class RogueGenerator : IIncrementalGenerator
             spc.AddSource("RogueModuleInit.g.cs",
                 SourceText.From(fileHeader + RegistrationEmitter.EmitModuleInit(models), Encoding.UTF8));
         });
+
+        // Feature module: validation code for [Validate] requests (only when its package is referenced).
+        ValidationModule.Register(context, discovered);
+    }
+
+    private static IncrementalValueProvider<ImmutableArray<BehaviorModel?>> MetadataBehaviors(IncrementalGeneratorInitializationContext context)
+    {
+        // ── Metadata behavior scan (PD-17) ──────────────────────────────────────────────
+        // Discover IPipelineBehavior<,> / IStreamPipelineBehavior<,> implementors in DIRECTLY
+        // referenced assemblies. Uses MetadataReferencesProvider (NOT CompilationProvider) so this
+        // stage re-fires only when the reference set changes, not on every source keystroke.
+        //
+        // v1 Known Limitation (PD-17 "Transitive assembly scan"): only directly-referenced
+        // assemblies are walked. Behaviors in transitively-referenced assemblies are not discovered.
+        IncrementalValuesProvider<BehaviorModel?> metadataBehaviors = context.MetadataReferencesProvider
+            .Combine(context.CompilationProvider)
+            .SelectMany(static (pair, ct) =>
+            {
+                (MetadataReference reference, Compilation compilation) = pair;
+                if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol asm)
+                    return ImmutableArray<BehaviorModel?>.Empty;
+
+                ImmutableArray<BehaviorModel?>.Builder results =
+                    ImmutableArray.CreateBuilder<BehaviorModel?>();
+                WalkNamespaceForBehaviors(asm.GlobalNamespace, results, ct);
+                return results.ToImmutable();
+            })
+            .Where(static b => b is not null);
+
+        return metadataBehaviors.Collect();
     }
 
     // ─── Syntax predicate ───────────────────────────────────────────────────────────

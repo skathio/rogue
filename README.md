@@ -298,6 +298,7 @@ See the [migration guide](docs/migration-guide.md) and the [before/after sample]
 | `SkathIO.Rogue` | Core library — source generator + DI wiring + dispatcher |
 | `SkathIO.Rogue.Abstractions` | Interfaces only — for library authors |
 | `SkathIO.Rogue.Logging` | `LoggingBehavior<,>` — structured request/response logging *(v1.0)* |
+| `SkathIO.Rogue.Validation` | Source-generated `[Validate]` request validation — attributes, a `Rules` hook, async rules from DI, 0 B on the valid path ([docs](docs/validation.md)) |
 | `SkathIO.Rogue.Validation.FluentValidation` | `ValidationBehavior<,>` — FluentValidation pipeline integration *(v1.0)* |
 | `SkathIO.Rogue.MediatR` | MediatR compatibility shim — `IMediator` adapter *(v1.0)* |
 

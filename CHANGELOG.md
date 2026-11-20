@@ -8,6 +8,21 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ### Added
 
+- **New package: `SkathIO.Rogue.Validation`**, source-generated request validation next to the
+  FluentValidation package (which stays supported). Mark a request `[Validate]` and `partial`, then
+  declare rules as attributes (`[NotEmpty]`, `[MinimumLength]`, `[MaximumLength]`, `[GreaterThan]`,
+  `[LessThan]`, or your own `RuleAttribute`), in a `private static void Rules(T x, ref ValidationErrors
+  errors)` hook, and in `IAsyncRules<T>` classes resolved from DI (registered Scoped by the generator).
+  Nested `[Validate]` objects and collections are checked with ASP.NET-style paths such as
+  `Lines[2].Sku`. The checks run inside the request's generated dispatch, before the handler, and a
+  failure throws `RogueValidationException`, whose `ToProblemDictionary()` feeds
+  `Results.ValidationProblem`. The valid path allocates nothing, and requests without `[Validate]`
+  are generated exactly as before. Targets `net8.0` and `net10.0`; no reflection, AOT-safe. See
+  `docs/validation.md`.
+- Generator diagnostics for validation misuse: `ROGUE014` (a `[Validate]` type is not partial),
+  `ROGUE015` (a rule does not fit its property), `ROGUE016` (a `Rules` method has the wrong
+  signature) and `ROGUE017` (a `[Validate]` type from an assembly built without the generator) are
+  errors; `ROGUE018` warns when rules are declared for a type without `[Validate]`.
 - **`ROGUE013` warning: feature package version mismatch.** The upcoming feature packages
   (`SkathIO.Rogue.Validation`, `SkathIO.Rogue.Jobs`, `SkathIO.Rogue.Messaging`) have no generator of
   their own; the core source generator emits their code. When one of them is referenced with a
