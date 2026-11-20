@@ -7,13 +7,20 @@ namespace SkathIO.Rogue.Jobs;
 
 /// <summary>
 /// Every job kind known to this process, bound to its serializer. Built once from the generated
-/// definitions; it fails at startup, naming each command, when a kind is taken twice or a command is
-/// not covered by the serializer context.
+/// definitions; it fails at startup, naming each command, when a kind is taken twice or a
+/// <c>[Job]</c> command is not covered by the serializer context.
 /// </summary>
+/// <remarks>
+/// A command without <c>[Job]</c> is a job only when the serializer context covers it; otherwise it is
+/// left out and enqueueing it fails, naming the missing attribute. The build reports an uncovered
+/// <c>[Job]</c> command (ROGUE019) but cannot know which other commands are meant as jobs, so only
+/// marked commands may fail startup: adding the package never breaks a project the build did not warn.
+/// </remarks>
 internal sealed class JobRegistry
 {
     private readonly Dictionary<string, JobBinding> _byKind = new Dictionary<string, JobBinding>(StringComparer.Ordinal);
     private readonly Dictionary<Type, JobBinding> _byType = new Dictionary<Type, JobBinding>();
+    private readonly HashSet<Type> _unbound = new HashSet<Type>();
 
     public JobRegistry(IEnumerable<JobDefinition> definitions, JobsOptions options)
     {
@@ -25,26 +32,24 @@ internal sealed class JobRegistry
         var uncovered = new List<string>();
         foreach (JobDefinition definition in definitions)
         {
-            JsonSerializerContext context = options.SerializerContext
-                ?? throw new InvalidOperationException("Jobs are registered but JobsOptions.SerializerContext is not set. Set it in AddRogueJobs to a JsonSerializerContext with [JsonSerializable(typeof(T))] for each job command.");
-
-            if (_byKind.TryGetValue(definition.Kind, out JobBinding? existing))
+            if (TryBind(definition, options))
             {
-                if (existing.CommandType != definition.CommandType)
-                {
-                    throw new InvalidOperationException("The job kind '" + definition.Kind + "' is used by both " + existing.CommandType + " and " + definition.CommandType + ". Give one a different [Job(Kind = ...)].");
-                }
                 continue;
             }
 
-            JobBinding? binding = definition.Bind(context, options);
-            if (binding is null)
+            // The generator passes JobDefaults.None exactly for a command without [Job].
+            if (ReferenceEquals(definition.Defaults, JobDefaults.None))
+            {
+                _unbound.Add(definition.CommandType);
+            }
+            else if (options.SerializerContext is null)
+            {
+                throw new InvalidOperationException("Jobs are registered but JobsOptions.SerializerContext is not set. Set it in AddRogueJobs to a JsonSerializerContext with [JsonSerializable(typeof(T))] for each job command.");
+            }
+            else
             {
                 uncovered.Add(definition.CommandType.ToString());
-                continue;
             }
-            _byKind.Add(binding.Kind, binding);
-            _byType.Add(binding.CommandType, binding);
         }
 
         if (uncovered.Count > 0)
@@ -70,7 +75,40 @@ internal sealed class JobRegistry
         {
             return typed;
         }
+        if (_unbound.Contains(typeof(TCommand)))
+        {
+            throw new InvalidOperationException(typeof(TCommand) + " cannot be enqueued: JobsOptions.SerializerContext does not cover it. Add [JsonSerializable(typeof(" + typeof(TCommand).Name + "))] to the context.");
+        }
         throw new InvalidOperationException(typeof(TCommand) + " is not a job. A job is a command with a handler in a project that references SkathIO.Rogue.Jobs; enqueue it by its own type.");
+    }
+
+    // Binds the definition to the serializer context; false when there is no context or it does not
+    // cover the command. A kind already bound to the same command counts as bound.
+    private bool TryBind(JobDefinition definition, JobsOptions options)
+    {
+        JsonSerializerContext? context = options.SerializerContext;
+        if (context is null)
+        {
+            return false;
+        }
+
+        if (_byKind.TryGetValue(definition.Kind, out JobBinding? existing))
+        {
+            if (existing.CommandType != definition.CommandType)
+            {
+                throw new InvalidOperationException("The job kind '" + definition.Kind + "' is used by both " + existing.CommandType + " and " + definition.CommandType + ". Give one a different [Job(Kind = ...)].");
+            }
+            return true;
+        }
+
+        JobBinding? binding = definition.Bind(context, options);
+        if (binding is null)
+        {
+            return false;
+        }
+        _byKind.Add(binding.Kind, binding);
+        _byType.Add(binding.CommandType, binding);
+        return true;
     }
 
     private IReadOnlyList<string> ResolveQueues(JobsOptions options)

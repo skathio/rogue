@@ -11,8 +11,9 @@ public sealed class JobsOptions
     public const int MaxBatchSize = 10_000;
 
     /// <summary>
-    /// The source-generated context that serializes job payloads. Required once any job exists; every
-    /// job command must be covered by a <c>[JsonSerializable]</c> attribute on it.
+    /// The source-generated context that serializes job payloads. Required once any <c>[Job]</c>
+    /// command exists, and each must be covered by a <c>[JsonSerializable]</c> attribute on it; a
+    /// command without <c>[Job]</c> is a job only when the context covers it.
     /// </summary>
     public JsonSerializerContext? SerializerContext { get; set; }
 
@@ -50,8 +51,9 @@ public sealed class JobsOptions
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// How long a claimed job stays reserved for its worker. The worker renews the lease while the job
-    /// runs; a job whose worker stopped renewing is claimed again once the lease runs out.
+    /// How long a claimed job stays reserved for its worker. The worker renews the lease from the claim
+    /// until the job's outcome is stored, waiting jobs included; a job whose worker stopped renewing is
+    /// claimed again once the lease runs out.
     /// </summary>
     public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
 

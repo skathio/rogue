@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace SkathIO.Rogue.Jobs;
 
@@ -8,8 +9,9 @@ namespace SkathIO.Rogue.Jobs;
 public static class JobsServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers <see cref="IJobScheduler"/>, <see cref="JobWorker"/> and, unless a store is already
-    /// registered, an <see cref="InMemoryJobStore"/>. The job kinds come from the code the Rogue source
+    /// Registers <see cref="IJobScheduler"/>, <see cref="JobWorker"/>, a hosted service that runs the
+    /// worker while the host runs and, unless a store is already registered, an
+    /// <see cref="InMemoryJobStore"/>. The job kinds come from the code the Rogue source
     /// generator emits into each project that references this package, registered by
     /// <c>AddRogue</c>, which must also be called. Only the first call's options apply.
     /// </summary>
@@ -30,6 +32,7 @@ public static class JobsServiceCollectionExtensions
             sp.GetRequiredService<IJobStore>(),
             sp.GetRequiredService<JobSignal>()));
         services.TryAddSingleton(static sp => new JobWorker(sp.GetRequiredService<JobRegistry>(), sp.GetRequiredService<IJobStore>(), sp));
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, JobWorkerService>(static sp => new JobWorkerService(sp.GetRequiredService<JobWorker>())));
         return services;
     }
 

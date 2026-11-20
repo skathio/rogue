@@ -31,6 +31,38 @@ public sealed class JobBackoffTests
         Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), JobBackoff.Jitter(JobBackoff.Delay(_first, 2, _max), jitter, random));
     }
 
+    // Past attempt 1024 the doubling factor is infinite; a zero first delay must not turn into NaN,
+    // which casts to a negative tick count on .NET 8.
+    [Theory]
+    [InlineData(1024)]
+    [InlineData(1025)]
+    [InlineData(int.MaxValue)]
+    public void ZeroFirstDelay_StaysZero_AtAnyAttempt(int attempt)
+    {
+        Assert.Equal(TimeSpan.Zero, JobBackoff.Delay(TimeSpan.Zero, attempt, _max));
+    }
+
+    [Theory]
+    [InlineData(1025)]
+    [InlineData(int.MaxValue)]
+    public void Delay_PastTheDoublingRange_IsTheCap(int attempt)
+    {
+        Assert.Equal(_max, JobBackoff.Delay(_first, attempt, _max));
+        Assert.Equal(TimeSpan.MaxValue, JobBackoff.Delay(_first, attempt, TimeSpan.MaxValue));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 0.999999)]
+    [InlineData(1, 1)]
+    public void Jitter_IsNeverNegative_NorLongerThanTheDelay(double jitter, double random)
+    {
+        TimeSpan jittered = JobBackoff.Jitter(TimeSpan.MaxValue, jitter, random);
+
+        Assert.InRange(jittered, TimeSpan.Zero, TimeSpan.MaxValue);
+        Assert.Equal(TimeSpan.Zero, JobBackoff.Jitter(TimeSpan.Zero, jitter, random));
+    }
+
     [Fact]
     public void ZeroFirstDelay_RetriesAtOnce()
     {

@@ -138,7 +138,7 @@ jobs:
       - name: Check transitive dependency allow-list (AC-H / NFR-LIC-1)
         run: |
           # Enumerate the union of all top-level + transitive package ids (all
-          # target frameworks) across the 5 packable projects, and fail the
+          # target frameworks) across the packable projects, and fail the
           # build if any id is not on the committed allow-list
           # (.github/allowed-packages.txt). The allow-list gates on package
           # identity: adding a new id requires a human to first verify the
@@ -149,6 +149,8 @@ jobs:
             "src/SkathIO.Rogue.MediatR/SkathIO.Rogue.MediatR.csproj"
             "src/SkathIO.Rogue.Logging/SkathIO.Rogue.Logging.csproj"
             "src/SkathIO.Rogue.Validation.FluentValidation/SkathIO.Rogue.Validation.FluentValidation.csproj"
+            "src/SkathIO.Rogue.Validation/SkathIO.Rogue.Validation.csproj"
+            "src/SkathIO.Rogue.Jobs/SkathIO.Rogue.Jobs.csproj"
           )
 
           : > closure-ids.txt

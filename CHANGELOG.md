@@ -17,11 +17,14 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   dead-lettered at once, and on shutdown running jobs are put back without counting the attempt.
   The core source generator emits the kind-to-invoker map, so jobs are found by a stable kind, never
   by a type name, and requests are dispatched exactly as before. Payloads go through your
-  System.Text.Json `JsonSerializerContext` (`JobsOptions.SerializerContext`), checked at startup.
-  `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
+  System.Text.Json `JsonSerializerContext` (`JobsOptions.SerializerContext`), checked at startup
+  for `[Job]` commands; a command without `[Job]` is a job only when the context covers it, so
+  adding the package never fails startup without a build warning. Every claimed job keeps its lease,
+  renewed while it waits for a slot or runs, until its outcome is stored, and a lease the store no
+  longer holds is logged as a warning. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
   follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. Register it
-  with `AddRogueJobs()` next to `AddRogue()`, and call `JobWorker.RunAsync` from a hosted service.
-  Targets `net8.0` and `net10.0`; no reflection, AOT-safe.
+  with `AddRogueJobs()` next to `AddRogue()`; it registers a hosted service that runs the worker
+  while the host runs (the package depends on `Microsoft.Extensions.Hosting.Abstractions`). Targets `net8.0` and `net10.0`; no reflection, AOT-safe.
 - `ROGUE019` warning, with a code fix: a `[Job]` type is not covered by a `[JsonSerializable]`
   attribute on the project's `JsonSerializerContext`. The fix adds the attribute.
 - **New package: `SkathIO.Rogue.Validation`**, source-generated request validation next to the

@@ -1,6 +1,6 @@
 # SkathIO.Rogue
 
-AOT-safe, source-generated CQRS/mediator for .NET, published to NuGet as five packages. Handler
+AOT-safe, source-generated CQRS/mediator for .NET, published to NuGet as seven packages. Handler
 discovery and dispatch wiring happen at compile time in a Roslyn incremental generator: no runtime
 reflection, no assembly scanning. A static project site lives in `site/` (GitHub Pages).
 
@@ -47,9 +47,10 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 - Public API is tracked by PublicApiAnalyzers. A new public member needs a `///` doc comment and an
   entry in `PublicAPI.Unshipped.txt` (one pair per project, at the project root).
 - Packages are pinned centrally in `Directory.Packages.props` (no versions in csproj).
-- Any new package in the restore graph of the five packable projects (build-only tools included)
+- Any new package in the restore graph of a packable project (build-only tools included)
   must be added to `.github/allowed-packages.txt` with a license annotation, after a human checks the
   license is permissive (`docs/governance.md`, "Dependency policy"). The `license-check` job fails otherwise.
+  A new packable project goes into that job's `packable_projects` list and the allow-list header.
 - Never reference `MediatR` or `Mediator.*` packages from `src/`; never use `BinaryFormatter`.
 - `Microsoft.CodeAnalysis.CSharp` stays at 5.0.0: it is compiled into the shipped generator, and a
   higher pin breaks consumers on older SDKs. Dependabot ignores it on purpose.

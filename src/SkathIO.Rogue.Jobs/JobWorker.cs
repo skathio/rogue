@@ -17,9 +17,10 @@ namespace SkathIO.Rogue.Jobs;
 /// dead-lettered at once.
 /// </summary>
 /// <remarks>
-/// Run it from the host: call <see cref="RunAsync"/> from a hosted service's execute method with the
-/// host's stopping token. On shutdown, running jobs are cancelled and put back without counting the
-/// attempt.
+/// <c>AddRogueJobs</c> registers a hosted service that calls <see cref="RunAsync"/> with the host's
+/// stopping token, so a host runs the worker without further code. On shutdown, running jobs are
+/// cancelled and put back without counting the attempt. Every claimed job keeps its lease, renewed
+/// every third of <see cref="JobsOptions.LeaseDuration"/>, until its outcome is stored.
 /// </remarks>
 public sealed class JobWorker
 {
@@ -42,6 +43,14 @@ public sealed class JobWorker
     private static readonly Action<ILogger, Exception?> _logRenewFailed =
         LoggerMessage.Define(LogLevel.Warning, new EventId(5, "JobLeaseRenewFailed"),
             "Renewing the leases of running jobs failed; the worker tries again shortly.");
+
+    private static readonly Action<ILogger, int, int, Exception?> _logRenewLost =
+        LoggerMessage.Define<int, int>(LogLevel.Warning, new EventId(6, "JobLeaseLost"),
+            "The store no longer held {Lost} of the {Held} job leases this worker renewed; those jobs may run again on another worker.");
+
+    private static readonly Action<ILogger, Guid, string, string, Exception?> _logSettleLost =
+        LoggerMessage.Define<Guid, string, string>(LogLevel.Warning, new EventId(7, "JobOutcomeLeaseLost"),
+            "The store no longer held the lease of job {JobId} ({JobKind}), so its outcome '{Outcome}' was not recorded; the job may run again.");
 
     private readonly JobRegistry _registry;
     private readonly IJobStore _store;
@@ -71,7 +80,11 @@ public sealed class JobWorker
     {
         JobsOptions options = _registry.Options;
         using var slots = new SemaphoreSlim(options.MaxConcurrency, options.MaxConcurrency);
-        Task renewing = RenewLeasesUntilStoppedAsync(stoppingToken);
+
+        // Renewal stops only once every claimed job has settled, not when the host starts stopping:
+        // jobs still being put back keep their leases until they are.
+        using var renewal = new CancellationTokenSource();
+        Task renewing = RenewLeasesUntilAsync(renewal.Token);
         bool holdingSlot = false;
         try
         {
@@ -91,6 +104,7 @@ public sealed class JobWorker
                 // The first job runs in the slot already held. Only this loop takes slots, so the ones
                 // counted before the claim are still free for the rest.
                 holdingSlot = false;
+                Hold(claimed);
                 for (int i = 0; i < claimed.Count; i++)
                 {
                     if (i > 0)
@@ -115,6 +129,7 @@ public sealed class JobWorker
             {
                 await slots.WaitAsync(CancellationToken.None).ConfigureAwait(false);
             }
+            await renewal.CancelAsync().ConfigureAwait(false);
             await renewing.ConfigureAwait(false);
         }
     }
@@ -127,24 +142,41 @@ public sealed class JobWorker
     {
         JobsOptions options = _registry.Options;
         using var slots = new SemaphoreSlim(options.MaxConcurrency, options.MaxConcurrency);
+
+        // A batch can outlast one lease while its jobs wait for a slot, so this path renews as well,
+        // until every job it claimed has settled.
+        using var renewal = new CancellationTokenSource();
+        Task renewing = RenewLeasesUntilAsync(renewal.Token);
         int ran = 0;
-        foreach (string queue in _registry.Queues)
+        try
         {
-            IReadOnlyList<ClaimedJob> claimed = await _store.ClaimAsync(queue, options.BatchSize, options.LeaseDuration, cancellationToken).ConfigureAwait(false);
-            var running = new Task[claimed.Count];
-            for (int i = 0; i < claimed.Count; i++)
+            foreach (string queue in _registry.Queues)
             {
-                // Not cancellable: every claimed job must run or be put back, never abandoned.
-                await slots.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-                running[i] = RunInSlotAsync(claimed[i], slots, cancellationToken);
+                IReadOnlyList<ClaimedJob> claimed = await _store.ClaimAsync(queue, options.BatchSize, options.LeaseDuration, cancellationToken).ConfigureAwait(false);
+                Hold(claimed);
+                var running = new Task[claimed.Count];
+                for (int i = 0; i < claimed.Count; i++)
+                {
+                    // Not cancellable: every claimed job must run or be put back, never abandoned.
+                    await slots.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+                    running[i] = RunInSlotAsync(claimed[i], slots, cancellationToken);
+                }
+                await Task.WhenAll(running).ConfigureAwait(false);
+                ran += claimed.Count;
             }
-            await Task.WhenAll(running).ConfigureAwait(false);
-            ran += claimed.Count;
+        }
+        finally
+        {
+            await renewal.CancelAsync().ConfigureAwait(false);
+            await renewing.ConfigureAwait(false);
         }
         return ran;
     }
 
-    /// <summary>Extends the leases of the running jobs and returns how many the store still held.</summary>
+    /// <summary>
+    /// Extends the leases of the claimed jobs that have not settled, waiting or running, and returns
+    /// how many the store still held; logs a warning when it held fewer.
+    /// </summary>
     internal async Task<int> RenewLeasesAsync(CancellationToken cancellationToken)
     {
         if (_running.IsEmpty)
@@ -152,7 +184,12 @@ public sealed class JobWorker
             return 0;
         }
         var leases = new List<JobLease>(_running.Values);
-        return await _store.ExtendLeasesAsync(leases, _registry.Options.LeaseDuration, cancellationToken).ConfigureAwait(false);
+        int held = await _store.ExtendLeasesAsync(leases, _registry.Options.LeaseDuration, cancellationToken).ConfigureAwait(false);
+        if (held < leases.Count)
+        {
+            _logRenewLost(_logger, leases.Count - held, leases.Count, null);
+        }
+        return held;
     }
 
     /// <summary>Runs one claimed job and stores its outcome; returns the outcome's telemetry name. Never throws.</summary>
@@ -185,6 +222,15 @@ public sealed class JobWorker
         RogueJobsTelemetry.Executed.Add(1, tags);
         RogueJobsTelemetry.Duration.Record(_time.GetElapsedTime(started).TotalMilliseconds, tags);
         return outcome.Name;
+    }
+
+    // Puts claimed jobs under renewal from the moment they are claimed; each leaves once settled.
+    private void Hold(IReadOnlyList<ClaimedJob> claimed)
+    {
+        foreach (ClaimedJob job in claimed)
+        {
+            _running[job.Id] = job.Lease;
+        }
     }
 
     private async Task RunInSlotAsync(ClaimedJob job, SemaphoreSlim slots, CancellationToken stoppingToken)
@@ -223,27 +269,29 @@ public sealed class JobWorker
         return Array.Empty<ClaimedJob>();
     }
 
-    private async Task RenewLeasesUntilStoppedAsync(CancellationToken stoppingToken)
+    // Renews every third of a lease until stopped. A failed renewal, a cancelled store command
+    // included, is logged and tried again on the next round; only the stop token ends the loop.
+    private async Task RenewLeasesUntilAsync(CancellationToken stop)
     {
         TimeSpan period = _registry.Options.LeaseDuration / 3;
         try
         {
             while (true)
             {
-                await Task.Delay(period, _time, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(period, _time, stop).ConfigureAwait(false);
                 try
                 {
-                    await RenewLeasesAsync(stoppingToken).ConfigureAwait(false);
+                    await RenewLeasesAsync(stop).ConfigureAwait(false);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!stop.IsCancellationRequested)
                 {
                     _logRenewFailed(_logger, ex);
                 }
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
-            // Shutting down.
+            // Every claimed job has settled.
         }
     }
 
@@ -303,22 +351,27 @@ public sealed class JobWorker
         JobLease lease = job.Lease;
         try
         {
+            bool stored;
             switch (outcome.Name)
             {
                 case RogueJobsTelemetry.Succeeded:
-                    await _store.CompleteAsync(new[] { lease }, CancellationToken.None).ConfigureAwait(false);
+                    stored = await _store.CompleteAsync(new[] { lease }, CancellationToken.None).ConfigureAwait(false) > 0;
                     break;
                 case RogueJobsTelemetry.Released:
-                    await _store.ReleaseAsync(lease, CancellationToken.None).ConfigureAwait(false);
+                    stored = await _store.ReleaseAsync(lease, CancellationToken.None).ConfigureAwait(false);
                     break;
                 case RogueJobsTelemetry.Retried:
                     _logRetry(_logger, job.Id, job.Kind, job.Attempt, job.MaxAttempts, outcome.Delay, outcome.Exception);
-                    await _store.RetryAsync(lease, outcome.Delay, outcome.Error!, CancellationToken.None).ConfigureAwait(false);
+                    stored = await _store.RetryAsync(lease, outcome.Delay, outcome.Error!, CancellationToken.None).ConfigureAwait(false);
                     break;
                 default:
                     _logDeadLetter(_logger, job.Id, job.Kind, job.Attempt, outcome.Exception);
-                    await _store.DeadLetterAsync(lease, outcome.Error!, CancellationToken.None).ConfigureAwait(false);
+                    stored = await _store.DeadLetterAsync(lease, outcome.Error!, CancellationToken.None).ConfigureAwait(false);
                     break;
+            }
+            if (!stored)
+            {
+                _logSettleLost(_logger, job.Id, job.Kind, outcome.Name, null);
             }
         }
         catch (Exception ex)

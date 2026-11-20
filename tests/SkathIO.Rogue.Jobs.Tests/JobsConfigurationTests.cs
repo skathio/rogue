@@ -84,6 +84,41 @@ public sealed class JobsConfigurationTests
     }
 
     [Fact]
+    public async Task UnmarkedCommand_TheContextMisses_IsLeftOut_AndEnqueueingItNamesTheAttribute()
+    {
+        var definitions = new JobDefinition[]
+        {
+            new JobDefinition<RecordValue>("covered", JobDefaults.None, static (_, _, _) => default),
+            new JobDefinition<UnmarkedJob>("uncovered", JobDefaults.None, static (_, _, _) => default),
+        };
+        var registry = new JobRegistry(definitions, new JobsOptions { SerializerContext = PartialJobsJson.Default });
+        var scheduler = new JobScheduler(registry, new InMemoryJobStore(), new JobSignal());
+
+        Assert.True(registry.TryGet("covered", out _));
+        Assert.False(registry.TryGet("uncovered", out _));
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await scheduler.Enqueue(new UnmarkedJob(1)));
+        Assert.Contains("[JsonSerializable(typeof(UnmarkedJob))]", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnmarkedCommands_WithNoSerializerContext_DoNotFailStartup()
+    {
+        var definitions = new JobDefinition[] { new JobDefinition<UnmarkedJob>("unmarked", JobDefaults.None, static (_, _, _) => default) };
+
+        var registry = new JobRegistry(definitions, new JobsOptions());
+
+        Assert.False(registry.TryGet("unmarked", out _));
+    }
+
+    [Fact]
+    public void MarkedCommand_WithNoSerializerContext_StillFailsStartup()
+    {
+        var definitions = new JobDefinition[] { new JobDefinition<RecordValue>("marked", new JobDefaults(null, 0, 0, 0), static (_, _, _) => default) };
+
+        Assert.Throws<InvalidOperationException>(() => new JobRegistry(definitions, new JobsOptions()));
+    }
+
+    [Fact]
     public void TwoCommands_UnderOneKind_FailAtStartup()
     {
         var definitions = new JobDefinition[]

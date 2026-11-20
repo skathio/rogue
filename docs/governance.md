@@ -16,11 +16,14 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
 - **Minimal runtime dependencies.** The core depends only on
   `Microsoft.Extensions.DependencyInjection.Abstractions`. Integration
   packages add exactly one dependency each (`Microsoft.Extensions.Logging.Abstractions`,
-  `FluentValidation`).
+  `FluentValidation`); `SkathIO.Rogue.Validation` adds none. `SkathIO.Rogue.Jobs` adds
+  `Microsoft.Extensions.Logging.Abstractions` and `Microsoft.Extensions.Hosting.Abstractions`, the
+  latter so the worker runs as a hosted service.
 - **Transitive dependency allow-list.** The `license-check` CI job runs
-  `dotnet list <project> package --include-transitive --format json` for each of the 5 packable
-  projects (`SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`, `SkathIO.Rogue.MediatR`,
-  `SkathIO.Rogue.Logging`, `SkathIO.Rogue.Validation.FluentValidation`), unions the resulting
+  `dotnet list <project> package --include-transitive --format json` for each packable project
+  (`SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`, `SkathIO.Rogue.MediatR`, `SkathIO.Rogue.Logging`,
+  `SkathIO.Rogue.Validation.FluentValidation`, `SkathIO.Rogue.Validation`, `SkathIO.Rogue.Jobs`;
+  a new package is added to the job's list when it is created), unions the resulting
   top-level + transitive package ids across all target frameworks, and **fails the build** if any id
   is not listed in [`.github/allowed-packages.txt`](../.github/allowed-packages.txt). **Adding a new
   package — or upgrading an existing one to a version that pulls in a new transitive dependency —
