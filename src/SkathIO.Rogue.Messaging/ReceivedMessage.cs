@@ -24,7 +24,7 @@ public class ReceivedMessage
 
     /// <summary>
     /// How many times the message has been delivered to be handled, this time included; the consumer
-    /// counts attempts by it. A delivery put back unhandled through
+    /// counts attempts by it. A delivery put back unhandled or stopped by shutdown, through
     /// <see cref="IMessageTransport.DeferAsync"/> is not counted.
     /// </summary>
     public int DeliveryCount { get; }

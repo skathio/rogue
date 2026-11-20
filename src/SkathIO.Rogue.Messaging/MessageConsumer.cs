@@ -26,7 +26,7 @@ namespace SkathIO.Rogue.Messaging;
 /// Logs carry a message's id and name, never its body. <c>AddRogueMessageConsumer</c> registers a hosted
 /// service that calls <see cref="RunAsync"/>; without it nothing is consumed, and a host can still drain
 /// messages itself through <see cref="RunOnceAsync"/>. On shutdown, running handlers are cancelled and
-/// their messages nacked with no delay.
+/// their messages put back with no delay as a deferral, so being stopped never uses up an attempt.
 /// </remarks>
 public sealed class MessageConsumer
 {
@@ -420,8 +420,8 @@ public sealed class MessageConsumer
                     break;
                 default:
                     TimeSpan later = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken, slot).ConfigureAwait(false);
-                    // A deferred message was put back without running its handlers, so it keeps every
-                    // attempt it has left.
+                    // A deferred message was put back without its handlers failing, either unhandled or
+                    // stopped by shutdown, so it keeps every attempt it has left.
                     await (outcome.Deferred
                         ? _transport.DeferAsync(delivery, later, CancellationToken.None)
                         : _transport.NackAsync(delivery, later, CancellationToken.None)).ConfigureAwait(false);
@@ -471,8 +471,12 @@ public sealed class MessageConsumer
 
         public static Outcome Ack => new Outcome(RogueMessagingTelemetry.Succeeded, TimeSpan.Zero, null, null);
 
-        /// <summary>Nacked with no delay: the consumer is stopping, so the message is left to the next one.</summary>
-        public static Outcome Release => new Outcome(RogueMessagingTelemetry.Released, TimeSpan.Zero, null, null);
+        /// <summary>
+        /// Put back with no delay: the consumer is stopping, so the message is left to the next one. It is
+        /// deferred, not nacked, because the handlers did not fail, and a message on its last attempt must
+        /// not be dead-lettered for being stopped.
+        /// </summary>
+        public static Outcome Release => new Outcome(RogueMessagingTelemetry.Released, TimeSpan.Zero, null, null) { Deferred = true };
 
         /// <summary>Acked unhandled: the inbox says the message has been handled before, or it is this service's own event.</summary>
         public static Outcome Duplicate => new Outcome(RogueMessagingTelemetry.Duplicate, TimeSpan.Zero, null, null);
@@ -487,7 +491,7 @@ public sealed class MessageConsumer
         /// <summary>The handler's exception, the only exception an outcome keeps.</summary>
         public Exception? Exception { get; }
 
-        /// <summary>Put back without running the handlers, so the delivery does not count as an attempt.</summary>
+        /// <summary>Put back without the handlers failing, so the delivery does not count as an attempt.</summary>
         public bool Deferred { get; private init; }
 
         /// <summary>Nacked unhandled, to come back after <paramref name="delay"/>: another delivery holds its id.</summary>

@@ -109,7 +109,8 @@ public sealed class MessageInboxTests
         await run.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.Equal(new[] { "claim:m-3", "release:m-3" }, inbox.Calls);
-        Assert.Equal(new[] { TimeSpan.Zero }, host.Transport.NackDelays);
+        Assert.Empty(host.Transport.NackDelays);
+        Assert.Equal(new[] { TimeSpan.Zero }, host.Transport.DeferDelays);
     }
 
     [Theory]

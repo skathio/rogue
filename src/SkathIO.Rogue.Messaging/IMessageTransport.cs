@@ -45,7 +45,7 @@ public interface IMessageTransport
 
     /// <summary>
     /// Settles <paramref name="message"/> as not attempted: its handlers did not run, since another
-    /// delivery holds its id. It is delivered again, with the same delivery count, once
+    /// delivery holds its id, or were stopped because the consumer is shutting down. It is delivered again, with the same delivery count, once
     /// <paramref name="delay"/> has passed (at once, without <see cref="TransportCapabilities.NativeDelay"/>),
     /// so being put back never uses up one of its attempts.
     /// </summary>

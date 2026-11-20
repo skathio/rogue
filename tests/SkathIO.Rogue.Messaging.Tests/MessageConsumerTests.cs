@@ -160,7 +160,7 @@ public sealed class MessageConsumerTests
     }
 
     [Fact]
-    public async Task StoppingWhileAHandlerRuns_NacksTheMessageWithNoDelay_AndItIsDeliveredAgain()
+    public async Task StoppingWhileAHandlerRuns_DefersTheMessageWithNoDelay_AndItIsDeliveredAgainWithTheSameCount()
     {
         await using MessagingHost host = MessagingHost.Create();
         await host.Transport.SendAsync(new[] { MessagingHost.Envelope("test.order-placed", "{\"Id\":1,\"Note\":\"wait\"}") }, CancellationToken.None);
@@ -172,8 +172,9 @@ public sealed class MessageConsumerTests
         await stopping.CancelAsync();
 
         Assert.Equal("released", await handling);
-        Assert.Equal(new[] { TimeSpan.Zero }, host.Transport.NackDelays);
-        Assert.Equal(2, Assert.Single(await host.Transport.ReceiveAsync(1, CancellationToken.None)).DeliveryCount);
+        Assert.Empty(host.Transport.NackDelays);
+        Assert.Equal(new[] { TimeSpan.Zero }, host.Transport.DeferDelays);
+        Assert.Equal(1, Assert.Single(await host.Transport.ReceiveAsync(1, CancellationToken.None)).DeliveryCount);
     }
 
     [Fact]
