@@ -65,7 +65,7 @@ public sealed class SignedDeliveryCountTests
         MessageEnvelope sent = Envelope("m-1");
         stamp.Sign(sent.Name, sent.Id, 3);
 
-        BasicDeliverEventArgs viaExchange = Delivery("shop", sent.Name, RabbitMqWire.ToProperties(sent), sent.Body, false);
+        BasicDeliverEventArgs viaExchange = Delivery("shop", sent.Name, RabbitMqWire.ToProperties(sent), false);
         BasicDeliverEventArgs viaQueue = Copy(sent, stamp: null);
 
         Assert.Equal(1, stamp.CountOf(viaExchange, Received(viaExchange)));
@@ -108,7 +108,7 @@ public sealed class SignedDeliveryCountTests
         MessageEnvelope sent = Envelope("m-1");
         BasicProperties properties = RabbitMqWire.ToProperties(sent, 3, deliveryStamp: stamp.Sign(sent.Name, sent.Id, 3));
 
-        BasicDeliverEventArgs delivery = Delivery("shop", sent.Name, AsReceived(properties), sent.Body, false);
+        BasicDeliverEventArgs delivery = Delivery("shop", sent.Name, AsReceived(properties), false);
 
         Assert.Equal(1, stamp.CountOf(delivery, Received(delivery)));
     }
@@ -143,7 +143,7 @@ public sealed class SignedDeliveryCountTests
         BasicProperties properties = RabbitMqWire.ToProperties(sent, 1);
         properties.Headers![RabbitMqWire.DeliveryCountHeader] = 3;
 
-        BasicDeliverEventArgs copy = Delivery(string.Empty, Queue, AsReceived(properties), sent.Body, false);
+        BasicDeliverEventArgs copy = Delivery(string.Empty, Queue, AsReceived(properties), false);
 
         Assert.Equal(1, stamp.CountOf(copy, Received(copy)));
     }
@@ -180,11 +180,11 @@ public sealed class SignedDeliveryCountTests
     private static BasicDeliverEventArgs Copy(MessageEnvelope sent, string? stamp, bool redelivered = false)
     {
         BasicProperties properties = RabbitMqWire.ToProperties(sent, 1, deliveryStamp: stamp);
-        return Delivery(string.Empty, Queue, AsReceived(properties), sent.Body, redelivered);
+        return Delivery(string.Empty, Queue, AsReceived(properties), redelivered);
     }
 
-    private static BasicDeliverEventArgs Delivery(string exchange, string routingKey, IReadOnlyBasicProperties properties, ReadOnlyMemory<byte> body, bool redelivered) =>
-        new BasicDeliverEventArgs("consumer", 1, redelivered, exchange, routingKey, properties, body);
+    private static BasicDeliverEventArgs Delivery(string exchange, string routingKey, IReadOnlyBasicProperties properties, bool redelivered) =>
+        new BasicDeliverEventArgs("consumer", 1, redelivered, exchange, routingKey, properties, Encoding.UTF8.GetBytes("{}"));
 
     // Headers set in this process stay strings; the broker hands string headers back as bytes.
     private static BasicProperties AsReceived(BasicProperties sent)
