@@ -420,11 +420,9 @@ public sealed class MessageConsumer
                     break;
                 default:
                     TimeSpan later = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken, slot).ConfigureAwait(false);
-                    // A deferred message was put back without its handlers failing, either unhandled or
-                    // stopped by shutdown, so it keeps every attempt it has left.
-                    await (outcome.Deferred
-                        ? _transport.DeferAsync(delivery, later, CancellationToken.None)
-                        : _transport.NackAsync(delivery, later, CancellationToken.None)).ConfigureAwait(false);
+                    // A released message was put back without its handlers failing, either unhandled or
+                    // stopped by shutdown, so it is deferred and keeps every attempt it has left.
+                    await _transport.DeferAsync(delivery, later, CancellationToken.None).ConfigureAwait(false);
                     break;
             }
         }
@@ -454,7 +452,7 @@ public sealed class MessageConsumer
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // Shutting down; the message is nacked now.
+            // Shutting down; the message is put back now.
         }
         return TimeSpan.Zero;
     }
@@ -476,7 +474,7 @@ public sealed class MessageConsumer
         /// deferred, not nacked, because the handlers did not fail, and a message on its last attempt must
         /// not be dead-lettered for being stopped.
         /// </summary>
-        public static Outcome Release => new Outcome(RogueMessagingTelemetry.Released, TimeSpan.Zero, null, null) { Deferred = true };
+        public static Outcome Release => new Outcome(RogueMessagingTelemetry.Released, TimeSpan.Zero, null, null);
 
         /// <summary>Acked unhandled: the inbox says the message has been handled before, or it is this service's own event.</summary>
         public static Outcome Duplicate => new Outcome(RogueMessagingTelemetry.Duplicate, TimeSpan.Zero, null, null);
@@ -491,11 +489,8 @@ public sealed class MessageConsumer
         /// <summary>The handler's exception, the only exception an outcome keeps.</summary>
         public Exception? Exception { get; }
 
-        /// <summary>Put back without the handlers failing, so the delivery does not count as an attempt.</summary>
-        public bool Deferred { get; private init; }
-
-        /// <summary>Nacked unhandled, to come back after <paramref name="delay"/>: another delivery holds its id.</summary>
-        public static Outcome Defer(TimeSpan delay) => new Outcome(RogueMessagingTelemetry.Released, delay, null, null) { Deferred = true };
+        /// <summary>Put back unhandled, to come back after <paramref name="delay"/>: another delivery holds its id.</summary>
+        public static Outcome Defer(TimeSpan delay) => new Outcome(RogueMessagingTelemetry.Released, delay, null, null);
 
         public static Outcome Retry(TimeSpan delay, Exception exception) => new Outcome(RogueMessagingTelemetry.Retried, delay, null, exception);
 
