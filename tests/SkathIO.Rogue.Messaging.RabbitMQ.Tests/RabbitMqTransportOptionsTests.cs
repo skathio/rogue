@@ -37,7 +37,11 @@ public sealed class RabbitMqTransportOptionsTests
     [MemberData(nameof(Options))]
     public void Options_AreCheckedWhenTheTransportIsRegistered(Action<RabbitMqTransportOptions> configure, Type? refused)
     {
-        Exception? thrown = Record.Exception(() => new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddRogueRabbitMqTransport(configure));
+        Exception? thrown = Record.Exception(() => new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddRogueRabbitMqTransport(o =>
+        {
+            o.DeliveryStampKey = RabbitMqHost.DeliveryStampKey;
+            configure(o);
+        }));
 
         Assert.Equal(refused, thrown?.GetType());
     }
@@ -128,7 +132,7 @@ public sealed class RabbitMqTransportOptionsTests
     [Fact]
     public void TheTransport_KeepsACopy_SoLaterChangesHaveNoEffect()
     {
-        var options = new RabbitMqTransportOptions { ServiceName = "billing" };
+        var options = new RabbitMqTransportOptions { ServiceName = "billing", DeliveryStampKey = RabbitMqHost.DeliveryStampKey };
         var transport = new RabbitMqTransport(options, Array.Empty<string>());
 
         options.ServiceName = "other";
@@ -143,8 +147,8 @@ public sealed class RabbitMqTransportOptionsTests
     [Fact]
     public void TheTransport_ChecksItsOptionsAndSubscriptions()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new RabbitMqTransport(new RabbitMqTransportOptions { PrefetchCount = 0 }, Array.Empty<string>()));
-        Assert.Throws<ArgumentException>(() => new RabbitMqTransport(new RabbitMqTransportOptions(), new[] { "orders.#" }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RabbitMqTransport(new RabbitMqTransportOptions { PrefetchCount = 0, DeliveryStampKey = RabbitMqHost.DeliveryStampKey }, Array.Empty<string>()));
+        Assert.Throws<ArgumentException>(() => new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey }, new[] { "orders.#" }));
         Assert.Throws<ArgumentNullException>(() => new RabbitMqTransport(null!, Array.Empty<string>()));
         Assert.Throws<ArgumentNullException>(() => new RabbitMqTransport(new RabbitMqTransportOptions(), null!));
     }

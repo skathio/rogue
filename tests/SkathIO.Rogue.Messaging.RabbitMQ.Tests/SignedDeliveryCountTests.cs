@@ -34,7 +34,7 @@ public sealed class SignedDeliveryCountTests
     [MemberData(nameof(SignedCounts))]
     public void ACopyTheTransportSigned_HasItsSignedCount_HeldToItsRange_PlusOneWhenRedelivered(int signed, bool redelivered, int expected)
     {
-        var stamp = new DeliveryStamp();
+        var stamp = Stamp();
         MessageEnvelope sent = Envelope("m-1");
 
         BasicDeliverEventArgs copy = Copy(sent, stamp.Sign(sent.Name, sent.Id, signed), redelivered);
@@ -45,7 +45,7 @@ public sealed class SignedDeliveryCountTests
     [Fact]
     public void ACopysCount_IsKept_HoweverManyOtherMessagesWereSentBackSinceThen()
     {
-        var stamp = new DeliveryStamp();
+        var stamp = Stamp();
         MessageEnvelope sent = Envelope("m-0");
         string signed = stamp.Sign(sent.Name, sent.Id, 3);
         for (int i = 1; i <= 25_000; i++)
@@ -61,7 +61,7 @@ public sealed class SignedDeliveryCountTests
     [Fact]
     public void AFreshDelivery_ReusingTheIdOfAMessageInRetry_StartsAt1()
     {
-        var stamp = new DeliveryStamp();
+        var stamp = Stamp();
         MessageEnvelope sent = Envelope("m-1");
         stamp.Sign(sent.Name, sent.Id, 3);
 
@@ -75,7 +75,7 @@ public sealed class SignedDeliveryCountTests
     [Fact]
     public void AStampCopiedOntoAnotherMessage_OrWithItsCountEdited_StartsAt1()
     {
-        var stamp = new DeliveryStamp();
+        var stamp = Stamp();
         MessageEnvelope sent = Envelope("m-1");
         string signed = stamp.Sign(sent.Name, sent.Id, 3);
         string mac = signed.Substring(signed.IndexOf('.', StringComparison.Ordinal) + 1);
@@ -92,19 +92,29 @@ public sealed class SignedDeliveryCountTests
     }
 
     [Fact]
-    public void AStampSignedByAnotherTransport_StartsAt1()
+    public void AStampSignedUnderAnotherKey_StartsAt1()
     {
-        var mine = new DeliveryStamp();
-        var theirs = new DeliveryStamp();
+        DeliveryStamp mine = Stamp(RabbitMqHost.DeliveryStampKey);
+        DeliveryStamp theirs = Stamp("another-delivery-stamp-key-of-32");
         MessageEnvelope sent = Envelope("m-1");
 
         Assert.Equal(1, CountOf(mine, sent, theirs.Sign(sent.Name, sent.Id, 3)));
     }
 
     [Fact]
+    public void AStampSignedByAnotherInstance_UnderTheSameKey_KeepsItsCount()
+    {
+        DeliveryStamp mine = Stamp(RabbitMqHost.DeliveryStampKey);
+        DeliveryStamp theirs = Stamp(RabbitMqHost.DeliveryStampKey);
+        MessageEnvelope sent = Envelope("m-1");
+
+        Assert.Equal(3, CountOf(mine, sent, theirs.Sign(sent.Name, sent.Id, 3)));
+    }
+
+    [Fact]
     public void AValidStamp_OnADeliveryThroughAnExchange_StartsAt1()
     {
-        var stamp = new DeliveryStamp();
+        var stamp = Stamp();
         MessageEnvelope sent = Envelope("m-1");
         BasicProperties properties = RabbitMqWire.ToProperties(sent, 3, deliveryStamp: stamp.Sign(sent.Name, sent.Id, 3));
 
@@ -132,13 +142,13 @@ public sealed class SignedDeliveryCountTests
     [MemberData(nameof(Malformed))]
     public void AMalformedStamp_StartsAt1(string forged)
     {
-        Assert.Equal(1, CountOf(new DeliveryStamp(), Envelope("m-1"), forged));
+        Assert.Equal(1, CountOf(Stamp(), Envelope("m-1"), forged));
     }
 
     [Fact]
     public void AForgedCountHeader_WithoutAStamp_StartsAt1()
     {
-        var stamp = new DeliveryStamp();
+        var stamp = Stamp();
         MessageEnvelope sent = Envelope("m-1");
         BasicProperties properties = RabbitMqWire.ToProperties(sent, 1);
         properties.Headers![RabbitMqWire.DeliveryCountHeader] = 3;
@@ -151,7 +161,7 @@ public sealed class SignedDeliveryCountTests
     [Fact]
     public void ACopy_KeepsItsStamp_InTheHeaderTheTransportReads()
     {
-        var stamp = new DeliveryStamp();
+        var stamp = Stamp();
         MessageEnvelope sent = Envelope("m-1");
         string signed = stamp.Sign(sent.Name, sent.Id, 2);
 
@@ -160,6 +170,8 @@ public sealed class SignedDeliveryCountTests
         Assert.Equal(signed, RabbitMqWire.HeaderString(AsReceived(properties), RabbitMqWire.DeliveryStampHeader));
         Assert.Equal(2, Assert.IsType<int>(properties.Headers![RabbitMqWire.DeliveryCountHeader]));
     }
+
+    private static DeliveryStamp Stamp(string key = RabbitMqHost.DeliveryStampKey) => new DeliveryStamp(key);
 
     private static int CountOf(DeliveryStamp stamp, MessageEnvelope sent, string forged)
     {

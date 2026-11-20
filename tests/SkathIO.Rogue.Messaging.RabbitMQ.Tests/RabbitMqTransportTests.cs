@@ -16,7 +16,7 @@ public sealed class RabbitMqTransportTests
     [Fact]
     public void Capabilities_AreNativeDeadLetterAndBatchSend_WithoutNativeDelay()
     {
-        var transport = new RabbitMqTransport(new RabbitMqTransportOptions(), Array.Empty<string>());
+        var transport = new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey }, Array.Empty<string>());
 
         Assert.Equal(TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend, transport.Capabilities);
     }
@@ -26,7 +26,7 @@ public sealed class RabbitMqTransportTests
     [InlineData(-1)]
     public async Task Receive_RefusesACountBelowOne(int maxCount)
     {
-        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ConnectionUri = _nowhere, ServiceName = "billing" }, Array.Empty<string>());
+        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey, ConnectionUri = _nowhere, ServiceName = "billing" }, Array.Empty<string>());
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await transport.ReceiveAsync(maxCount, CancellationToken.None));
     }
@@ -34,7 +34,7 @@ public sealed class RabbitMqTransportTests
     [Fact]
     public async Task Receive_WithoutAServiceName_IsRefused_SinceThereIsNoQueue()
     {
-        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ConnectionUri = _nowhere }, Array.Empty<string>());
+        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey, ConnectionUri = _nowhere }, Array.Empty<string>());
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await transport.ReceiveAsync(1, CancellationToken.None));
     }
@@ -45,7 +45,7 @@ public sealed class RabbitMqTransportTests
     [InlineData("has space")]
     public async Task Send_RefusesANameThatIsNoRoutingKey_BeforeConnecting(string name)
     {
-        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ConnectionUri = _nowhere }, Array.Empty<string>());
+        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey, ConnectionUri = _nowhere }, Array.Empty<string>());
 
         await Assert.ThrowsAsync<ArgumentException>(async () => await transport.SendAsync(new[] { new MessageEnvelope { Name = name } }, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentNullException>(async () => await transport.SendAsync(new MessageEnvelope[] { null! }, CancellationToken.None));
@@ -55,7 +55,7 @@ public sealed class RabbitMqTransportTests
     [Fact]
     public async Task Send_OfAnEmptyBatch_SendsNothing_AndDoesNotConnect()
     {
-        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ConnectionUri = _nowhere }, Array.Empty<string>());
+        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey, ConnectionUri = _nowhere }, Array.Empty<string>());
 
         await transport.SendAsync(Array.Empty<MessageEnvelope>(), CancellationToken.None);
     }
@@ -63,7 +63,7 @@ public sealed class RabbitMqTransportTests
     [Fact]
     public async Task Settling_AMessageItDidNotDeliver_IsRefused()
     {
-        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ConnectionUri = _nowhere }, Array.Empty<string>());
+        await using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey, ConnectionUri = _nowhere }, Array.Empty<string>());
         var foreign = new ReceivedMessage(new MessageEnvelope { Name = "orders.placed" }, 1);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await transport.AckAsync(foreign, CancellationToken.None));
@@ -76,7 +76,7 @@ public sealed class RabbitMqTransportTests
     [Fact]
     public async Task ADisposedTransport_RefusesToConnect()
     {
-        var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ConnectionUri = _nowhere, ServiceName = "billing" }, Array.Empty<string>());
+        var transport = new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey, ConnectionUri = _nowhere, ServiceName = "billing" }, Array.Empty<string>());
         await transport.DisposeAsync();
         await transport.DisposeAsync();
 
@@ -92,7 +92,11 @@ public sealed class RabbitMqTransportTests
         services.AddSingleton<IMessageTransport>(new InMemoryTransport());
         services.AddRogue();
         services.AddRogueMessaging(static o => o.SerializerContext = TestMessagesJson.Default);
-        services.AddRogueRabbitMqTransport(static o => o.ServiceName = "billing");
+        services.AddRogueRabbitMqTransport(static o =>
+        {
+            o.ServiceName = "billing";
+            o.DeliveryStampKey = RabbitMqHost.DeliveryStampKey;
+        });
         await using ServiceProvider provider = services.BuildServiceProvider();
 
         var transport = Assert.IsType<RabbitMqTransport>(provider.GetRequiredService<IMessageTransport>());
@@ -106,7 +110,7 @@ public sealed class RabbitMqTransportTests
     [InlineData(null)]
     public void TheTransportsServiceName_IsTheOptionsServiceName(string? serviceName)
     {
-        using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ServiceName = serviceName }, Array.Empty<string>());
+        using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ServiceName = serviceName, DeliveryStampKey = RabbitMqHost.DeliveryStampKey }, Array.Empty<string>());
 
         Assert.Equal(serviceName, ((IMessageTransport)transport).ServiceName);
     }
@@ -115,7 +119,11 @@ public sealed class RabbitMqTransportTests
     public void AProviderDisposedSynchronously_DisposesTheTransport()
     {
         var services = new ServiceCollection();
-        services.AddRogueRabbitMqTransport(static o => o.ConnectionUri = _nowhere);
+        services.AddRogueRabbitMqTransport(static o =>
+        {
+            o.ConnectionUri = _nowhere;
+            o.DeliveryStampKey = RabbitMqHost.DeliveryStampKey;
+        });
         ServiceProvider provider = services.BuildServiceProvider();
         var transport = provider.GetRequiredService<RabbitMqTransport>();
 

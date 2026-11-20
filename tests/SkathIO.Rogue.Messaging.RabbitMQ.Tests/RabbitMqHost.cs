@@ -12,6 +12,9 @@ internal sealed class RabbitMqHost : IAsyncDisposable
     // Only a bound on how long a broken test waits; no assertion depends on time.
     private static readonly TimeSpan _giveUpAfter = TimeSpan.FromMinutes(2);
 
+    /// <summary>A delivery stamp key for tests: 32 bytes, the shortest the transport accepts.</summary>
+    public const string DeliveryStampKey = "test-delivery-stamp-key-32-bytes";
+
     private RabbitMqHost(ServiceProvider services, RabbitMqTransportOptions options)
     {
         Services = services;
@@ -46,6 +49,7 @@ internal sealed class RabbitMqHost : IAsyncDisposable
             options.ConnectionUri = broker;
             options.Exchange = "test-" + run;
             options.ServiceName = "service-" + run;
+            options.DeliveryStampKey = DeliveryStampKey;
             options.ConfigureConnection = static factory => factory.NetworkRecoveryInterval = TimeSpan.FromSeconds(1);
             configure?.Invoke(options);
             transportOptions = options;

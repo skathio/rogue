@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using RabbitMQ.Client;
 
 namespace SkathIO.Rogue.Messaging.RabbitMQ;
@@ -14,6 +15,9 @@ public sealed class RabbitMqTransportOptions
 {
     /// <summary>The longest exchange, queue, routing key or header name, in characters (an AMQP short string).</summary>
     public const int MaxNameLength = 255;
+
+    /// <summary>The shortest <see cref="DeliveryStampKey"/>, in UTF-8 bytes.</summary>
+    public const int MinDeliveryStampKeyBytes = 32;
 
     private readonly List<RoutingKeyMap> _routingKeyMaps = new List<RoutingKeyMap>();
     private readonly List<HeaderMap> _headerMaps = new List<HeaderMap>();
@@ -46,6 +50,16 @@ public sealed class RabbitMqTransportOptions
     /// transport's own settings: <see cref="ConnectionUri"/>, automatic recovery and topology recovery.
     /// </summary>
     public Action<ConnectionFactory>? ConfigureConnection { get; set; }
+
+    /// <summary>
+    /// The secret that signs the delivery count on each copy the transport puts back on the service's
+    /// queue for a retry, at least <see cref="MinDeliveryStampKeyBytes"/> bytes in UTF-8. Required, with
+    /// no default. Give every instance of a service the same key, from configuration or a secret store,
+    /// so each one reads the count of a copy another put back, and a message that always fails is
+    /// dead-lettered after the attempt limit however its deliveries are spread. A copy signed under
+    /// another key counts again from 1. Never logged or put in an exception by this package.
+    /// </summary>
+    public string? DeliveryStampKey { get; set; }
 
     /// <summary>The exchange messages are dead-lettered to: <see cref="Exchange"/> followed by <c>.dead-letter</c>.</summary>
     public string DeadLetterExchange => Exchange + ".dead-letter";
@@ -147,6 +161,7 @@ public sealed class RabbitMqTransportOptions
         }
         ArgumentOutOfRangeException.ThrowIfLessThan(PrefetchCount, 1, nameof(PrefetchCount));
         ArgumentOutOfRangeException.ThrowIfGreaterThan(PrefetchCount, ushort.MaxValue, nameof(PrefetchCount));
+        CheckDeliveryStampKey(DeliveryStampKey);
     }
 
     // The transport keeps a copy, so changing the options after it is built changes nothing.
@@ -159,11 +174,25 @@ public sealed class RabbitMqTransportOptions
             ServiceName = ServiceName,
             PrefetchCount = PrefetchCount,
             ConfigureConnection = ConfigureConnection,
+            DeliveryStampKey = DeliveryStampKey,
         };
         copy._routingKeyMaps.AddRange(_routingKeyMaps);
         copy._headerMaps.AddRange(_headerMaps);
         copy._bindings.AddRange(_bindings);
         return copy;
+    }
+
+    // The messages name the rule and never the key, so a refused key stays out of logs and crash reports.
+    private static void CheckDeliveryStampKey(string? key)
+    {
+        if (key is null)
+        {
+            throw new ArgumentNullException(nameof(DeliveryStampKey), "Set the delivery stamp key: the same secret on every instance of the service, from configuration or a secret store.");
+        }
+        if (Encoding.UTF8.GetByteCount(key) < MinDeliveryStampKeyBytes)
+        {
+            throw new ArgumentException("The delivery stamp key must be at least " + MinDeliveryStampKeyBytes + " bytes in UTF-8.", nameof(DeliveryStampKey));
+        }
     }
 
     private static void CheckExchange(string exchange, string parameter)

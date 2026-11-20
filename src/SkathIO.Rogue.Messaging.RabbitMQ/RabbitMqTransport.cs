@@ -25,9 +25,9 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// </para>
 /// <para>
 /// RabbitMQ has no native delay, so the consumer waits out a retry delay itself. A message nacked for a
-/// retry is published back to the service's queue, then acked, its delivery count one higher signed by
-/// the transport, so a sender cannot set the count of its own messages; a dead-lettered one is published to
-/// the dead-letter queue with the reason in its <c>rogue-dead-letter-reason</c> header, then acked.
+/// retry is published back to the service's queue, then acked, its delivery count one higher signed under
+/// the shared <see cref="RabbitMqTransportOptions.DeliveryStampKey"/>, so a sender cannot set it; a dead-lettered
+/// one is published to the dead-letter queue with the reason in its <c>rogue-dead-letter-reason</c> header, then acked.
 /// Each copy is confirmed by the broker before the original is acked, so a message is delivered at
 /// least once; when a copy cannot be published, the original is handed back to the broker (requeued,
 /// or dead-lettered without a reason).
@@ -48,7 +48,7 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
     private readonly SemaphoreSlim _publishGate = new SemaphoreSlim(1, 1);
     private readonly SemaphoreSlim _settleGate = new SemaphoreSlim(1, 1);
     private readonly Channel<Delivery> _deliveries = Channel.CreateUnbounded<Delivery>(new UnboundedChannelOptions { SingleWriter = true });
-    private readonly DeliveryStamp _stamp = new DeliveryStamp();
+    private readonly DeliveryStamp _stamp;
     private IConnection? _connection;
     private IChannel? _publisher;
     private IChannel? _consumer;
@@ -65,6 +65,7 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
         ArgumentNullException.ThrowIfNull(subscriptions);
         _options = options.Copy();
         _options.Validate();
+        _stamp = new DeliveryStamp(_options.DeliveryStampKey!);
         _subscriptions = subscriptions.Distinct(StringComparer.Ordinal).ToArray();
         foreach (string name in _subscriptions)
         {

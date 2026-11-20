@@ -10,7 +10,7 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ.Tests;
 /// <summary>What a sender on the broker cannot steer: the name a delivery gets, and what an oversized body costs.</summary>
 public sealed class RabbitMqHardeningTests
 {
-    private static readonly RabbitMqTransportOptions _options = new RabbitMqTransportOptions { Exchange = "shop", ServiceName = "billing" };
+    private static readonly RabbitMqTransportOptions _options = new RabbitMqTransportOptions { Exchange = "shop", ServiceName = "billing", DeliveryStampKey = RabbitMqHost.DeliveryStampKey };
 
     [Theory]
     [InlineData("payments.refunded")]
@@ -39,7 +39,11 @@ public sealed class RabbitMqHardeningTests
             o.SerializerContext = TestMessagesJson.Default;
             o.MaxMessageBytes = limit;
         });
-        services.AddRogueRabbitMqTransport(static o => o.Exchange = "shop");
+        services.AddRogueRabbitMqTransport(static o =>
+        {
+            o.Exchange = "shop";
+            o.DeliveryStampKey = RabbitMqHost.DeliveryStampKey;
+        });
         using ServiceProvider provider = services.BuildServiceProvider();
 
         Assert.Equal(limit, provider.GetRequiredService<RabbitMqTransport>().MaxMessageBytes);

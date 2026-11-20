@@ -11,23 +11,23 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// Signs the delivery count of each copy the transport sends back to its own queue, and reads a
 /// delivery's count only from such a signature. The count travels on the copy, in the
 /// <see cref="RabbitMqWire.DeliveryStampHeader"/> header, as the count, a dot, and an HMAC-SHA256 over the
-/// message's name, id and count under a key this transport drew at random. A sender has no key, so a
-/// message it publishes, whatever id it reuses or header it sets, is on its first delivery; and since
-/// nothing is kept per message, no number of messages in retry can make the transport lose a count.
+/// message's name, id and count under <see cref="RabbitMqTransportOptions.DeliveryStampKey"/>. A sender
+/// has no key, so a message it publishes, whatever id it reuses or header it sets, is on its first
+/// delivery; and since nothing is kept per message, no number of messages in retry can make the
+/// transport lose a count.
 /// </summary>
 /// <remarks>
-/// The key lives as long as the transport. A copy read by another instance of the service, or after a
-/// restart, starts again from 1, so a message can get more attempts than the limit, never fewer.
+/// Every instance of a service is given the same key, so a copy one instance puts back is read with its
+/// count by any other, and after a restart. A copy signed under another key starts again from 1.
 /// </remarks>
 internal sealed class DeliveryStamp
 {
-    private const int KeyBytes = 32;
-
     private readonly byte[] _key;
 
-    public DeliveryStamp()
+    /// <summary>Signs and verifies under the UTF-8 bytes of <paramref name="key"/>, which the stamp never shows.</summary>
+    public DeliveryStamp(string key)
     {
-        _key = RandomNumberGenerator.GetBytes(KeyBytes);
+        _key = Encoding.UTF8.GetBytes(key);
     }
 
     /// <summary>The stamp of a copy of the message named <paramref name="name"/> with id <paramref name="id"/>, on delivery <paramref name="count"/>.</summary>

@@ -161,12 +161,14 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   a message from another exchange that no map names is dead-lettered unread. The transport's service
   name is its `ServiceName`, and an event's origin travels in the `rogue-origin` header.
   A message's delivery count is signed by the transport on each copy it sends back for a retry
-  (`rogue-delivery-stamp`, an HMAC-SHA256 under a key drawn at random when the transport starts),
-  and read only from that signature, never from the `rogue-delivery-count` header, so a sender
-  cannot cut short the retries of its messages by setting a header or reusing an id. The count
-  travels on the copy, so any number of messages can be in retry at once. A retry taken by another
-  instance of the service, or read after a restart, counts again from 1, so a message can get more
-  than `MaxAttempts` attempts, never fewer.
+  (`rogue-delivery-stamp`, an HMAC-SHA256 under `DeliveryStampKey`), and read only from that
+  signature, never from the `rogue-delivery-count` header, so a sender cannot cut short the retries
+  of its messages by setting a header or reusing an id. The count travels on the copy, so any number
+  of messages can be in retry at once. `DeliveryStampKey` is a required secret of at least 32 bytes
+  (UTF-8) with no default: registration fails at startup without it. Give every instance of a service
+  the same key, from configuration or user-secrets, so a retry taken by another instance keeps its
+  count and a message that always fails is dead-lettered after exactly `MaxAttempts` deliveries. The
+  key is never logged or put in an exception. See [docs/messaging-rabbitmq.md](docs/messaging-rabbitmq.md).
   Targets `net8.0` and `net10.0`; depends on `RabbitMQ.Client`; no reflection.
 - **New package: `SkathIO.Rogue.Messaging.Outbox`**, a transactional outbox and inbox on the
   Postgres and SQL Server job stores. Register it with `AddRogueMessagingOutbox()` next to

@@ -221,7 +221,11 @@ public sealed class TraceAndHardeningFixesTests
             o.SerializerContext = TestMessagesJson.Default;
             configure?.Invoke(o);
         });
-        services.AddRogueRabbitMqTransport(static o => o.Exchange = "shop");
+        services.AddRogueRabbitMqTransport(static o =>
+        {
+            o.Exchange = "shop";
+            o.DeliveryStampKey = RabbitMqHost.DeliveryStampKey;
+        });
         return services.BuildServiceProvider();
     }
 
