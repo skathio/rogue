@@ -72,6 +72,8 @@ public sealed class RabbitMqWireTests
     [InlineData("legacy", "legacy.events", null, "")]
     [InlineData("", "billing", "orders.placed", "orders.placed")]
     [InlineData("other", "orders.placed", null, "")]
+    [InlineData("legacy", "legacy.events", "orders.placed", "")]
+    [InlineData("other", "orders.placed", "orders.placed", "")]
     public void WithoutAHeaderMatch_TheNameComesFromARoutingKeyMap_ThenTheTypeProperty_ThenTheOwnExchangesRoutingKey(string exchange, string routingKey, string? type, string expected)
     {
         Assert.Equal(expected, RabbitMqWire.ResolveName(_options, exchange, routingKey, new BasicProperties { Type = type }));
@@ -81,7 +83,7 @@ public sealed class RabbitMqWireTests
     [InlineData("StockReserved", "legacy.order.placed", null, "stock.reserved")]
     [InlineData("StockReserved", "legacy.events", "Contoso.StockReserved", "stock.reserved")]
     [InlineData("Unknown", "legacy.order.placed", null, "orders.placed")]
-    [InlineData("Unknown", "legacy.events", "orders.placed", "orders.placed")]
+    [InlineData("Unknown", "legacy.events", "orders.placed", "")]
     [InlineData("Unknown", "legacy.events", null, "")]
     public void AHeaderMatch_NamesTheMessage_BeforeARoutingKeyMapOrTheTypeProperty(string eventType, string routingKey, string? type, string expected)
     {

@@ -152,7 +152,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   names it handles, and a dead-letter exchange and queue for the messages it gives up on. Messages are
   taken with a prefetch limit and acked only after their handlers succeed. The connection reconnects
   and recovers its topology on its own. JSON from systems that do not use Rogue is mapped to a Rogue
-  message by its routing key (`MapRoutingKey`) or by a header (`MapHeader`), never by a type name.
+  message by its routing key (`MapRoutingKey`) or by a header (`MapHeader`), never by a type name;
+  a message from another exchange that no map names is dead-lettered unread.
   Targets `net8.0` and `net10.0`; depends on `RabbitMQ.Client`; no reflection.
 - **New package: `SkathIO.Rogue.Messaging.Outbox`**, a transactional outbox and inbox on the
   Postgres and SQL Server job stores. Register it with `AddRogueMessagingOutbox()` next to

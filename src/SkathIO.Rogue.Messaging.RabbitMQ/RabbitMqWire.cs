@@ -76,8 +76,8 @@ internal static class RabbitMqWire
     /// <summary>
     /// The stable name of a delivery: from the first header map whose header holds its value, else from
     /// a routing-key map for the exchange and key, else the routing key when the delivery came through
-    /// the transport's own exchange, else the AMQP type property, which names the copies the transport
-    /// sends back through the default exchange. Empty when none applies, which the consumer
+    /// the transport's own exchange, else, on the default exchange only, the AMQP type property, which
+    /// names the copies the transport sends back there. Empty when none applies, which the consumer
     /// dead-letters as an unknown name.
     /// </summary>
     public static string ResolveName(RabbitMqTransportOptions options, string exchange, string routingKey, IReadOnlyBasicProperties properties)
@@ -102,7 +102,13 @@ internal static class RabbitMqWire
         {
             return routingKey;
         }
-        return string.IsNullOrEmpty(properties.Type) ? string.Empty : properties.Type;
+        // On another system's exchange only a map names a delivery: its sender's type property could
+        // otherwise pick any message name and reach a handler no map lets through.
+        if (exchange.Length != 0 || string.IsNullOrEmpty(properties.Type))
+        {
+            return string.Empty;
+        }
+        return properties.Type;
     }
 
     /// <summary>
