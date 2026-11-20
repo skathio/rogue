@@ -54,7 +54,13 @@ internal sealed record HandlerModel(
     /// constrains the generated D3 extension method's visibility: the method's <c>ValueTask&lt;TResponse&gt;</c>
     /// return type cannot be more accessible than <c>TResponse</c>.
     /// </summary>
-    TypeAccessibility ResponseAccessibility = TypeAccessibility.Public
+    TypeAccessibility ResponseAccessibility = TypeAccessibility.Public,
+    /// <summary>
+    /// Names of the feature modules (<see cref="FeatureModule.Name"/>) whose marker attribute the
+    /// request type carries, in <see cref="FeatureModules.All"/> order. Empty for an unmarked request,
+    /// which is emitted exactly as it was before feature modules existed.
+    /// </summary>
+    EquatableArray<string> MarkedModules = default
 );
 
 /// <summary>Pipeline behavior (IPipelineBehavior&lt;,&gt; or IStreamPipelineBehavior&lt;,&gt;).</summary>
@@ -142,6 +148,23 @@ internal sealed record DiscoveredModels(
     EquatableArray<ProcessorModel> Processors,
     EquatableArray<StreamHandlerModel> StreamHandlers,
     EquatableArray<RequestMessageModel> RequestMessages
+);
+
+/// <summary>The version of a referenced SkathIO.Rogue package, read from its assembly (ROGUE013).</summary>
+internal sealed record PackageVersionModel(
+    string AssemblyName,
+    int Major,
+    int Minor,
+    string Display
+);
+
+/// <summary>
+/// The core package version and the versions of the referenced feature packages, compared on
+/// major.minor for ROGUE013. <see cref="Core"/> is null when no core assembly is referenced.
+/// </summary>
+internal sealed record PackageVersionsModel(
+    PackageVersionModel? Core,
+    EquatableArray<PackageVersionModel> Features
 );
 
 /// <summary>

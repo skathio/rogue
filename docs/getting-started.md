@@ -116,6 +116,7 @@ runtime exceptions:
 | `ROGUE010` | Suggestion: inject `ISender`/`IPublisher` instead of `IMediator`. |
 | `ROGUE011` | A type implements multiple CQS contracts (ambiguous under the CQS-explicit core). |
 | `ROGUE012` | A MediatR-adapter request has a command-vs-query mapping conflict. |
+| `ROGUE013` | A feature package (`SkathIO.Rogue.Validation`, `.Jobs`, `.Messaging`) has a different major.minor version than the core `SkathIO.Rogue` package. |
 
 (`ROGUE007` is intentionally unused — a removed-from-scope id, never reissued.)
 

@@ -112,4 +112,20 @@ internal static class DiagnosticDescriptors
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         helpLinkUri: HelpLinkBase + "ROGUE012");
+
+    /// <summary>
+    /// ROGUE013 — a referenced feature package (SkathIO.Rogue.Validation, .Jobs or .Messaging) has a
+    /// different major.minor version than the core SkathIO.Rogue package. The feature packages carry
+    /// no generator of their own: the core generator emits their code, so it assumes the feature
+    /// package's types and contracts match its own release. Warning: the build may still succeed, but
+    /// the generated code can call members the referenced feature package does not have.
+    /// </summary>
+    internal static readonly DiagnosticDescriptor FeaturePackageVersionMismatch = new DiagnosticDescriptor(
+        id: "ROGUE013",
+        title: "Feature package version differs from the core package",
+        messageFormat: "Package '{0}' is version {1}, but the core SkathIO.Rogue package is version {2}. The core source generator emits the code for '{0}', so reference the same major.minor version of both packages.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGUE013");
 }

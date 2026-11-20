@@ -37,7 +37,12 @@ internal static class DispatcherEmitter
         w.Line("{");
         w.Indent();
 
-        w.Open("internal sealed class RogueDispatcherImpl : global::SkathIO.Rogue.RogueDispatcher");
+        // The class is partial only when a request carries a feature-module marker: that is what lets
+        // a module's generated code implement the pre-handler hooks declared below. Without markers the
+        // declaration stays exactly as it was.
+        w.Open(FeatureModules.HasMarkedRequest(models)
+            ? "internal sealed partial class RogueDispatcherImpl : global::SkathIO.Rogue.RogueDispatcher"
+            : "internal sealed class RogueDispatcherImpl : global::SkathIO.Rogue.RogueDispatcher");
 
         // ── Event → handler-FQN map (built once, used by the constructor fields and the
         //    per-event Publish helpers) ────────────────────────────────────────────────
@@ -301,6 +306,11 @@ internal static class DispatcherEmitter
         // PipelineExecutor.Execute body unchanged.
         bool useStaticChain = !hasProcessors && !hasOpenBehavior && applicableBehaviors.Count > 0;
 
+        // Feature-module pre-handler hooks: one partial method per module marked on the request. A hook
+        // with no implementing part is removed by the compiler together with its call, so a marked
+        // request costs nothing until its module emits the implementation.
+        FeatureModules.EmitPreHandlerHookDeclarations(w, handler, methodName, requestFqn);
+
         // D3: the per-request entry point is emitted `internal` (not `private`) so the generated
         // public RogueExtensions class (same consumer assembly) can downcast RogueDispatcher to this
         // impl and call it directly — the 0-alloc concrete fast path. The static _Direct/_WithBehaviors/
@@ -309,6 +319,9 @@ internal static class DispatcherEmitter
         w.Open(
             "internal global::System.Threading.Tasks.ValueTask<" + responseFqn + "> " +
             methodName + "(" + requestFqn + " request, global::System.Threading.CancellationToken cancellationToken)");
+
+        // Feature-module pre-handler steps run before the handler is resolved, on every path below.
+        FeatureModules.EmitPreHandlerSteps(w, handler, methodName);
 
         // Resolve handler
         w.Line("var handler = " + SP + ".GetRequiredService<" + handlerIface + ">(" + SVC + ");");

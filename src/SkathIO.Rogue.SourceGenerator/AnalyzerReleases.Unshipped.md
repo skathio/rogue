@@ -11,3 +11,4 @@ ROGUE006 | SkathIO.Rogue | Warning | Open-generic request type not supported by 
 ROGUE010 | SkathIO.Rogue | Info | Consider injecting ISender or IPublisher instead of IMediator
 ROGUE011 | SkathIO.Rogue | Error | Type implements multiple CQS contracts
 ROGUE012 | SkathIO.Rogue | Warning | Adapter command-vs-query mapping conflict
+ROGUE013 | SkathIO.Rogue | Warning | Feature package version differs from the core package

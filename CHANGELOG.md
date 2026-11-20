@@ -6,6 +6,19 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **`ROGUE013` warning: feature package version mismatch.** The upcoming feature packages
+  (`SkathIO.Rogue.Validation`, `SkathIO.Rogue.Jobs`, `SkathIO.Rogue.Messaging`) have no generator of
+  their own; the core source generator emits their code. When one of them is referenced with a
+  different major.minor version than the core `SkathIO.Rogue` package, the build warns. Patch
+  versions may differ. The version is read from each assembly's file version.
+- The core source generator recognises the feature-module marker attributes
+  (`SkathIO.Rogue.Validation.ValidateAttribute`, `SkathIO.Rogue.Jobs.JobAttribute`,
+  `SkathIO.Rogue.Messaging.MessageAttribute`). A request that carries one gets a pre-handler step in
+  its generated `Send_X`, ahead of handler resolution, for that module to fill in. Requests without a
+  marker are generated exactly as before and keep their zero-allocation direct path.
+
 ### Removed
 
 - **Breaking: `netstandard2.0` is no longer a target.** `SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`,

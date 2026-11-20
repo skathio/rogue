@@ -152,7 +152,7 @@ Migration analyzer diagnostics `ROGM001`–`ROGM006` — see [migration-guide](m
 
 ## Diagnostics
 
-Compile-time generator diagnostics: `ROGUE001`–`ROGUE006` + `ROGUE010`/`ROGUE011`/`ROGUE012`
+Compile-time generator diagnostics: `ROGUE001`–`ROGUE006` + `ROGUE010`–`ROGUE013`
 (`ROGUE007` is intentionally unused) — see
 [getting-started](getting-started.md#troubleshooting). Migration analyzer diagnostics:
 `ROGM001`–`ROGM006` (see [migration-guide](migration-guide.md)).
