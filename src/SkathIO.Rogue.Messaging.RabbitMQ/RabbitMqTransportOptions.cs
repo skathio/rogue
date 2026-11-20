@@ -19,6 +19,9 @@ public sealed class RabbitMqTransportOptions
     /// <summary>The shortest <see cref="DeliveryStampKey"/>, in UTF-8 bytes.</summary>
     public const int MinDeliveryStampKeyBytes = 32;
 
+    // Throws on text that has no UTF-8 bytes of its own, where Encoding.UTF8 would replace it.
+    private static readonly UTF8Encoding _strictUtf8 = new UTF8Encoding(false, true);
+
     private readonly List<RoutingKeyMap> _routingKeyMaps = new List<RoutingKeyMap>();
     private readonly List<HeaderMap> _headerMaps = new List<HeaderMap>();
     private readonly List<Binding> _bindings = new List<Binding>();
@@ -54,7 +57,7 @@ public sealed class RabbitMqTransportOptions
     /// <summary>
     /// The secret that signs the delivery count on each copy the transport puts back on the service's
     /// queue for a retry, at least <see cref="MinDeliveryStampKeyBytes"/> bytes in UTF-8. Required, with
-    /// no default. Give every instance of a service the same key, from configuration or a secret store,
+    /// no default; it must be well-formed text, with no half of a surrogate pair. Give every instance of a service the same key, from configuration or a secret store,
     /// so each one reads the count of a copy another put back, and a message that always fails is
     /// dead-lettered after the attempt limit however its deliveries are spread. A copy signed under
     /// another key counts again from 1. Never logged or put in an exception by this package.
@@ -198,7 +201,19 @@ public sealed class RabbitMqTransportOptions
         {
             throw new ArgumentNullException(nameof(DeliveryStampKey), "Set the delivery stamp key: the same secret on every instance of the service, from configuration or a secret store.");
         }
-        if (Encoding.UTF8.GetByteCount(key) < MinDeliveryStampKeyBytes)
+        int bytes;
+        try
+        {
+            bytes = _strictUtf8.GetByteCount(key);
+        }
+        catch (EncoderFallbackException)
+        {
+            // Half of a surrogate pair has no UTF-8 bytes: encoding would put the same replacement in
+            // place of each, so different keys would sign alike. The encoder's own message quotes the
+            // character, so it is not passed on.
+            throw new ArgumentException("The delivery stamp key must be well-formed text, with no half of a surrogate pair.", nameof(DeliveryStampKey));
+        }
+        if (bytes < MinDeliveryStampKeyBytes)
         {
             throw new ArgumentException("The delivery stamp key must be at least " + MinDeliveryStampKeyBytes + " bytes in UTF-8.", nameof(DeliveryStampKey));
         }

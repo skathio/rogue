@@ -26,7 +26,8 @@ signature, so a sender cannot shorten a message's retries by setting a header.
 
 - **Required.** There is no default. `AddRogueRabbitMqTransport` (and the `RabbitMqTransport`
   constructor) throws an `ArgumentException` at startup when the key is missing or shorter than
-  32 bytes in UTF-8 (`RabbitMqTransportOptions.MinDeliveryStampKeyBytes`).
+  32 bytes in UTF-8 (`RabbitMqTransportOptions.MinDeliveryStampKeyBytes`), or is not well-formed
+  text (it holds half of a surrogate pair).
 - **The same on every instance of a service.** Any instance can take the copy another one put back.
   With the same key it reads the count, so a message that always fails is dead-lettered after
   `MaxAttempts` deliveries. With a different key the count starts again from 1, and the message can
