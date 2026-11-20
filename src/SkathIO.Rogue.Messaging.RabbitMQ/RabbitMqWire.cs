@@ -19,9 +19,12 @@ internal static class RabbitMqWire
     public const string OriginHeader = "rogue-origin";
     /// <summary>
     /// The delivery count stamped on a copy the transport sends back, for whoever reads the queue. It is
-    /// never read back: the sender controls every header, so the count comes from <see cref="DeliveryCounts"/>.
+    /// never read back: the sender controls every header, so the count comes from <see cref="DeliveryStampHeader"/>.
     /// </summary>
     public const string DeliveryCountHeader = "rogue-delivery-count";
+
+    /// <summary>The count of a copy the transport sends back, signed by it; see <see cref="DeliveryStamp"/>.</summary>
+    public const string DeliveryStampHeader = "rogue-delivery-stamp";
     public const string DeadLetterReasonHeader = "rogue-dead-letter-reason";
 
     /// <summary>
@@ -30,17 +33,18 @@ internal static class RabbitMqWire
     /// </summary>
     public const int MaxHeaderBytes = 1024;
 
-    /// <summary>The highest recorded delivery count a delivery is given; a higher one is read as this.</summary>
+    /// <summary>The highest signed delivery count a delivery is given; a higher one is read as this.</summary>
     public const int MaxDeliveryCount = 1_000_000;
 
     /// <summary>The persistent properties <paramref name="envelope"/> is published with.</summary>
-    public static BasicProperties ToProperties(MessageEnvelope envelope, int? deliveryCount = null, string? deadLetterReason = null)
+    public static BasicProperties ToProperties(MessageEnvelope envelope, int? deliveryCount = null, string? deadLetterReason = null, string? deliveryStamp = null)
     {
         var headers = new Dictionary<string, object?>(StringComparer.Ordinal);
         AddIfSet(headers, CausationHeader, envelope.CausationId);
         AddIfSet(headers, TraceParentHeader, envelope.TraceParent);
         AddIfSet(headers, OriginHeader, envelope.Origin);
         AddIfSet(headers, DeadLetterReasonHeader, deadLetterReason);
+        AddIfSet(headers, DeliveryStampHeader, deliveryStamp);
         if (deliveryCount is int count)
         {
             headers[DeliveryCountHeader] = count;
