@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace SkathIO.Rogue.Messaging.Tests;
@@ -191,6 +192,52 @@ public sealed class MessageConsumerTests
         Assert.Equal(new[] { "placed:1", "placed:2", "placed:3" }, host.Probe.Ran.OrderBy(static r => r, StringComparer.Ordinal));
         Assert.Empty(host.DeadLettered);
         Assert.Empty(await host.DrainAsync());
+    }
+
+    [Theory]
+    [InlineData("in-memory", false)]
+    [InlineData("shipping", true)]
+    [InlineData("IN-MEMORY", true)]
+    [InlineData("", true)]
+    [InlineData(null, true)]
+    public async Task AnEvent_IsDroppedOnlyWhenItsOriginIsThisService(string? origin, bool handled)
+    {
+        await using MessagingHost host = MessagingHost.Create();
+        MessageEnvelope envelope = MessagingHost.Envelope("test.order-placed", Placed);
+        envelope.Origin = origin;
+
+        await host.DeliverAsync(envelope);
+
+        Assert.Equal(handled ? new[] { "placed:1" } : Array.Empty<string>(), host.Probe.Ran);
+        Assert.Empty(host.DeadLettered);
+        Assert.Empty(await host.DrainAsync());
+    }
+
+    [Fact]
+    public async Task ACommand_CarryingThisServicesOrigin_IsStillHandled()
+    {
+        await using MessagingHost host = MessagingHost.Create();
+        MessageEnvelope envelope = MessagingHost.Envelope("test.reserve", "{\"Id\":5}");
+        envelope.Origin = host.Transport.ServiceName;
+
+        await host.DeliverAsync(envelope);
+
+        Assert.Equal(new[] { "reserve:5" }, host.Probe.Ran);
+        Assert.Empty(host.DeadLettered);
+    }
+
+    [Fact]
+    public async Task AnEventPublishedThroughTheBus_CarriesNoOrigin_AndIsHandledWhenItArrives()
+    {
+        // No local handler ran when it was published, so its copy from the bus is the only run.
+        await using MessagingHost host = MessagingHost.Create();
+        await host.Services.GetRequiredService<IMessageBus>().Publish(new OrderPlaced(4, "none"));
+        MessageEnvelope sent = Assert.Single(await host.DrainAsync());
+
+        await host.DeliverAsync(sent);
+
+        Assert.Null(sent.Origin);
+        Assert.Equal(new[] { "placed:4" }, host.Probe.Ran);
     }
 
     [Theory]

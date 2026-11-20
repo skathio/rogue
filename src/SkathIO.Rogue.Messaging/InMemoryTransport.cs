@@ -12,8 +12,9 @@ namespace SkathIO.Rogue.Messaging;
 /// process stops.
 /// </summary>
 /// <remarks>
-/// Every message sent is delivered back to this process, so an event published through
-/// <see cref="IPublisher"/> runs its local handlers again when the consumer receives it.
+/// Every message sent is delivered back to this process, which is the one service it names in
+/// <see cref="ServiceName"/>. An event published through <see cref="IPublisher"/> runs its local handlers
+/// at once and carries that name, so the consumer drops it when it comes back: the handlers run once.
 /// </remarks>
 public sealed class InMemoryTransport : IMessageTransport
 {
@@ -32,6 +33,9 @@ public sealed class InMemoryTransport : IMessageTransport
 
     /// <inheritdoc />
     public TransportCapabilities Capabilities => TransportCapabilities.NativeDelay | TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend;
+
+    /// <inheritdoc />
+    public string ServiceName => "in-memory";
 
     /// <summary>The messages dead-lettered so far, oldest first, each with its reason.</summary>
     public IReadOnlyList<DeadLetteredMessage> DeadLettered

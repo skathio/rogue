@@ -91,6 +91,18 @@ public sealed class MessageBusTests
     }
 
     [Fact]
+    public async Task EventForwardedFromThePublisher_CarriesTheTransportsServiceNameAsItsOrigin()
+    {
+        await using MessagingHost host = MessagingHost.Create();
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        await scope.ServiceProvider.GetRequiredService<IPublisher>().Publish(new OrderPlaced(2, "none"));
+
+        Assert.Equal("in-memory", host.Transport.ServiceName);
+        Assert.Equal("in-memory", Assert.Single(await host.DrainAsync()).Origin);
+    }
+
+    [Fact]
     public async Task PublishOnlyType_IsSent_ButDeadLetteredWhenItArrives()
     {
         await using MessagingHost host = MessagingHost.Create();

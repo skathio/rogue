@@ -24,6 +24,7 @@ SkathIO.Rogue.Messaging.IMessageBus.Publish<TMessage>(TMessage message, System.T
 SkathIO.Rogue.Messaging.IMessageTransport
 SkathIO.Rogue.Messaging.IMessageTransport.AckAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.Capabilities.get -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.IMessageTransport.ServiceName.get -> string?
 SkathIO.Rogue.Messaging.IMessageTransport.DeadLetterAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.DeferAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.NackAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
@@ -32,6 +33,7 @@ SkathIO.Rogue.Messaging.IMessageTransport.SendAsync(System.Collections.Generic.I
 SkathIO.Rogue.Messaging.InMemoryTransport
 SkathIO.Rogue.Messaging.InMemoryTransport.AckAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.InMemoryTransport.Capabilities.get -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.InMemoryTransport.ServiceName.get -> string!
 SkathIO.Rogue.Messaging.InMemoryTransport.DeadLetterAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.InMemoryTransport.DeferAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.InMemoryTransport.DeadLettered.get -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.DeadLetteredMessage!>!
@@ -63,6 +65,8 @@ SkathIO.Rogue.Messaging.MessageEnvelope.Id.set -> void
 SkathIO.Rogue.Messaging.MessageEnvelope.MessageEnvelope() -> void
 SkathIO.Rogue.Messaging.MessageEnvelope.Name.get -> string!
 SkathIO.Rogue.Messaging.MessageEnvelope.Name.set -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.Origin.get -> string?
+SkathIO.Rogue.Messaging.MessageEnvelope.Origin.set -> void
 SkathIO.Rogue.Messaging.MessageEnvelope.TraceParent.get -> string?
 SkathIO.Rogue.Messaging.MessageEnvelope.TraceParent.set -> void
 SkathIO.Rogue.Messaging.MessageForwarding

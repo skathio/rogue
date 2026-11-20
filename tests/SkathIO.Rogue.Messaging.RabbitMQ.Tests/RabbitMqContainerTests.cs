@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using Xunit;
 
@@ -69,6 +70,38 @@ public sealed class RabbitMqContainerTests
             Assert.Equal(new[] { "placed:7", "reserve:9" }, Sorted(host.Probe.Ran));
             Assert.Equal("{\"Id\":11}", Encoding.UTF8.GetString(deadLettered!.Body.Span));
             Assert.Contains("No message type has this name", Encoding.UTF8.GetString((byte[])deadLettered.BasicProperties.Headers!["rogue-dead-letter-reason"]!), StringComparison.Ordinal);
+        }
+    }
+
+    [RabbitMqFact]
+    public async Task EventPublishedThroughThePublisher_RunsItsLocalHandlersOnce_AndAnotherServiceStillGetsIt()
+    {
+        string exchange = "test-" + Guid.NewGuid().ToString("N");
+        await using RabbitMqHost publisher = RabbitMqHost.Create(_broker.ConnectionUri, options => options.Exchange = exchange);
+        await using RabbitMqHost other = RabbitMqHost.Create(_broker.ConnectionUri, options => options.Exchange = exchange);
+        // Both queues are declared and bound before anything is published.
+        await publisher.Consumer.RunOnceAsync();
+        await other.Consumer.RunOnceAsync();
+
+        await using (AsyncServiceScope scope = publisher.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IPublisher>().Publish(new OrderPlaced(5, "ok"));
+        }
+        Assert.Equal(new[] { "placed:5" }, publisher.Probe.Ran);
+
+        // The publisher's own copy is received and dropped; the other service handles its copy.
+        int ownCopies = 0;
+        await other.RunUntilAsync(
+            () => other.Probe.Count("placed:5") == 1 && ownCopies >= 1,
+            async () => ownCopies += await publisher.Consumer.RunOnceAsync());
+
+        Assert.Equal(new[] { "placed:5" }, publisher.Probe.Ran);
+        Assert.Equal(new[] { "placed:5" }, other.Probe.Ran);
+        (IConnection connection, IChannel raw) = await RabbitMqHost.RawChannelAsync(_broker.ConnectionUri);
+        await using (connection)
+        {
+            Assert.Equal(0u, await raw.MessageCountAsync(publisher.Options.ServiceName!));
+            Assert.Equal(0u, await raw.MessageCountAsync(publisher.Options.DeadLetterQueue!));
         }
     }
 

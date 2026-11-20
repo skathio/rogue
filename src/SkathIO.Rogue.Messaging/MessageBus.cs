@@ -49,14 +49,17 @@ internal sealed class MessageBus : IMessageBus
     internal async ValueTask ForwardAfterAsync(BoundMessage bound, IEvent @event, ValueTask localHandlers, CancellationToken cancellationToken)
     {
         await localHandlers.ConfigureAwait(false);
-        await Send(bound, @event, cancellationToken).ConfigureAwait(false);
+        await Send(bound, @event, cancellationToken, Transport.ServiceName).ConfigureAwait(false);
     }
 
-    internal async ValueTask Send(BoundMessage bound, object message, CancellationToken cancellationToken)
+    // An origin is given only for an event whose local handlers have run, so that this service's
+    // consumer does not run them again; a message published through IMessageBus carries none.
+    internal async ValueTask Send(BoundMessage bound, object message, CancellationToken cancellationToken, string? origin = null)
     {
         byte[] body = Serialize(bound, message);
         using Activity? activity = StartPublish(bound);
         MessageEnvelope envelope = Envelope(bound, body, activity);
+        envelope.Origin = origin;
         await Transport.SendAsync(new[] { envelope }, cancellationToken).ConfigureAwait(false);
         RogueMessagingTelemetry.Published.Add(1, new TagList { { RogueMessagingTelemetry.NameTag, bound.Name } });
     }

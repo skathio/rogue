@@ -101,6 +101,16 @@ public sealed class RabbitMqTransportTests
         Assert.Equal(new[] { "rmq.order-placed", "rmq.reserve" }, transport.Subscriptions.OrderBy(static n => n, StringComparer.Ordinal));
     }
 
+    [Theory]
+    [InlineData("billing")]
+    [InlineData(null)]
+    public void TheTransportsServiceName_IsTheOptionsServiceName(string? serviceName)
+    {
+        using var transport = new RabbitMqTransport(new RabbitMqTransportOptions { ServiceName = serviceName }, Array.Empty<string>());
+
+        Assert.Equal(serviceName, ((IMessageTransport)transport).ServiceName);
+    }
+
     [Fact]
     public void AProviderDisposedSynchronously_DisposesTheTransport()
     {

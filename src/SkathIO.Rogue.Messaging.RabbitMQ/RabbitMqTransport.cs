@@ -76,6 +76,9 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
     /// <inheritdoc />
     public TransportCapabilities Capabilities => TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend;
 
+    /// <summary>The <see cref="RabbitMqTransportOptions.ServiceName"/>, which also names the service's queue.</summary>
+    public string? ServiceName => _options.ServiceName;
+
     internal IReadOnlyList<string> Subscriptions => _subscriptions;
 
     /// <summary>

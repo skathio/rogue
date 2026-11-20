@@ -16,6 +16,7 @@ internal static class RabbitMqWire
 {
     public const string CausationHeader = "rogue-causation-id";
     public const string TraceParentHeader = "traceparent";
+    public const string OriginHeader = "rogue-origin";
     public const string DeliveryCountHeader = "rogue-delivery-count";
     public const string DeadLetterReasonHeader = "rogue-dead-letter-reason";
 
@@ -34,6 +35,7 @@ internal static class RabbitMqWire
         var headers = new Dictionary<string, object?>(StringComparer.Ordinal);
         AddIfSet(headers, CausationHeader, envelope.CausationId);
         AddIfSet(headers, TraceParentHeader, envelope.TraceParent);
+        AddIfSet(headers, OriginHeader, envelope.Origin);
         AddIfSet(headers, DeadLetterReasonHeader, deadLetterReason);
         if (deliveryCount is int count)
         {
@@ -64,6 +66,7 @@ internal static class RabbitMqWire
             CorrelationId = properties.CorrelationId,
             CausationId = HeaderString(properties, CausationHeader),
             TraceParent = HeaderString(properties, TraceParentHeader),
+            Origin = HeaderString(properties, OriginHeader),
             Body = delivery.Body.ToArray(),
         };
         if (!string.IsNullOrEmpty(properties.MessageId))

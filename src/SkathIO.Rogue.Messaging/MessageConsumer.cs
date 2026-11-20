@@ -18,7 +18,9 @@ namespace SkathIO.Rogue.Messaging;
 /// dead-lettered. A message with an unknown name, a body over <see cref="MessagingOptions.MaxMessageBytes"/>,
 /// or a body that is not JSON of its type within <see cref="MessagingOptions.MaxJsonDepth"/> is
 /// dead-lettered at once, without running any handler. When an <see cref="IMessageInbox"/> is registered,
-/// a message whose id it reports handled is acked without running its handlers.
+/// a message whose id it reports handled is acked without running its handlers. So is an event whose
+/// <see cref="MessageEnvelope.Origin"/> is the transport's own <see cref="IMessageTransport.ServiceName"/>:
+/// it was published through <see cref="IPublisher"/> here, and its handlers ran then.
 /// </summary>
 /// <remarks>
 /// Logs carry a message's id and name, never its body. <c>AddRogueMessageConsumer</c> registers a hosted
@@ -218,6 +220,11 @@ public sealed class MessageConsumer
         return mediaType.Equals(MessageEnvelope.JsonContentType, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Whether the envelope names this service as its origin. The origin is the sender's claim, but a
+    // forged one only drops events the forger itself sent.
+    private bool IsOwnEvent(MessageEnvelope envelope)
+        => _transport.ServiceName is { } own && string.Equals(envelope.Origin, own, StringComparison.Ordinal);
+
     private static string TrimReason(string reason)
     {
         reason = reason.Replace("\0", string.Empty, StringComparison.Ordinal);
@@ -281,6 +288,12 @@ public sealed class MessageConsumer
             // Any failure to read the body, a custom converter's included, is the body's fault and no
             // retry fixes it. The exception is not logged or kept: its message may quote the body.
             return Outcome.DeadLetter("The body is not a '" + bound.Name + "' message in JSON nested at most " + options.MaxJsonDepth + " deep (" + ex.GetType().Name + ").");
+        }
+        // Only an event runs its local handlers when it is published; a command is handled wherever it
+        // comes from, whatever origin it carries.
+        if (message is IEvent && IsOwnEvent(envelope))
+        {
+            return Outcome.Duplicate;
         }
 
         return _inbox is null
@@ -461,7 +474,7 @@ public sealed class MessageConsumer
         /// <summary>Nacked with no delay: the consumer is stopping, so the message is left to the next one.</summary>
         public static Outcome Release => new Outcome(RogueMessagingTelemetry.Released, TimeSpan.Zero, null, null);
 
-        /// <summary>Acked unhandled: the inbox says the message has been handled before.</summary>
+        /// <summary>Acked unhandled: the inbox says the message has been handled before, or it is this service's own event.</summary>
         public static Outcome Duplicate => new Outcome(RogueMessagingTelemetry.Duplicate, TimeSpan.Zero, null, null);
 
         public string Name { get; }

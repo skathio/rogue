@@ -136,6 +136,38 @@ public sealed class RabbitMqWireTests
     }
 
     [Fact]
+    public void TheOrigin_RoundTripsThroughItsHeader_AndSurvivesARetryOrDeadLetterCopy()
+    {
+        var sent = new MessageEnvelope { Name = "orders.placed", Origin = "billing", Body = Encoding.UTF8.GetBytes("{}") };
+
+        MessageEnvelope received = RabbitMqWire.ToEnvelope(_options, Delivery("shop", "orders.placed", AsReceived(RabbitMqWire.ToProperties(sent)), sent.Body));
+        MessageEnvelope copy = RabbitMqWire.ToEnvelope(_options, Delivery(string.Empty, "billing", AsReceived(RabbitMqWire.ToProperties(received, 2, "because")), sent.Body));
+
+        Assert.Equal("billing", received.Origin);
+        Assert.Equal("billing", copy.Origin);
+    }
+
+    [Fact]
+    public void AMessageWithoutAnOrigin_SendsNoOriginHeader_AndIsReadWithNone()
+    {
+        BasicProperties properties = RabbitMqWire.ToProperties(new MessageEnvelope { Name = "orders.placed" });
+
+        Assert.False(properties.Headers!.ContainsKey(RabbitMqWire.OriginHeader));
+        Assert.Null(RabbitMqWire.ToEnvelope(_options, Delivery("shop", "orders.placed", properties, Array.Empty<byte>())).Origin);
+    }
+
+    [Fact]
+    public void AnOriginOverTheHeaderLimit_IsReadAsNone()
+    {
+        var properties = new BasicProperties
+        {
+            Headers = new Dictionary<string, object?> { [RabbitMqWire.OriginHeader] = Encoding.UTF8.GetBytes(new string('a', RabbitMqWire.MaxHeaderBytes + 1)) },
+        };
+
+        Assert.Null(RabbitMqWire.ToEnvelope(_options, Delivery("shop", "orders.placed", properties, Array.Empty<byte>())).Origin);
+    }
+
+    [Fact]
     public void HeaderStrings_OverTheLimitOrNotUtf8_AreIgnored()
     {
         var properties = new BasicProperties

@@ -125,7 +125,10 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   handler through `ISender`, by code the core source generator emits, with no reflection or
   type-name lookup. `IMessageBus.Publish(message)` sends any marked type, and an event marked
   `[Message]` that you publish through `IPublisher` is also sent to the bus once its local handlers
-  have succeeded (an event handled because it arrived from the bus is not sent back). Each message
+  have succeeded (an event handled because it arrived from the bus is not sent back). Such an event
+  carries the transport's `ServiceName` as its `Origin`, and the consumer drops an event whose origin
+  is its own service, so a service that consumes the events it publishes runs their local handlers
+  once, while other services still receive them; commands are always handled. Each message
   travels in a `MessageEnvelope` with an id, its name, a content type, correlation and causation ids
   (taken from the message being handled, if any) and the W3C `traceparent`. `IMessageTransport` is
   the transport contract: batch send, receive, ack, nack with a delay, defer (put back unhandled,
@@ -154,7 +157,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   taken with a prefetch limit and acked only after their handlers succeed. The connection reconnects
   and recovers its topology on its own. JSON from systems that do not use Rogue is mapped to a Rogue
   message by its routing key (`MapRoutingKey`) or by a header (`MapHeader`), never by a type name;
-  a message from another exchange that no map names is dead-lettered unread.
+  a message from another exchange that no map names is dead-lettered unread. The transport's service
+  name is its `ServiceName`, and an event's origin travels in the `rogue-origin` header.
   Targets `net8.0` and `net10.0`; depends on `RabbitMQ.Client`; no reflection.
 - **New package: `SkathIO.Rogue.Messaging.Outbox`**, a transactional outbox and inbox on the
   Postgres and SQL Server job stores. Register it with `AddRogueMessagingOutbox()` next to

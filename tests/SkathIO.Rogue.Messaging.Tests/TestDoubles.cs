@@ -52,7 +52,7 @@ internal sealed class StepClock : TimeProvider
     }
 }
 
-/// <summary>An <see cref="InMemoryTransport"/> that reports the capabilities a test gives it and records each nack's and deferral's delay.</summary>
+/// <summary>An <see cref="InMemoryTransport"/>, under its service name, that reports the capabilities a test gives it and records each nack's and deferral's delay.</summary>
 internal sealed class RecordingTransport : IMessageTransport
 {
     private readonly InMemoryTransport _inner;
@@ -70,6 +70,8 @@ internal sealed class RecordingTransport : IMessageTransport
     public ConcurrentQueue<TimeSpan> DeferDelays { get; } = new ConcurrentQueue<TimeSpan>();
 
     public InMemoryTransport Inner => _inner;
+
+    public string? ServiceName => _inner.ServiceName;
 
     public ValueTask SendAsync(IReadOnlyList<MessageEnvelope> messages, CancellationToken cancellationToken) => _inner.SendAsync(messages, cancellationToken);
 

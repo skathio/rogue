@@ -29,6 +29,14 @@ public sealed class MessageEnvelope
     /// <summary>The W3C <c>traceparent</c> of the activity that published the message, or null for none.</summary>
     public string? TraceParent { get; set; }
 
+    /// <summary>
+    /// The <see cref="IMessageTransport.ServiceName"/> of the service that published this event through
+    /// <see cref="IPublisher"/>, where its local handlers already ran; null for any other message. That
+    /// service's consumer drops the event when its own copy comes back, so its handlers run once. The
+    /// sender sets it, so a forged one can only keep that service from handling the sender's own events.
+    /// </summary>
+    public string? Origin { get; set; }
+
     /// <summary>The serialized message.</summary>
     public ReadOnlyMemory<byte> Body { get; set; }
 }

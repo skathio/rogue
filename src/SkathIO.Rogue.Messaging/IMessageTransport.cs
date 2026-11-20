@@ -15,6 +15,14 @@ public interface IMessageTransport
     /// <summary>What the transport does natively; the consumer host fills in the rest.</summary>
     TransportCapabilities Capabilities { get; }
 
+    /// <summary>
+    /// The name of the service whose messages this transport receives, or null, the default, when it
+    /// names none. An event published through <see cref="IPublisher"/> runs its local handlers there and
+    /// then; the bus stamps this name on it as <see cref="MessageEnvelope.Origin"/>, and the consumer
+    /// drops a received event that carries it, so those handlers do not run a second time.
+    /// </summary>
+    string? ServiceName => null;
+
     /// <summary>Sends <paramref name="messages"/>, in order. An empty batch sends nothing.</summary>
     ValueTask SendAsync(IReadOnlyList<MessageEnvelope> messages, CancellationToken cancellationToken);
 
