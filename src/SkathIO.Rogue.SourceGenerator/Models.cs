@@ -182,7 +182,35 @@ internal sealed record DiscoveredModels(
     /// True when the SkathIO.Rogue.Validation package is referenced, so validated requests get their
     /// <c>IAsyncRules&lt;T&gt;</c> step. A compilation with the marker attribute alone keeps only the hook.
     /// </summary>
-    bool ValidationRuntime = false
+    bool ValidationRuntime = false,
+    /// <summary>
+    /// True when the SkathIO.Rogue.Messaging package is referenced, so the generated <c>Publish</c> hands
+    /// each event to the message bus once its local handlers have run.
+    /// </summary>
+    bool MessagingRuntime = false
+);
+
+/// <summary>How a <c>[Message]</c> type reaches its handler when it arrives from the bus.</summary>
+internal enum MessageShape
+{
+    /// <summary>An event, published through <c>IPublisher</c>.</summary>
+    Event,
+    /// <summary>A command without a response, sent through <c>ISender</c>.</summary>
+    Command,
+    /// <summary>A command with a response, sent through <c>ISender</c>; the response is dropped.</summary>
+    CommandWithResponse,
+    /// <summary>Neither: it can be published, but this process has no way to handle it.</summary>
+    PublishOnly,
+}
+
+/// <summary>A type marked <c>[Message("name")]</c>, read for the messaging feature module.</summary>
+internal sealed record MessageTypeModel(
+    string TypeFqn,
+    /// <summary>The stable name from the attribute, or null when the attribute was given null.</summary>
+    string? Name,
+    MessageShape Shape,
+    /// <summary>The response type of a <see cref="MessageShape.CommandWithResponse"/>; null otherwise.</summary>
+    string? ResponseFqn
 );
 
 /// <summary>The version of a referenced SkathIO.Rogue package, read from its assembly (ROGUE013).</summary>

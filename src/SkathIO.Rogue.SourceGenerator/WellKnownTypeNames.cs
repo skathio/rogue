@@ -90,6 +90,9 @@ internal static class WellKnownTypeNames
     public const string JobDefinition1 = "SkathIO.Rogue.Jobs.JobDefinition`1";
     public const string RecurringAttribute = "SkathIO.Rogue.Jobs.RecurringAttribute";
 
+    // Messaging feature module: the runtime type whose presence means the messaging package is referenced.
+    public const string MessageBinding1 = "SkathIO.Rogue.Messaging.MessageBinding`1";
+
     // Assemblies whose version is the core package's version (ROGUE013): the runtime first, then the
     // contracts, which a library that only declares requests references on its own.
     public const string CoreAssemblyName         = "SkathIO.Rogue";

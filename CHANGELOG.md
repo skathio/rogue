@@ -119,6 +119,29 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   `SkathIO.Rogue.Messaging.MessageAttribute`). A request that carries one gets a pre-handler step in
   its generated `Send_X`, ahead of handler resolution, for that module to fill in. Requests without a
   marker are generated exactly as before and keep their zero-allocation direct path.
+- **New package: `SkathIO.Rogue.Messaging`**, a message bus between services on Rogue handlers. A
+  type marked `[Message("orders.created")]` travels under that stable name, never its type name. An
+  inbound event is published to its handlers through `IPublisher` and an inbound command sent to its
+  handler through `ISender`, by code the core source generator emits, with no reflection or
+  type-name lookup. `IMessageBus.Publish(message)` sends any marked type, and an event marked
+  `[Message]` that you publish through `IPublisher` is also sent to the bus once its local handlers
+  have succeeded (an event handled because it arrived from the bus is not sent back). Each message
+  travels in a `MessageEnvelope` with an id, its name, a content type, correlation and causation ids
+  (taken from the message being handled, if any) and the W3C `traceparent`. `IMessageTransport` is
+  the transport contract: batch send, receive, ack, nack with a delay, dead-letter, and capability
+  flags (`NativeDelay`, `NativeDeadLetter`, `BatchSend`) whose gaps the consumer fills in.
+  `InMemoryTransport` keeps messages in memory, for tests and single-process development. The
+  `MessageConsumer` runs at most `MaxConcurrency` handlers at once, each in its own service scope,
+  redelivers a failed message after a doubling, capped delay until `MaxAttempts` deliveries have
+  failed, then dead-letters it. A message with an unknown name, a body over `MaxMessageBytes`, or a
+  body that is not JSON of its type within `MaxJsonDepth` is dead-lettered at once without running
+  any handler. Logs carry a message's id and name, never its body. Bodies go through your
+  System.Text.Json `JsonSerializerContext` (`MessagingOptions.SerializerContext`), checked at
+  startup; a name taken by two types also fails startup. Telemetry comes from its own
+  `SkathIO.Rogue.Messaging` activity source and meter, and the consume activity continues the
+  publisher's trace. Register it with `AddRogueMessaging()` next to `AddRogue()` and an
+  `IMessageTransport`; add `AddRogueMessageConsumer()` in each host that should consume. Targets
+  `net8.0` and `net10.0`; no reflection, AOT-safe.
 
 ### Removed
 

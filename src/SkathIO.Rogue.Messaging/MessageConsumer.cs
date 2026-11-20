@@ -1,0 +1,350 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace SkathIO.Rogue.Messaging;
+
+/// <summary>
+/// Receives messages from the transport and hands each to its handlers through the code the source
+/// generator emits for its stable name, each in a service scope of its own, at most
+/// <see cref="MessagingOptions.MaxConcurrency"/> at a time. A failed message is delivered again after an
+/// exponential delay until <see cref="MessagingOptions.MaxAttempts"/> deliveries have failed, then
+/// dead-lettered. A message with an unknown name, a body over <see cref="MessagingOptions.MaxMessageBytes"/>,
+/// or a body that is not JSON of its type within <see cref="MessagingOptions.MaxJsonDepth"/> is
+/// dead-lettered at once, without running any handler.
+/// </summary>
+/// <remarks>
+/// Logs carry a message's id and name, never its body. <c>AddRogueMessageConsumer</c> registers a hosted
+/// service that calls <see cref="RunAsync"/>; without it nothing is consumed, and a host can still drain
+/// messages itself through <see cref="RunOnceAsync"/>. On shutdown, running handlers are cancelled and
+/// their messages nacked with no delay.
+/// </remarks>
+public sealed class MessageConsumer
+{
+    private const string InvalidText = "(invalid)";
+    private const int MaxReasonLength = 1000;
+
+    private static readonly Action<ILogger, string, string, int, int, TimeSpan, Exception?> _logRetry =
+        LoggerMessage.Define<string, string, int, int, TimeSpan>(LogLevel.Warning, new EventId(1, "MessageRetry"),
+            "Message {MessageId} ({MessageName}) failed on delivery {Attempt} of {MaxAttempts}; it is delivered again in {Delay}.");
+
+    private static readonly Action<ILogger, string, string, int, string, Exception?> _logDeadLetter =
+        LoggerMessage.Define<string, string, int, string>(LogLevel.Error, new EventId(2, "MessageDeadLettered"),
+            "Message {MessageId} ({MessageName}) was dead-lettered on delivery {Attempt}: {Reason}");
+
+    private static readonly Action<ILogger, string, Exception?> _logSettleFailed =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(3, "MessageNotSettled"),
+            "Message {MessageId} could not be settled with the transport; it is delivered again.");
+
+    private static readonly Action<ILogger, Exception?> _logReceiveFailed =
+        LoggerMessage.Define(LogLevel.Error, new EventId(4, "MessageReceiveFailed"),
+            "Receiving messages failed; the consumer tries again after its poll interval.");
+
+    private readonly MessageRegistry _registry;
+    private readonly IMessageTransport _transport;
+    private readonly IServiceScopeFactory _scopes;
+    private readonly TimeProvider _time;
+    private readonly ILogger _logger;
+
+    // Built only by AddRogueMessaging, which registers every service read here, the transport aside.
+    internal MessageConsumer(MessageRegistry registry, IServiceProvider services)
+    {
+        _registry = registry;
+        _transport = services.GetRequiredService<IMessageTransport>();
+        _scopes = services.GetRequiredService<IServiceScopeFactory>();
+        _time = services.GetRequiredService<TimeProvider>();
+        _logger = (ILogger?)services.GetService<ILoggerFactory>()?.CreateLogger("SkathIO.Rogue.Messaging." + nameof(MessageConsumer)) ?? NullLogger.Instance;
+    }
+
+    /// <summary>
+    /// Consumes messages until <paramref name="stoppingToken"/> is cancelled, at most
+    /// <see cref="MessagingOptions.MaxConcurrency"/> at a time, and returns once the running handlers
+    /// have stopped and their messages are settled. It receives again as soon as a handler finishes,
+    /// and waits <see cref="MessagingOptions.PollInterval"/> when nothing was ready.
+    /// </summary>
+    public async Task RunAsync(CancellationToken stoppingToken)
+    {
+        MessagingOptions options = _registry.Options;
+        var running = new List<Task>(options.MaxConcurrency);
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                running.RemoveAll(static t => t.IsCompleted);
+                int free = options.MaxConcurrency - running.Count;
+                if (free > 0 && await StartReceivedAsync(running, Math.Min(free, options.BatchSize), stoppingToken).ConfigureAwait(false) > 0)
+                {
+                    continue;
+                }
+                Task wait = free == 0 ? Task.WhenAny(running) : Task.Delay(options.PollInterval, _time, stoppingToken);
+                await wait.ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Shutting down.
+        }
+        finally
+        {
+            // HandleAsync never throws, so this returns once every received message is settled.
+            await Task.WhenAll(running).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Receives one batch of up to <see cref="MessagingOptions.BatchSize"/> ready messages, handles them,
+    /// at most <see cref="MessagingOptions.MaxConcurrency"/> at a time, and returns how many it received
+    /// once each is settled. For tests and for hosts that drain messages on a schedule.
+    /// </summary>
+    public async Task<int> RunOnceAsync(CancellationToken cancellationToken = default)
+    {
+        MessagingOptions options = _registry.Options;
+        IReadOnlyList<ReceivedMessage> received = await _transport.ReceiveAsync(options.BatchSize, cancellationToken).ConfigureAwait(false);
+
+        // The loop itself is not cancellable: every received message must be settled, never abandoned.
+        var parallel = new ParallelOptions { MaxDegreeOfParallelism = options.MaxConcurrency };
+        await Parallel.ForEachAsync(received, parallel, async (delivery, _) => await HandleAsync(delivery, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        return received.Count;
+    }
+
+    /// <summary>
+    /// Handles one delivery and settles it with the transport; returns the outcome's telemetry name.
+    /// Never throws.
+    /// </summary>
+    internal async Task<string> HandleAsync(ReceivedMessage delivery, CancellationToken stoppingToken)
+    {
+        MessageEnvelope envelope = delivery.Envelope;
+        string name = Loggable(envelope.Name);
+        ActivityContext.TryParse(envelope.TraceParent, null, out ActivityContext parent);
+        using Activity? activity = RogueMessagingTelemetry.Source.StartActivity(RogueMessagingTelemetry.ConsumeActivity, ActivityKind.Consumer, parent);
+        activity?.SetTag(RogueMessagingTelemetry.NameTag, name);
+        activity?.SetTag(RogueMessagingTelemetry.AttemptTag, delivery.DeliveryCount);
+
+        Outcome outcome = await DecideAsync(delivery, stoppingToken).ConfigureAwait(false);
+        await SettleAsync(delivery, outcome, stoppingToken).ConfigureAwait(false);
+
+        var tags = new TagList
+        {
+            { RogueMessagingTelemetry.NameTag, name },
+            { RogueMessagingTelemetry.OutcomeTag, outcome.Name },
+        };
+        if (outcome.Exception is not null)
+        {
+            string errorType = outcome.Exception.GetType().Name;
+            tags.Add(RogueMessagingTelemetry.ErrorTypeTag, errorType);
+            activity?.SetTag(RogueMessagingTelemetry.ErrorTypeTag, errorType);
+            activity?.SetStatus(ActivityStatusCode.Error);
+        }
+        activity?.SetTag(RogueMessagingTelemetry.OutcomeTag, outcome.Name);
+        RogueMessagingTelemetry.Consumed.Add(1, tags);
+        return outcome.Name;
+    }
+
+    /// <summary>
+    /// The delay before delivery <paramref name="attempt"/> + 1 of a failed message (one-based): the
+    /// first delay doubled for each attempt after the first, capped. Never negative.
+    /// </summary>
+    internal static TimeSpan RetryDelay(TimeSpan first, int attempt, TimeSpan max)
+    {
+        if (first <= TimeSpan.Zero || max <= TimeSpan.Zero)
+        {
+            return TimeSpan.Zero;
+        }
+        double doubled = first.Ticks * Math.Pow(2, Math.Max(0, attempt - 1));
+        return doubled >= max.Ticks ? max : TimeSpan.FromTicks((long)doubled);
+    }
+
+    /// <summary>
+    /// A name or id from the wire as it may be logged: itself when it is a valid message name, otherwise
+    /// a placeholder, so a sender cannot put a body, or anything else of any length, into the logs.
+    /// </summary>
+    internal static string Loggable(string? value) => MessageLimits.IsValidName(value) ? value! : InvalidText;
+
+    private static bool IsJson(string? contentType)
+    {
+        if (string.IsNullOrEmpty(contentType))
+        {
+            return true;
+        }
+        int end = contentType.IndexOf(';', StringComparison.Ordinal);
+        ReadOnlySpan<char> mediaType = (end < 0 ? contentType.AsSpan() : contentType.AsSpan(0, end)).Trim();
+        return mediaType.Equals(MessageEnvelope.JsonContentType, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string TrimReason(string reason)
+    {
+        reason = reason.Replace("\0", string.Empty, StringComparison.Ordinal);
+        return reason.Length <= MaxReasonLength ? reason : reason.Substring(0, MaxReasonLength);
+    }
+
+    // Receives up to maxCount messages and starts handling each; returns how many. A failed receive is
+    // logged and counts as none, so the caller waits its poll interval before trying again.
+    private async Task<int> StartReceivedAsync(List<Task> running, int maxCount, CancellationToken stoppingToken)
+    {
+        IReadOnlyList<ReceivedMessage> received;
+        try
+        {
+            received = await _transport.ReceiveAsync(maxCount, stoppingToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
+        {
+            _logReceiveFailed(_logger, ex);
+            return 0;
+        }
+        foreach (ReceivedMessage delivery in received)
+        {
+            running.Add(HandleAsync(delivery, stoppingToken));
+        }
+        return received.Count;
+    }
+
+    // Checks the untrusted envelope before anything reads its body, then runs the handlers.
+    private async Task<Outcome> DecideAsync(ReceivedMessage delivery, CancellationToken stoppingToken)
+    {
+        MessagingOptions options = _registry.Options;
+        MessageEnvelope envelope = delivery.Envelope;
+        if (envelope.Body.Length > options.MaxMessageBytes)
+        {
+            return Outcome.DeadLetter("The body is " + envelope.Body.Length + " bytes, over the limit of " + options.MaxMessageBytes + ".");
+        }
+        if (envelope.Name is null || !_registry.TryGet(envelope.Name, out BoundMessage? bound))
+        {
+            return Outcome.DeadLetter("No message type has this name.");
+        }
+        if (!bound.CanDispatch)
+        {
+            return Outcome.DeadLetter("This process has no handler for the message.");
+        }
+        if (!IsJson(envelope.ContentType))
+        {
+            return Outcome.DeadLetter("The content type is not " + MessageEnvelope.JsonContentType + ".");
+        }
+
+        object message;
+        try
+        {
+            message = bound.Deserialize(envelope.Body, options.MaxJsonDepth);
+        }
+        catch (Exception ex)
+        {
+            // Any failure to read the body, a custom converter's included, is the body's fault and no
+            // retry fixes it. The exception is not logged or kept: its message may quote the body.
+            return Outcome.DeadLetter("The body is not a '" + bound.Name + "' message in JSON nested at most " + options.MaxJsonDepth + " deep (" + ex.GetType().Name + ").");
+        }
+
+        try
+        {
+            await DispatchAsync(bound, envelope, message, stoppingToken).ConfigureAwait(false);
+            return Outcome.Ack;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return Outcome.Release;
+        }
+        catch (Exception ex)
+        {
+            if (delivery.DeliveryCount >= options.MaxAttempts)
+            {
+                return Outcome.DeadLetter("The handler failed on delivery " + delivery.DeliveryCount + " of " + options.MaxAttempts + ".", ex);
+            }
+            return Outcome.Retry(RetryDelay(options.RetryDelay, delivery.DeliveryCount, options.MaxRetryDelay), ex);
+        }
+    }
+
+    // An async method of its own, so the inbound context it enters ends when the handlers return.
+    private async Task DispatchAsync(BoundMessage bound, MessageEnvelope envelope, object message, CancellationToken stoppingToken)
+    {
+        AsyncServiceScope scope = _scopes.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            InboundContext.Enter(envelope, message);
+            await bound.DispatchAsync(scope.ServiceProvider, message, stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task SettleAsync(ReceivedMessage delivery, Outcome outcome, CancellationToken stoppingToken)
+    {
+        MessageEnvelope envelope = delivery.Envelope;
+        string id = Loggable(envelope.Id);
+        try
+        {
+            switch (outcome.Name)
+            {
+                case RogueMessagingTelemetry.Succeeded:
+                    await _transport.AckAsync(delivery, CancellationToken.None).ConfigureAwait(false);
+                    break;
+                case RogueMessagingTelemetry.Retried:
+                    _logRetry(_logger, id, Loggable(envelope.Name), delivery.DeliveryCount, _registry.Options.MaxAttempts, outcome.Delay, outcome.Exception);
+                    TimeSpan delay = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken).ConfigureAwait(false);
+                    await _transport.NackAsync(delivery, delay, CancellationToken.None).ConfigureAwait(false);
+                    break;
+                case RogueMessagingTelemetry.DeadLettered:
+                    _logDeadLetter(_logger, id, Loggable(envelope.Name), delivery.DeliveryCount, outcome.Reason!, outcome.Exception);
+                    string reason = outcome.Exception is null ? outcome.Reason! : outcome.Reason + " " + outcome.Exception.GetType().FullName + ": " + outcome.Exception.Message;
+                    await _transport.DeadLetterAsync(delivery, TrimReason(reason), CancellationToken.None).ConfigureAwait(false);
+                    break;
+                default:
+                    await _transport.NackAsync(delivery, TimeSpan.Zero, CancellationToken.None).ConfigureAwait(false);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logSettleFailed(_logger, id, ex);
+        }
+    }
+
+    // A transport that cannot hold a nacked message for a delay gets it back at once, so the delay is
+    // waited out here, in the message's slot. Shutting down cuts the wait short.
+    private async Task<TimeSpan> WaitUnlessNativeAsync(TimeSpan delay, CancellationToken stoppingToken)
+    {
+        if ((_transport.Capabilities & TransportCapabilities.NativeDelay) != 0 || delay <= TimeSpan.Zero)
+        {
+            return delay;
+        }
+        try
+        {
+            await Task.Delay(delay, _time, stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Shutting down; the message is nacked now.
+        }
+        return TimeSpan.Zero;
+    }
+
+    private readonly struct Outcome
+    {
+        private Outcome(string name, TimeSpan delay, string? reason, Exception? exception)
+        {
+            Name = name;
+            Delay = delay;
+            Reason = reason;
+            Exception = exception;
+        }
+
+        public static Outcome Ack => new Outcome(RogueMessagingTelemetry.Succeeded, TimeSpan.Zero, null, null);
+
+        /// <summary>Nacked with no delay: the consumer is stopping, so the message is left to the next one.</summary>
+        public static Outcome Release => new Outcome(RogueMessagingTelemetry.Released, TimeSpan.Zero, null, null);
+
+        public string Name { get; }
+
+        public TimeSpan Delay { get; }
+
+        /// <summary>Why the message was dead-lettered, in words that never quote the body.</summary>
+        public string? Reason { get; }
+
+        /// <summary>The handler's exception, the only exception an outcome keeps.</summary>
+        public Exception? Exception { get; }
+
+        public static Outcome Retry(TimeSpan delay, Exception exception) => new Outcome(RogueMessagingTelemetry.Retried, delay, null, exception);
+
+        public static Outcome DeadLetter(string reason, Exception? exception = null) => new Outcome(RogueMessagingTelemetry.DeadLettered, TimeSpan.Zero, reason, exception);
+    }
+}

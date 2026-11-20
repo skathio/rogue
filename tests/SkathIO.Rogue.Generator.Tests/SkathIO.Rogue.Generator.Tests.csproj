@@ -21,6 +21,10 @@
     <!-- The jobs package: JobsCoreTests compile consumer code against its built DLL and load its
          analyzer and code fix from their build output, so building this project must build all three. -->
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
+    <!-- The messaging package: MessagingCoreRulesTests compile consumer code against its built DLL, which
+         they load from the package's own output, so this builds it without referencing its assembly. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging\SkathIO.Rogue.Messaging.csproj"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

@@ -139,7 +139,7 @@ internal static class DispatcherEmitter
         }
 
         // ── Publish override ──────────────────────────────────────────────────────────
-        EmitPublishOverride(w, handlersByEvent);
+        EmitPublishOverride(w, handlersByEvent, models.MessagingRuntime);
 
         w.Close(); // class RogueDispatcherImpl
 
@@ -1426,9 +1426,25 @@ internal static class DispatcherEmitter
     // Publish override
     // ────────────────────────────────────────────────────────────────────────────────────
 
-    private static void EmitPublishOverride(CodeWriter w, Dictionary<string, List<string>> handlersByEvent)
+    private static void EmitPublishOverride(CodeWriter w, Dictionary<string, List<string>> handlersByEvent, bool messagingRuntime)
     {
-        w.Open("public override global::System.Threading.Tasks.ValueTask Publish(global::SkathIO.Rogue.IEvent ev, global::System.Threading.CancellationToken cancellationToken = default)");
+        const string publishSignature = "global::System.Threading.Tasks.ValueTask Publish(global::SkathIO.Rogue.IEvent ev, global::System.Threading.CancellationToken cancellationToken = default)";
+        if (!messagingRuntime)
+        {
+            w.Open("public override " + publishSignature);
+            EmitPublishSwitchBody(w, handlersByEvent);
+            w.Close();
+            return;
+        }
+
+        // With the messaging package referenced, an event marked [Message] also goes to the message bus
+        // once its local handlers have run. The runtime decides which events by their type, so a marked
+        // event declared in another assembly, or with no local handler, is forwarded too.
+        w.Open("public override " + publishSignature);
+        w.Line("return global::SkathIO.Rogue.Messaging.MessageForwarding.AfterLocalHandlers(_serviceProvider, ev, PublishLocal(ev, cancellationToken), cancellationToken);");
+        w.Close();
+        w.Line();
+        w.Open("private global::System.Threading.Tasks.ValueTask PublishLocal(global::SkathIO.Rogue.IEvent ev, global::System.Threading.CancellationToken cancellationToken)");
         EmitPublishSwitchBody(w, handlersByEvent);
         w.Close();
     }

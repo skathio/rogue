@@ -1,3 +1,9 @@
+using System;
+using System.Collections.Immutable;
+using System.Threading;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
 namespace SkathIO.Rogue.SourceGenerator;
 
 /// <summary>
@@ -36,6 +42,21 @@ internal static class FeatureModules
     /// </summary>
     internal static string PreHandlerHookName(string module, string sendMethodName)
         => "PreHandle_" + module + "_" + sendMethodName;
+
+    /// <summary>
+    /// Every type declaration that carries the attribute <paramref name="markerMetadataName"/>, read by
+    /// <paramref name="read"/>; a type it returns null for is left out.
+    /// </summary>
+    internal static IncrementalValueProvider<ImmutableArray<T>> MarkedTypes<T>(
+        IncrementalGeneratorInitializationContext context,
+        string markerMetadataName,
+        Func<GeneratorAttributeSyntaxContext, CancellationToken, T?> read)
+        where T : class
+        => context.SyntaxProvider
+            .ForAttributeWithMetadataName(markerMetadataName, predicate: static (node, _) => node is TypeDeclarationSyntax, transform: read)
+            .Where(static m => m is not null)
+            .Select(static (m, _) => m!)
+            .Collect();
 
     internal static bool Marks(HandlerModel handler, string module)
     {

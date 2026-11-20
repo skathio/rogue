@@ -32,7 +32,9 @@ public sealed class RogueGenerator : IIncrementalGenerator
             .Combine(allMetadataBehaviors)
             .Select(static (pair, _) => BuildDiscoveredModels(pair.Left, pair.Right))
             .Combine(ValidationModule.RuntimeAvailable(context))
-            .Select(static (pair, _) => pair.Left with { ValidationRuntime = pair.Right });
+            .Select(static (pair, _) => pair.Left with { ValidationRuntime = pair.Right })
+            .Combine(MessagingModule.RuntimeAvailable(context))
+            .Select(static (pair, _) => pair.Left with { MessagingRuntime = pair.Right });
 
         // Phase 3.2: real diagnostic emission.
         context.RegisterSourceOutput(discovered, static (spc, models) => EmitDiagnostics(spc, models));
@@ -73,6 +75,9 @@ public sealed class RogueGenerator : IIncrementalGenerator
 
         // Feature module: the job kind-to-invoker map for every command (only when its package is referenced).
         JobsModule.Register(context, discovered);
+
+        // Feature module: the stable-name-to-dispatch map for every [Message] type (only when its package is referenced).
+        MessagingModule.Register(context);
     }
 
     private static IncrementalValueProvider<ImmutableArray<BehaviorModel?>> MetadataBehaviors(IncrementalGeneratorInitializationContext context)

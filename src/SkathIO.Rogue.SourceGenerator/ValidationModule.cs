@@ -21,14 +21,8 @@ internal static class ValidationModule
 
     internal static void Register(IncrementalGeneratorInitializationContext context, IncrementalValueProvider<DiscoveredModels> discovered)
     {
-        IncrementalValueProvider<ImmutableArray<ValidatedTypeModel>> types = context.SyntaxProvider
-            .ForAttributeWithMetadataName(
-                WellKnownTypeNames.ValidateAttribute,
-                predicate: static (node, _) => node is TypeDeclarationSyntax,
-                transform: static (ctx, ct) => ValidationDiscovery.ExtractValidatedType(ctx, ct))
-            .Where(static m => m is not null)
-            .Select(static (m, _) => m!)
-            .Collect();
+        IncrementalValueProvider<ImmutableArray<ValidatedTypeModel>> types =
+            FeatureModules.MarkedTypes(context, WellKnownTypeNames.ValidateAttribute, static (ctx, ct) => ValidationDiscovery.ExtractValidatedType(ctx, ct));
 
         IncrementalValueProvider<ImmutableArray<AsyncRulesModel>> asyncRules = context.SyntaxProvider
             .CreateSyntaxProvider(

@@ -17,6 +17,7 @@
 #   src/SkathIO.Rogue.Jobs/SkathIO.Rogue.Jobs.csproj
 #   src/SkathIO.Rogue.Jobs.Postgres/SkathIO.Rogue.Jobs.Postgres.csproj
 #   src/SkathIO.Rogue.Jobs.SqlServer/SkathIO.Rogue.Jobs.SqlServer.csproj
+#   src/SkathIO.Rogue.Messaging/SkathIO.Rogue.Messaging.csproj
 #
 # Adding a new id to this file requires FIRST verifying that the package's
 # license is permissive (MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, MS-PL,
