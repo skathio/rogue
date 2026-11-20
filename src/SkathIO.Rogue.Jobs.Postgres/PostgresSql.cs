@@ -21,7 +21,8 @@ internal sealed class PostgresSql
         Channel = "\"" + schema + "\"";
         string sequence = s + ".job_seq";
 
-        Migrations = new[] { CreateJobsTable(Jobs, sequence) };
+        Scheduling = new PostgresSchedulingSql(s, Jobs);
+        Migrations = new[] { CreateJobsTable(Jobs, sequence), Scheduling.Migration };
 
         MigrationPrologue =
             "SELECT pg_advisory_xact_lock(1919381317, hashtext(@schema));\n"
@@ -30,7 +31,7 @@ internal sealed class PostgresSql
         CurrentVersion = "SELECT coalesce(max(version), 0) FROM " + s + ".schema_version;";
         RecordMigration = "INSERT INTO " + s + ".schema_version (version) VALUES (@version);";
 
-        Insert = "INSERT INTO " + Jobs + " (id, kind, queue, payload, max_attempts, run_at) VALUES (@id, @kind, @queue, @payload, @max_attempts, @now);";
+        Insert = "INSERT INTO " + Jobs + " (id, kind, queue, payload, max_attempts, run_at) VALUES (@id, @kind, @queue, @payload, @max_attempts, @run_at);";
         Copy = "COPY " + Jobs + " (id, kind, queue, payload, max_attempts, run_at) FROM STDIN (FORMAT BINARY)";
         Notify = "SELECT pg_notify(@channel, @queue);";
 
@@ -89,10 +90,14 @@ internal sealed class PostgresSql
             + "CREATE INDEX jobs_leased ON " + jobs + " (queue, lease_until) WHERE state = " + Processing + ";\n"
             + "CREATE INDEX jobs_finished ON " + jobs + " (finished_at) WHERE state IN (" + Succeeded + ", " + DeadLettered + ");";
 
-    // Moves dead-lettered jobs back to ready.
+    // Moves dead-lettered jobs back to ready, skipping one whose unique key a pending job holds and,
+    // of several sharing a kind and unique key, all but one.
     private static string RequeueSql(string jobs, string sequence)
-        => "UPDATE " + jobs + " SET state = " + Enqueued + ", attempt = 0, run_at = @now, finished_at = NULL, seq = nextval('" + sequence + "')\n"
-            + "WHERE id = ANY(@ids) AND state = " + DeadLettered + ";";
+        => "UPDATE " + jobs + " j SET state = " + Enqueued + ", attempt = 0, run_at = @now, finished_at = NULL, seq = nextval('" + sequence + "')\n"
+            + "FROM (SELECT id, kind, unique_key, row_number() OVER (PARTITION BY kind, unique_key ORDER BY id) AS n\n"
+            + "      FROM " + jobs + " WHERE id = ANY(@ids) AND state = " + DeadLettered + ") c\n"
+            + "WHERE j.id = c.id AND (c.unique_key IS NULL OR (c.n = 1 AND NOT EXISTS (\n"
+            + "  SELECT 1 FROM " + jobs + " o WHERE o.kind = c.kind AND o.unique_key = c.unique_key AND o.state IN (" + Enqueued + ", " + Processing + "))));";
 
     // A processing job whose lease ran out is due again now, or dead-lettered when that claim was its
     // last attempt. Runs before each claim, on the claim's queue.
@@ -129,6 +134,9 @@ internal sealed class PostgresSql
     public string CurrentVersion { get; }
 
     public string RecordMigration { get; }
+
+    /// <summary>The statements for delayed and recurring jobs, unique keys and the leader lock.</summary>
+    public PostgresSchedulingSql Scheduling { get; }
 
     public string Insert { get; }
 

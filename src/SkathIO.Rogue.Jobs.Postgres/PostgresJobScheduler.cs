@@ -29,6 +29,10 @@ internal sealed class PostgresJobScheduler : IPostgresJobScheduler
     {
         ArgumentNullException.ThrowIfNull(connection);
         NewJob job = _scheduler.CreateJob(command);
+        if (job.UniqueKey is not null)
+        {
+            return await _store.EnqueueOnceAsync(job, connection, cancellationToken).ConfigureAwait(false);
+        }
         await _store.EnqueueAsync(new[] { job }, connection, cancellationToken).ConfigureAwait(false);
         return job.Id;
     }
@@ -45,15 +49,29 @@ internal sealed class PostgresJobScheduler : IPostgresJobScheduler
     {
         ArgumentNullException.ThrowIfNull(commands);
         ArgumentNullException.ThrowIfNull(connection);
-        var jobs = new NewJob[commands.Count];
-        var ids = new Guid[commands.Count];
-        for (int i = 0; i < jobs.Length; i++)
+        IReadOnlyList<NewJob> jobs = _scheduler.CreateJobs(commands);
+        if (jobs.Count > 0 && jobs[0].UniqueKey is not null)
         {
-            TCommand command = commands[i] ?? throw new ArgumentException("The commands contain null at index " + i + ".", nameof(commands));
-            jobs[i] = _scheduler.CreateJob(command);
-            ids[i] = jobs[i].Id;
+            return await EnqueueEachAsync(jobs, connection, cancellationToken).ConfigureAwait(false);
         }
         await _store.EnqueueAsync(jobs, connection, cancellationToken).ConfigureAwait(false);
+        var ids = new Guid[jobs.Count];
+        for (int i = 0; i < ids.Length; i++)
+        {
+            ids[i] = jobs[i].Id;
+        }
+        return ids;
+    }
+
+    // A unique key is held by one job at a time, so each job is stored on its own and gets the id of
+    // the job that holds the key.
+    private async ValueTask<IReadOnlyList<Guid>> EnqueueEachAsync(IReadOnlyList<NewJob> jobs, NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        var ids = new Guid[jobs.Count];
+        for (int i = 0; i < ids.Length; i++)
+        {
+            ids[i] = await _store.EnqueueOnceAsync(jobs[i], connection, cancellationToken).ConfigureAwait(false);
+        }
         return ids;
     }
 }

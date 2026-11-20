@@ -63,6 +63,28 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 - `IJobScheduler.CreateJob(command)` serializes a command into a `NewJob` without storing it, for a
   store's own enqueue; `JobSignal.Pulse()` lets a store wake the worker; `JobLimits.CheckQueue`
   checks a queue name against the store contract.
+- Job scheduling on every store (in-memory, Postgres, SQL Server):
+  - `IJobScheduler.Schedule(command, at)` stores a delayed job that no worker runs before `at`;
+    a time already past is due at once. `NewJob.RunAt` carries the time for a store's own enqueue.
+  - `[Recurring("30 * * * *")]` on a parameterless `[Job]` command runs it at each occurrence of a
+    five-field cron expression, in UTC, parsed in-house (no cron package). Each host that calls
+    `AddRogueJobWorker()` runs a scheduler; one at a time leads, through a leader lock in the store
+    (`JobsOptions.LeaderLeaseDuration`, default one minute), and stores the next occurrence as a
+    delayed job. Each run is stored once per task key and run time, unique in the store, so two hosts
+    never run one occurrence twice. Occurrences that fall while no host runs are skipped, not caught
+    up. A recurring command that is not a `[Job]`, has no parameterless constructor, or whose cron
+    expression is invalid fails the host at startup, naming it. `AddRecurringJob(new
+    RecurringJob<T>(cron, create))` registers one in code.
+  - `[Job(UniqueKey = "...")]`: while a job of that kind holding the key is enqueued or processing,
+    enqueueing or scheduling the command again stores nothing and returns the pending job's id. The
+    database stores keep it under a partial unique index.
+  - `IJobStore` gains `EnqueueOnceAsync` (a keyed enqueue that returns the id of the job holding
+    the key), `TryAcquireLeadershipAsync` and `ReleaseLeadershipAsync`; a batch `EnqueueAsync`
+    rejects keyed jobs. `RequeueAsync` skips a dead-lettered job whose unique key a pending job
+    holds. Both database stores add these through a second schema migration, applied on startup
+    with `AutoMigrate` or by `MigrateAsync()`.
+  - `IJobScheduler.CreateJobs(commands)` serializes a batch of commands into `NewJob`s without
+    storing them, for a store's own batch enqueue.
 - `ROGUE019` warning, with a code fix: a `[Job]` type is not covered by a `[JsonSerializable]`
   attribute on the project's `JsonSerializerContext`. The fix adds the attribute.
 - **New package: `SkathIO.Rogue.Validation`**, source-generated request validation next to the

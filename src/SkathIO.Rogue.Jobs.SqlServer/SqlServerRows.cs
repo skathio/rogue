@@ -22,6 +22,7 @@ internal static class SqlServerRows
         new SqlMetaData("queue", SqlDbType.NVarChar, JobLimits.MaxQueueLength),
         new SqlMetaData("payload", SqlDbType.VarBinary, SqlMetaData.Max),
         new SqlMetaData("max_attempts", SqlDbType.Int),
+        new SqlMetaData("run_at", SqlDbType.DateTime2),
     };
 
     private static readonly SqlMetaData[] _leaseColumns =
@@ -59,6 +60,14 @@ internal static class SqlServerRows
             record.SetString(3, job.Queue);
             record.SetValue(4, Bytes(job.Payload));
             record.SetInt32(5, job.MaxAttempts);
+            if (job.RunAt is { } runAt)
+            {
+                record.SetDateTime(6, runAt.UtcDateTime);
+            }
+            else
+            {
+                record.SetDBNull(6);
+            }
             yield return record;
         }
     }

@@ -33,6 +33,7 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
     private readonly PostgresSql _sql;
     private readonly CompletionBatcher _completions;
     private readonly MigrationGate _migrations;
+    private readonly PostgresScheduling _scheduling;
 
     /// <summary>Creates a store on <paramref name="dataSource"/> with the given options, on the system clock by default.</summary>
     /// <exception cref="ArgumentException">An option is out of range.</exception>
@@ -45,6 +46,7 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
         _sql = new PostgresSql(_options.Schema);
         _completions = new CompletionBatcher(CompleteBatchAsync);
         _migrations = new MigrationGate(_options.AutoMigrate, MigrateAsync);
+        _scheduling = new PostgresScheduling(this);
     }
 
     internal PostgresSql Sql => _sql;
@@ -112,6 +114,37 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
     public ValueTask EnqueueAsync(IReadOnlyList<NewJob> jobs, NpgsqlTransaction transaction, CancellationToken cancellationToken = default)
     {
         return EnqueueAsync(jobs, ConnectionOf(transaction), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Runs in a transaction of its own: the run ledger row and the job commit together.</remarks>
+    public async ValueTask<Guid> EnqueueOnceAsync(NewJob job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        await ReadyAsync(cancellationToken).ConfigureAwait(false);
+        NpgsqlConnection connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        Guid stored = Guid.Empty;
+        await StoreSupport.InTransactionAsync<NpgsqlTransaction>(connection, async (transaction, ct) =>
+        {
+            stored = await _scheduling.EnqueueOnceAsync(job, transaction.Connection!, ct).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
+        return stored;
+    }
+
+    /// <summary>
+    /// Stores one keyed job on the caller's open <paramref name="connection"/>, in its current
+    /// transaction if any, as <see cref="EnqueueOnceAsync(NewJob, CancellationToken)"/> does; for the
+    /// transactional scheduler.
+    /// </summary>
+    internal async ValueTask<Guid> EnqueueOnceAsync(NewJob job, NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        if (connection.FullState != System.Data.ConnectionState.Open)
+        {
+            throw new InvalidOperationException("The connection must be open, and not busy with another command, to enqueue jobs on it.");
+        }
+        await ReadyAsync(cancellationToken).ConfigureAwait(false);
+        return await _scheduling.EnqueueOnceAsync(job, connection, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -224,6 +257,22 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
         return await StoreSupport.ReadSnapshotAsync(reader, id, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public async ValueTask<bool> TryAcquireLeadershipAsync(string name, string owner, TimeSpan lease, CancellationToken cancellationToken)
+    {
+        StoreSupport.CheckLeadership(name, owner, lease);
+        await ReadyAsync(cancellationToken).ConfigureAwait(false);
+        return await _scheduling.TryAcquireLeadershipAsync(name, owner, lease, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask ReleaseLeadershipAsync(string name, string owner, CancellationToken cancellationToken)
+    {
+        StoreSupport.CheckLeadership(name, owner, null);
+        await ReadyAsync(cancellationToken).ConfigureAwait(false);
+        await _scheduling.ReleaseLeadershipAsync(name, owner, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Deletes succeeded and dead-lettered jobs older than their retention, a batch per statement, and
     /// returns how many it deleted. The pruner calls it every <see cref="PostgresJobsOptions.PruneInterval"/>.
@@ -232,6 +281,7 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
     {
         await ReadyAsync(cancellationToken).ConfigureAwait(false);
         DateTimeOffset now = _time.GetUtcNow();
+        await _scheduling.ForgetRunsBeforeAsync((now - _options.SucceededRetention).UtcDateTime, cancellationToken).ConfigureAwait(false);
         return await StoreSupport.DeleteInBatchesAsync(async ct =>
         {
             await using NpgsqlCommand command = _dataSource.CreateCommand(_sql.Prune);
@@ -289,7 +339,7 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
         }
     }
 
-    private DateTime Now() => _time.GetUtcNow().UtcDateTime;
+    internal DateTime Now() => _time.GetUtcNow().UtcDateTime;
 
     private static void CheckJobs(IReadOnlyList<NewJob> jobs) => StoreSupport.CheckBatch(jobs);
 
@@ -304,12 +354,7 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
         {
             NewJob job = jobs[0];
             await using var insert = new NpgsqlCommand(_sql.Insert, connection);
-            insert.Parameters.AddWithValue("id", job.Id);
-            insert.Parameters.AddWithValue("kind", job.Kind);
-            insert.Parameters.AddWithValue("queue", job.Queue);
-            insert.Parameters.Add(new NpgsqlParameter<ReadOnlyMemory<byte>>("payload", NpgsqlDbType.Bytea) { TypedValue = job.Payload });
-            insert.Parameters.AddWithValue("max_attempts", job.MaxAttempts);
-            insert.Parameters.AddWithValue("now", now);
+            AddJobValues(insert.Parameters, job, RunAt(job, now));
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
         else
@@ -332,13 +377,26 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
                 await importer.WriteAsync(job.Queue, NpgsqlDbType.Text, cancellationToken).ConfigureAwait(false);
                 await importer.WriteAsync(job.Payload, NpgsqlDbType.Bytea, cancellationToken).ConfigureAwait(false);
                 await importer.WriteAsync(job.MaxAttempts, NpgsqlDbType.Integer, cancellationToken).ConfigureAwait(false);
-                await importer.WriteAsync(now, NpgsqlDbType.TimestampTz, cancellationToken).ConfigureAwait(false);
+                await importer.WriteAsync(RunAt(job, now), NpgsqlDbType.TimestampTz, cancellationToken).ConfigureAwait(false);
             }
             await importer.CompleteAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task NotifyAsync(IReadOnlyList<NewJob> jobs, NpgsqlConnection connection, CancellationToken cancellationToken)
+    internal static DateTime RunAt(NewJob job, DateTime now) => job.RunAt?.UtcDateTime ?? now;
+
+    /// <summary>Adds the parameters an insert of <paramref name="job"/> takes, due at <paramref name="runAt"/>.</summary>
+    internal static void AddJobValues(NpgsqlParameterCollection values, NewJob job, DateTime runAt)
+    {
+        values.AddWithValue("id", job.Id);
+        values.AddWithValue("kind", job.Kind);
+        values.AddWithValue("queue", job.Queue);
+        values.Add(new NpgsqlParameter<ReadOnlyMemory<byte>>("payload", NpgsqlDbType.Bytea) { TypedValue = job.Payload });
+        values.AddWithValue("max_attempts", job.MaxAttempts);
+        values.AddWithValue("run_at", runAt);
+    }
+
+    internal async Task NotifyAsync(IReadOnlyList<NewJob> jobs, NpgsqlConnection connection, CancellationToken cancellationToken)
     {
         var queues = new HashSet<string>(StringComparer.Ordinal);
         await using var batch = new NpgsqlBatch(connection);

@@ -68,13 +68,20 @@ internal static class StoreSupport
         };
     }
 
-    /// <summary>Checks a batch for the store contract: not null, and no null job.</summary>
+    /// <summary>
+    /// Checks a batch for the store contract: not null, no null job, and no job with a unique key or a
+    /// task key, which only a single keyed enqueue may store.
+    /// </summary>
     public static void CheckBatch(IReadOnlyList<NewJob> jobs)
     {
         ArgumentNullException.ThrowIfNull(jobs);
         foreach (NewJob job in jobs)
         {
             ArgumentNullException.ThrowIfNull(job, nameof(jobs));
+            if (job.UniqueKey is not null || job.TaskKey is not null)
+            {
+                throw new ArgumentException("A job with a unique key or a task key is stored with EnqueueOnceAsync, not in a batch.", nameof(jobs));
+            }
         }
     }
 
@@ -84,6 +91,17 @@ internal static class StoreSupport
         JobLimits.CheckQueue(queue, nameof(queue));
         ArgumentOutOfRangeException.ThrowIfLessThan(maxCount, 1);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lease, TimeSpan.Zero);
+    }
+
+    /// <summary>Checks a leader lock's name, owner and lease for the store contract.</summary>
+    public static void CheckLeadership(string name, string owner, TimeSpan? lease)
+    {
+        JobLimits.CheckKey(name, nameof(name));
+        JobLimits.CheckKey(owner, nameof(owner));
+        if (lease is { } length)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(length, TimeSpan.Zero, "lease");
+        }
     }
 
     /// <summary>

@@ -62,19 +62,35 @@ internal sealed record HandlerModel(
     /// </summary>
     EquatableArray<string> MarkedModules = default,
     /// <summary>
-    /// The <c>[Job]</c> defaults the command type carries, or null when it has none. Read for command
-    /// handlers only; the jobs module emits a job definition for every command either way.
+    /// The <c>[Job]</c> defaults and <c>[Recurring]</c> schedule the command type carries, or null when
+    /// it has neither. Read for command handlers only; the jobs module emits a job definition for every
+    /// command either way.
     /// </summary>
     JobOptionsModel? JobOptions = null
 );
 
-/// <summary>The named arguments of a command's <c>[Job]</c> attribute; zero or null keeps the default.</summary>
+/// <summary>
+/// The named arguments of a command's <c>[Job]</c> attribute, where zero or null keeps the default,
+/// and its <c>[Recurring]</c> schedule.
+/// </summary>
 internal sealed record JobOptionsModel(
+    bool IsJob,
     string? Kind,
     string? Queue,
     int MaxAttempts,
     int BackoffSeconds,
-    int TimeoutSeconds
+    int TimeoutSeconds,
+    string? UniqueKey,
+    RecurringModel? Recurring
+);
+
+/// <summary>
+/// A command's <c>[Recurring]</c> attribute: its cron text (null when the attribute was given null),
+/// and whether generated code can create the command with <c>new T()</c>.
+/// </summary>
+internal sealed record RecurringModel(
+    string? Cron,
+    bool CanCreate
 );
 
 /// <summary>Pipeline behavior (IPipelineBehavior&lt;,&gt; or IStreamPipelineBehavior&lt;,&gt;).</summary>

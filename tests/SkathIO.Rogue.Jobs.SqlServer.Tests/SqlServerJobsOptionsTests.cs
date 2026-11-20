@@ -126,6 +126,23 @@ public sealed class SqlServerJobsOptionsTests
     }
 
     [Fact]
+    public void BatchRows_CarryEachJobsRunTime_OrNullForNow()
+    {
+        var at = new DateTimeOffset(2026, 1, 1, 2, 0, 0, TimeSpan.FromHours(2));
+        NewJob[] jobs =
+        {
+            new NewJob { Id = Guid.NewGuid(), Kind = "k", Queue = "q", Payload = new byte[] { 1 }, MaxAttempts = 1, RunAt = at },
+            new NewJob { Id = Guid.NewGuid(), Kind = "k", Queue = "q", Payload = new byte[] { 2 }, MaxAttempts = 1 },
+        };
+
+        var rows = (System.Collections.Generic.IEnumerable<Microsoft.Data.SqlClient.Server.SqlDataRecord>)SqlServerRows.Jobs("@jobs", "[s].[job_batch]", jobs).Value;
+        (bool IsNull, DateTime RunAt)[] runAts = rows.Select(static r => (r.IsDBNull(6), r.IsDBNull(6) ? default : r.GetDateTime(6))).ToArray();
+
+        Assert.Equal((false, at.UtcDateTime), runAts[0]);
+        Assert.True(runAts[1].IsNull);
+    }
+
+    [Fact]
     public void PollInterval_DropsToTheMin_OnAFind_AndDoublesUpToTheMax_Otherwise()
     {
         TimeSpan min = TimeSpan.FromMilliseconds(100);

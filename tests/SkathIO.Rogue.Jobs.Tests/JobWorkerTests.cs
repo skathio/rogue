@@ -31,6 +31,7 @@ public sealed class JobWorkerTests
             "SkathIO.Rogue.Jobs.Tests.RecordValue",
             "SkathIO.Rogue.Jobs.Tests.SlowJob",
             "SkathIO.Rogue.Jobs.Tests.TelemetryJob",
+            "SkathIO.Rogue.Jobs.Tests.UniqueJob",
             "SkathIO.Rogue.Jobs.Tests.UnmarkedJob",
             "tests.priced",
         }, kinds);
@@ -50,6 +51,8 @@ public sealed class JobWorkerTests
         Assert.Equal("billing", priced.Queue);
         Assert.Same(JobDefaults.None, unmarked);
         Assert.Equal(typeof(PriceJob), byKind["tests.priced"].CommandType);
+        Assert.Equal("unique-test", byKind["SkathIO.Rogue.Jobs.Tests.UniqueJob"].Defaults.UniqueKey);
+        Assert.Null(flaky.UniqueKey);
     }
 
     [Fact]

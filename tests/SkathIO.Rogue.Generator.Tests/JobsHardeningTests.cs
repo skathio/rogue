@@ -158,7 +158,10 @@ public sealed class JobWorkerHardeningTests
         Type? hostedType = Type.GetType("Microsoft.Extensions.Hosting.IHostedService, Microsoft.Extensions.Hosting.Abstractions");
         Assert.NotNull(hostedType);
         await using HardeningRig rig = HardeningRig.Create();
-        object hosted = Assert.Single(rig.Services.GetServices(hostedType))!;
+        // The worker, beside the recurring jobs' scheduler that the same call registers.
+        object?[] services = rig.Services.GetServices(hostedType).ToArray();
+        Assert.All(services, static s => Assert.Same(typeof(JobWorker).Assembly, s!.GetType().Assembly));
+        object hosted = Assert.Single(services, static s => s!.GetType().Name == "JobWorkerService")!;
         rig.Probe.Open.TrySetResult();
 
         await InvokeAsync(hostedType, hosted, "StartAsync");
@@ -688,6 +691,13 @@ internal sealed class HardeningStore : IJobStore
     public void CancelNextExtends(int count) => Volatile.Write(ref _cancelledExtends, count);
 
     public ValueTask EnqueueAsync(IReadOnlyList<NewJob> jobs, CancellationToken cancellationToken) => _inner.EnqueueAsync(jobs, cancellationToken);
+
+    public ValueTask<Guid> EnqueueOnceAsync(NewJob job, CancellationToken cancellationToken) => _inner.EnqueueOnceAsync(job, cancellationToken);
+
+    public ValueTask<bool> TryAcquireLeadershipAsync(string name, string owner, TimeSpan lease, CancellationToken cancellationToken)
+        => _inner.TryAcquireLeadershipAsync(name, owner, lease, cancellationToken);
+
+    public ValueTask ReleaseLeadershipAsync(string name, string owner, CancellationToken cancellationToken) => _inner.ReleaseLeadershipAsync(name, owner, cancellationToken);
 
     public ValueTask<IReadOnlyList<ClaimedJob>> ClaimAsync(string queue, int maxCount, TimeSpan lease, CancellationToken cancellationToken)
     {

@@ -60,6 +60,12 @@ public sealed class JobsOptions
     /// <summary>The largest serialized payload the scheduler accepts, in bytes.</summary>
     public int MaxPayloadBytes { get; set; } = 1024 * 1024;
 
+    /// <summary>
+    /// How long the host that stores recurring jobs' occurrences stays their leader without renewing;
+    /// it renews every third of this. When it stops, another host takes over once the lease runs out.
+    /// </summary>
+    public TimeSpan LeaderLeaseDuration { get; set; } = TimeSpan.FromMinutes(1);
+
     /// <summary>Checks every option and throws on the first that is out of range.</summary>
     internal void Validate()
     {
@@ -81,5 +87,6 @@ public sealed class JobsOptions
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(PollInterval, TimeSpan.Zero, nameof(PollInterval));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(LeaseDuration, TimeSpan.Zero, nameof(LeaseDuration));
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxPayloadBytes, 1, nameof(MaxPayloadBytes));
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(LeaderLeaseDuration, TimeSpan.Zero, nameof(LeaderLeaseDuration));
     }
 }

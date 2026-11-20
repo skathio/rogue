@@ -17,6 +17,9 @@ public static class JobLimits
     /// <summary>The longest recorded error, in characters; a store keeps only this much of a longer one.</summary>
     public const int MaxErrorLength = 4000;
 
+    /// <summary>The longest key, in characters: a job's unique key or task key, a leader lock's name or owner.</summary>
+    public const int MaxKeyLength = 200;
+
     /// <summary>
     /// Removes every NUL character (U+0000) from <paramref name="error"/>, then cuts it to
     /// <see cref="MaxErrorLength"/>. Postgres text cannot hold NUL, so storing an exception message
@@ -41,6 +44,14 @@ public static class JobLimits
     /// <exception cref="ArgumentNullException"><paramref name="queue"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="queue"/> is empty, too long or has white space.</exception>
     public static void CheckQueue(string queue, string parameter) => CheckName(queue, MaxQueueLength, parameter);
+
+    /// <summary>
+    /// Checks a key against the store contract: 1 to <see cref="MaxKeyLength"/> characters, with no white
+    /// space or control characters. Stores call it on the leader lock's name and owner.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="key"/> is empty, too long or has white space.</exception>
+    public static void CheckKey(string key, string parameter) => CheckName(key, MaxKeyLength, parameter);
 
     private static void CheckName(string value, int maxLength, string parameter)
     {

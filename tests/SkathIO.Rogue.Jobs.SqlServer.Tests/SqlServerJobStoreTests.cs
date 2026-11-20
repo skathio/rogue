@@ -35,8 +35,8 @@ public sealed class SqlServerJobStoreTests
         await Task.WhenAll(stores.Select(static s => s.MigrateAsync()));
         await stores[0].MigrateAsync();
 
-        Assert.Equal(1, await ScalarAsync<int>("SELECT count(*) FROM [" + _schema + "].[schema_version]"));
-        Assert.Equal(1, await ScalarAsync<int>("SELECT max(version) FROM [" + _schema + "].[schema_version]"));
+        Assert.Equal(2, await ScalarAsync<int>("SELECT count(*) FROM [" + _schema + "].[schema_version]"));
+        Assert.Equal(2, await ScalarAsync<int>("SELECT max(version) FROM [" + _schema + "].[schema_version]"));
     }
 
     [StoreFact]
@@ -86,6 +86,19 @@ public sealed class SqlServerJobStoreTests
         Assert.False(await store.HasNewlyDueAsync(start, due - TimeSpan.FromTicks(1), None));
         Assert.True(await store.HasNewlyDueAsync(start, due, None));
         Assert.False(await store.HasNewlyDueAsync(due, due + TimeSpan.FromMinutes(1), None));
+    }
+
+    [StoreFact]
+    public async Task Probe_FindsAScheduledJob_OnceItsTimeComes()
+    {
+        SqlServerJobStore store = Store();
+        DateTime start = store.Now();
+        DateTime due = start + TimeSpan.FromMinutes(5);
+        NewJob scheduled = Job();
+        await store.EnqueueAsync(new[] { new NewJob { Id = scheduled.Id, Kind = scheduled.Kind, Queue = scheduled.Queue, Payload = scheduled.Payload, MaxAttempts = 1, RunAt = new DateTimeOffset(due, TimeSpan.Zero) } }, None);
+
+        Assert.False(await store.HasNewlyDueAsync(start, due - TimeSpan.FromTicks(1), None));
+        Assert.True(await store.HasNewlyDueAsync(start, due, None));
     }
 
     [StoreFact]

@@ -56,6 +56,25 @@ public sealed class SqlServerJobStore : IJobStore, IDatabaseJobStore
     }
 
     /// <inheritdoc />
+    /// <remarks>One batch in one transaction: the run ledger row and the job commit together.</remarks>
+    public async ValueTask<Guid> EnqueueOnceAsync(NewJob job, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        DateTime now = Now();
+        await using SqlConnection connection = await OpenReadyAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new SqlCommand(_sql.EnqueueOnce, connection);
+        command.Parameters.Add(new SqlParameter("@id", SqlDbType.UniqueIdentifier) { Value = job.Id });
+        command.Parameters.Add(Text("@kind", job.Kind, JobLimits.MaxKindLength));
+        command.Parameters.Add(Text("@queue", job.Queue, JobLimits.MaxQueueLength));
+        command.Parameters.Add(new SqlParameter("@payload", SqlDbType.VarBinary, -1) { Value = SqlServerRows.Bytes(job.Payload) });
+        command.Parameters.Add(Int("@max_attempts", job.MaxAttempts));
+        command.Parameters.Add(Time("@run_at", job.RunAt?.UtcDateTime ?? now));
+        command.Parameters.Add(NullableText("@unique_key", job.UniqueKey, JobLimits.MaxKeyLength));
+        command.Parameters.Add(NullableText("@task_key", job.TaskKey, JobLimits.MaxKeyLength));
+        return (Guid)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+    }
+
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<ClaimedJob>> ClaimAsync(string queue, int maxCount, TimeSpan lease, CancellationToken cancellationToken)
     {
         StoreSupport.CheckClaim(queue, maxCount, lease);
@@ -133,6 +152,27 @@ public sealed class SqlServerJobStore : IJobStore, IDatabaseJobStore
         return await StoreSupport.ReadSnapshotAsync(reader, id, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public async ValueTask<bool> TryAcquireLeadershipAsync(string name, string owner, TimeSpan lease, CancellationToken cancellationToken)
+    {
+        StoreSupport.CheckLeadership(name, owner, lease);
+        DateTime now = Now();
+        await using SqlConnection connection = await OpenReadyAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new SqlCommand(_sql.AcquireLeadership, connection);
+        command.Parameters.Add(Text("@name", name, JobLimits.MaxKeyLength));
+        command.Parameters.Add(Text("@owner", owner, JobLimits.MaxKeyLength));
+        command.Parameters.Add(Time("@now", now));
+        command.Parameters.Add(Time("@lease_until", now + lease));
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is string;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask ReleaseLeadershipAsync(string name, string owner, CancellationToken cancellationToken)
+    {
+        StoreSupport.CheckLeadership(name, owner, null);
+        await ExecuteAsync(_sql.ReleaseLeadership, cancellationToken, Text("@name", name, JobLimits.MaxKeyLength), Text("@owner", owner, JobLimits.MaxKeyLength)).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Deletes succeeded and dead-lettered jobs older than their retention, a batch per statement, and
     /// returns how many it deleted. The pruner calls it every <see cref="DatabaseJobsOptions.PruneInterval"/>.
@@ -140,6 +180,7 @@ public sealed class SqlServerJobStore : IJobStore, IDatabaseJobStore
     public async Task<int> PruneAsync(CancellationToken cancellationToken = default)
     {
         DateTime now = Now();
+        await ExecuteAsync(_sql.PruneRuns, cancellationToken, Time("@before", now - _options.SucceededRetention)).ConfigureAwait(false);
         return await StoreSupport.DeleteInBatchesAsync(ct => ExecuteAsync(
             _sql.Prune,
             ct,
@@ -192,6 +233,8 @@ public sealed class SqlServerJobStore : IJobStore, IDatabaseJobStore
     private static SqlParameter Int(string name, int value) => new SqlParameter(name, SqlDbType.Int) { Value = value };
 
     private static SqlParameter Text(string name, string value, int size) => new SqlParameter(name, SqlDbType.NVarChar, size) { Value = value };
+
+    private static SqlParameter NullableText(string name, string? value, int size) => new SqlParameter(name, SqlDbType.NVarChar, size) { Value = (object?)value ?? DBNull.Value };
 
     private static SqlParameter Error(string error) => Text("@error", JobLimits.TrimError(error), JobLimits.MaxErrorLength);
 

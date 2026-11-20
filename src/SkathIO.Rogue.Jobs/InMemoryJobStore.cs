@@ -10,7 +10,7 @@ namespace SkathIO.Rogue.Jobs;
 /// development, tests and work that may be dropped; it is the default store until a durable one is
 /// registered. Finished jobs are kept for inspection up to a limit, oldest dropped first.
 /// </summary>
-public sealed class InMemoryJobStore : IJobStore
+public sealed partial class InMemoryJobStore : IJobStore
 {
     /// <summary>How many succeeded and how many dead-lettered jobs are kept by default.</summary>
     public const int DefaultFinishedRetention = 10_000;
@@ -51,6 +51,10 @@ public sealed class InMemoryJobStore : IJobStore
             foreach (NewJob job in jobs)
             {
                 ArgumentNullException.ThrowIfNull(job, nameof(jobs));
+                if (job.IsKeyed)
+                {
+                    throw new ArgumentException("A job with a unique key or a task key is stored with EnqueueOnceAsync, not in a batch.", nameof(jobs));
+                }
                 if (_jobs.ContainsKey(job.Id) || !batch.Add(job.Id))
                 {
                     throw new InvalidOperationException("A job with id " + job.Id + " is already stored.");
@@ -60,9 +64,7 @@ public sealed class InMemoryJobStore : IJobStore
             DateTimeOffset now = _time.GetUtcNow();
             foreach (NewJob job in jobs)
             {
-                var entry = new Entry(job, now, ++_sequence);
-                _jobs.Add(job.Id, entry);
-                Index(job.Queue).Ready.Add(entry.ReadyKey);
+                Add(job, now);
             }
         }
         return default;
@@ -117,6 +119,7 @@ public sealed class InMemoryJobStore : IJobStore
                 return false;
             }
             entry.State = JobState.Succeeded;
+            ReleaseUniqueKey(entry);
             Retain(_succeeded, entry);
             return true;
         }));
@@ -183,6 +186,10 @@ public sealed class InMemoryJobStore : IJobStore
             {
                 return false;
             }
+            if (entry.UniqueKey is not null && !_uniqueKeys.TryAdd((entry.Kind, entry.UniqueKey), entry.Id))
+            {
+                return false;
+            }
             entry.Attempt = 0;
             MakeReady(entry, now);
             return true;
@@ -236,6 +243,18 @@ public sealed class InMemoryJobStore : IJobStore
         }
         return applied;
     }
+
+    private void Add(NewJob job, DateTimeOffset now)
+    {
+        var entry = new Entry(job, job.RunAt ?? now, ++_sequence);
+        _jobs.Add(job.Id, entry);
+        Index(job.Queue).Ready.Add(entry.ReadyKey);
+        if (entry.UniqueKey is not null)
+        {
+            _uniqueKeys.Add((entry.Kind, entry.UniqueKey), entry.Id);
+        }
+    }
+
 
     private QueueIndex Index(string queue)
     {
@@ -314,6 +333,7 @@ public sealed class InMemoryJobStore : IJobStore
     private void DeadLetter(Entry entry, string error)
     {
         entry.State = JobState.DeadLettered;
+        ReleaseUniqueKey(entry);
         entry.LastError = JobLimits.TrimError(error);
         Retain(_deadLettered, entry);
     }
@@ -331,81 +351,5 @@ public sealed class InMemoryJobStore : IJobStore
                 _jobs.Remove(id);
             }
         }
-    }
-
-    private sealed class QueueIndex
-    {
-        public SortedSet<ReadyKey> Ready { get; } = new SortedSet<ReadyKey>();
-
-        public HashSet<Guid> Processing { get; } = new HashSet<Guid>();
-    }
-
-    private readonly record struct ReadyKey(DateTimeOffset RunAt, long Sequence, Guid Id) : IComparable<ReadyKey>
-    {
-        public int CompareTo(ReadyKey other)
-        {
-            int byTime = RunAt.CompareTo(other.RunAt);
-            return byTime != 0 ? byTime : Sequence.CompareTo(other.Sequence);
-        }
-    }
-
-    private sealed class Entry
-    {
-        public Entry(NewJob job, DateTimeOffset now, long sequence)
-        {
-            Id = job.Id;
-            Kind = job.Kind;
-            Queue = job.Queue;
-            Payload = job.Payload.ToArray();
-            MaxAttempts = job.MaxAttempts;
-            RunAt = now;
-            Sequence = sequence;
-        }
-
-        public Guid Id { get; }
-
-        public string Kind { get; }
-
-        public string Queue { get; }
-
-        public ReadOnlyMemory<byte> Payload { get; }
-
-        public int MaxAttempts { get; }
-
-        public JobState State { get; set; }
-
-        public int Attempt { get; set; }
-
-        public DateTimeOffset RunAt { get; set; }
-
-        public long Sequence { get; set; }
-
-        public DateTimeOffset LeaseUntil { get; set; }
-
-        public string? LastError { get; set; }
-
-        public ReadyKey ReadyKey => new ReadyKey(RunAt, Sequence, Id);
-
-        public ClaimedJob ToClaimed() => new ClaimedJob
-        {
-            Id = Id,
-            Kind = Kind,
-            Queue = Queue,
-            Payload = Payload,
-            Attempt = Attempt,
-            MaxAttempts = MaxAttempts,
-        };
-
-        public JobSnapshot ToSnapshot() => new JobSnapshot
-        {
-            Id = Id,
-            Kind = Kind,
-            Queue = Queue,
-            State = State,
-            Attempt = Attempt,
-            MaxAttempts = MaxAttempts,
-            RunAt = RunAt,
-            LastError = LastError,
-        };
     }
 }

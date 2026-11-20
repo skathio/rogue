@@ -8,6 +8,8 @@ namespace SkathIO.Rogue.Jobs;
 /// </summary>
 public sealed class JobDefaults
 {
+    private readonly string? _uniqueKey;
+
     /// <summary>
     /// The defaults of a command without <see cref="JobAttribute"/>. A definition carrying exactly this
     /// instance is not a job: the worker never runs it and the scheduler refuses it.
@@ -44,4 +46,19 @@ public sealed class JobDefaults
 
     /// <summary>The run timeout in seconds, or zero for no limit.</summary>
     public int TimeoutSeconds { get; }
+
+    /// <summary>The unique key a pending job of this kind holds, or <see langword="null"/> for none.</summary>
+    /// <exception cref="ArgumentException">The key is empty, too long or has white space.</exception>
+    public string? UniqueKey
+    {
+        get => _uniqueKey;
+        init
+        {
+            if (value is not null)
+            {
+                JobLimits.CheckKey(value, nameof(UniqueKey));
+            }
+            _uniqueKey = value;
+        }
+    }
 }

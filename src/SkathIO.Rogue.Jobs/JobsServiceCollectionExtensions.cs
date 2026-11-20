@@ -2,6 +2,8 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace SkathIO.Rogue.Jobs;
 
@@ -27,24 +29,31 @@ public static class JobsServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IJobStore>(static sp => new InMemoryJobStore(sp.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton(static _ => new JobSignal());
-        services.TryAddSingleton(sp => new JobRegistry(sp.GetServices<JobDefinition>(), options));
-        services.TryAddSingleton<IJobScheduler>(static sp => new JobScheduler(
+        services.TryAddSingleton(sp => new JobRegistry(sp.GetServices<JobDefinition>(), options, sp.GetServices<RecurringJob>()));
+        services.TryAddSingleton(static sp => new JobScheduler(
             sp.GetRequiredService<JobRegistry>(),
             sp.GetRequiredService<IJobStore>(),
             sp.GetRequiredService<JobSignal>()));
+        services.TryAddSingleton<IJobScheduler>(static sp => sp.GetRequiredService<JobScheduler>());
         services.TryAddSingleton(static sp => new JobWorker(sp.GetRequiredService<JobRegistry>(), sp.GetRequiredService<IJobStore>(), sp));
         return services;
     }
 
     /// <summary>
-    /// Registers the hosted service that runs the <see cref="JobWorker"/> while the host runs. Call it
-    /// in each host that should run jobs, together with <see cref="AddRogueJobs"/>; calling it again
-    /// adds no second worker.
+    /// Registers the hosted services that run jobs while the host runs: the <see cref="JobWorker"/>, and
+    /// the scheduler that stores each recurring job's next occurrence while this host leads the others.
+    /// Call it in each host that should run jobs, together with <see cref="AddRogueJobs"/>; calling it
+    /// again adds no second worker.
     /// </summary>
     public static IServiceCollection AddRogueJobWorker(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, JobWorkerService>(static sp => new JobWorkerService(sp.GetRequiredService<JobWorker>())));
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RecurringJobService>(static sp => new RecurringJobService(
+            sp.GetRequiredService<JobRegistry>(),
+            sp.GetRequiredService<JobScheduler>(),
+            sp.GetRequiredService<TimeProvider>(),
+            (ILogger?)sp.GetService<ILoggerFactory>()?.CreateLogger("SkathIO.Rogue.Jobs.RecurringJobs") ?? NullLogger.Instance)));
         return services;
     }
 
@@ -57,5 +66,19 @@ public static class JobsServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(definition);
         services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(JobDefinition), definition));
+    }
+
+    /// <summary>
+    /// Registers <paramref name="job"/> to run at each occurrence of its cron expression in hosts that
+    /// call <see cref="AddRogueJobWorker"/>. Generated code calls this for each command marked
+    /// <see cref="RecurringAttribute"/>; a command can have one schedule, and a second fails the host at
+    /// startup.
+    /// </summary>
+    public static IServiceCollection AddRecurringJob(this IServiceCollection services, RecurringJob job)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(job);
+        services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(RecurringJob), job));
+        return services;
     }
 }

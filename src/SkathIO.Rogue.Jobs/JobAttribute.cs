@@ -33,4 +33,13 @@ public sealed class JobAttribute : Attribute
 
     /// <summary>How long one run may take, in seconds, before it is cancelled and counted as failed. Defaults to no limit.</summary>
     public int TimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// A key that at most one pending (enqueued or processing) job of this kind holds. Enqueueing the
+    /// command again while such a job is pending stores nothing and returns the pending job's id; once
+    /// it has succeeded or been dead-lettered, the next enqueue stores a new job. Up to
+    /// <see cref="JobLimits.MaxKeyLength"/> characters with no white space. Defaults to no key: every
+    /// enqueue stores a job.
+    /// </summary>
+    public string? UniqueKey { get; set; }
 }

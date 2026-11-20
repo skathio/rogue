@@ -141,5 +141,14 @@ public sealed class JobSchedulerTests
 
         public ValueTask<JobSnapshot?> GetAsync(Guid id, CancellationToken cancellationToken)
             => _inner.GetAsync(id, cancellationToken);
+
+        public ValueTask<Guid> EnqueueOnceAsync(NewJob job, CancellationToken cancellationToken)
+            => _inner.EnqueueOnceAsync(job, cancellationToken);
+
+        public ValueTask<bool> TryAcquireLeadershipAsync(string name, string owner, TimeSpan lease, CancellationToken cancellationToken)
+            => _inner.TryAcquireLeadershipAsync(name, owner, lease, cancellationToken);
+
+        public ValueTask ReleaseLeadershipAsync(string name, string owner, CancellationToken cancellationToken)
+            => _inner.ReleaseLeadershipAsync(name, owner, cancellationToken);
     }
 }

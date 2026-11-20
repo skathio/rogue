@@ -88,6 +88,7 @@ internal static class WellKnownTypeNames
 
     // Jobs feature module: the runtime type whose presence means the jobs package is referenced.
     public const string JobDefinition1 = "SkathIO.Rogue.Jobs.JobDefinition`1";
+    public const string RecurringAttribute = "SkathIO.Rogue.Jobs.RecurringAttribute";
 
     // Assemblies whose version is the core package's version (ROGUE013): the runtime first, then the
     // contracts, which a library that only declares requests references on its own.

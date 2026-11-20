@@ -154,8 +154,10 @@ public sealed class JobsConfigurationTests
         services.AddRogueJobWorker();
 
         using ServiceProvider provider = services.BuildServiceProvider();
-        IHostedService hosted = Assert.Single(provider.GetServices<IHostedService>());
-        Assert.IsType<JobWorkerService>(hosted);
+        IHostedService[] hosted = provider.GetServices<IHostedService>().ToArray();
+        Assert.Equal(2, hosted.Length);
+        Assert.Single(hosted, static h => h is JobWorkerService);
+        Assert.Single(hosted, static h => h is RecurringJobService);
         Assert.Throws<ArgumentNullException>(() => ((IServiceCollection)null!).AddRogueJobWorker());
     }
 

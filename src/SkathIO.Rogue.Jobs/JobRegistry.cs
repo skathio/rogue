@@ -23,7 +23,7 @@ internal sealed class JobRegistry
     private readonly Dictionary<Type, JobBinding> _byType = new Dictionary<Type, JobBinding>();
     private readonly HashSet<Type> _unmarked = new HashSet<Type>();
 
-    public JobRegistry(IEnumerable<JobDefinition> definitions, JobsOptions options)
+    public JobRegistry(IEnumerable<JobDefinition> definitions, JobsOptions options, IEnumerable<RecurringJob>? recurring = null)
     {
         ArgumentNullException.ThrowIfNull(definitions);
         ArgumentNullException.ThrowIfNull(options);
@@ -54,12 +54,16 @@ internal sealed class JobRegistry
         }
 
         Queues = ResolveQueues(options);
+        Recurring = BindRecurring(recurring ?? Array.Empty<RecurringJob>());
     }
 
     public JobsOptions Options { get; }
 
     /// <summary>The queues the worker processes.</summary>
     public IReadOnlyList<string> Queues { get; }
+
+    /// <summary>The recurring jobs, each bound to its command's job kind.</summary>
+    public IReadOnlyList<RecurringBinding> Recurring { get; }
 
     public bool TryGet(string kind, [NotNullWhen(true)] out JobBinding? binding) => _byKind.TryGetValue(kind, out binding);
 
@@ -105,6 +109,22 @@ internal sealed class JobRegistry
         _byKind.Add(binding.Kind, binding);
         _byType.Add(binding.CommandType, binding);
         return true;
+    }
+
+    // A recurring job's command must be a job with a parameterless constructor, and has one schedule.
+    private List<RecurringBinding> BindRecurring(IEnumerable<RecurringJob> recurring)
+    {
+        var bound = new List<RecurringBinding>();
+        var seen = new HashSet<Type>();
+        foreach (RecurringJob job in recurring)
+        {
+            if (!seen.Add(job.CommandType))
+            {
+                throw new InvalidOperationException("The command " + job.CommandType + " is registered as a recurring job more than once. Keep one schedule for it.");
+            }
+            bound.Add(job.Bind(this));
+        }
+        return bound;
     }
 
     private IReadOnlyList<string> ResolveQueues(JobsOptions options)

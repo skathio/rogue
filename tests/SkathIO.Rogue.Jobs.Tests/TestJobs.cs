@@ -182,6 +182,23 @@ public sealed class TelemetryJobHandler : ICommandHandler<TelemetryJob>
         => command.Fail ? throw new FormatException("telemetry failure") : default;
 }
 
+/// <summary>A job whose pending instance holds a unique key.</summary>
+[Job(UniqueKey = "unique-test")]
+public sealed record UniqueJob(int Id) : ICommand;
+
+public sealed class UniqueJobHandler : ICommandHandler<UniqueJob>
+{
+    private readonly JobProbe _probe;
+
+    public UniqueJobHandler(JobProbe probe) => _probe = probe;
+
+    public ValueTask Handle(UniqueJob command, CancellationToken cancellationToken)
+    {
+        _probe.Ran.Enqueue("unique:" + command.Id);
+        return default;
+    }
+}
+
 /// <summary>A query: never a job.</summary>
 public sealed record LookupQuery(int Id) : IQuery<int>;
 
@@ -197,6 +214,7 @@ public sealed class LookupQueryHandler : IQueryHandler<LookupQuery, int>
 [JsonSerializable(typeof(UnmarkedJob))]
 [JsonSerializable(typeof(TelemetryJob))]
 [JsonSerializable(typeof(GateJob))]
+[JsonSerializable(typeof(UniqueJob))]
 public sealed partial class TestJobsJson : JsonSerializerContext
 {
 }

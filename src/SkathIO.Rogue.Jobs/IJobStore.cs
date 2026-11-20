@@ -26,10 +26,35 @@ namespace SkathIO.Rogue.Jobs;
 public interface IJobStore
 {
     /// <summary>
-    /// Stores <paramref name="jobs"/>, all or none, ready to be claimed now. A job whose id is already
-    /// stored, or appears twice in the batch, fails the whole batch.
+    /// Stores <paramref name="jobs"/>, all or none, each due at its <see cref="NewJob.RunAt"/> or, when it
+    /// has none, now. A job whose id is already stored, or appears twice in the batch, fails the whole
+    /// batch.
     /// </summary>
+    /// <exception cref="ArgumentException">A job carries a unique key or a task key; store it with <see cref="EnqueueOnceAsync"/>.</exception>
     ValueTask EnqueueAsync(IReadOnlyList<NewJob> jobs, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stores <paramref name="job"/> unless a key it carries is already held, and returns the id of the
+    /// job that holds it: the new job's own id, or the existing job's. A <see cref="NewJob.TaskKey"/> is
+    /// held by the job stored for that task key and run time, whatever its state, so one recurring run
+    /// is stored once however many hosts store it. A <see cref="NewJob.UniqueKey"/> is held, for its
+    /// kind, by the job that is enqueued or processing with it. A job with neither key is simply stored.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="job"/> is null.</exception>
+    ValueTask<Guid> EnqueueOnceAsync(NewJob job, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Makes <paramref name="owner"/> the holder of the leader lock <paramref name="name"/> for
+    /// <paramref name="lease"/> from now, and returns true, when no one else holds it or another
+    /// holder's lease has run out; renews it when <paramref name="owner"/> already holds it. Returns
+    /// false while another owner's lease holds.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="owner"/> is not a valid key, or <paramref name="lease"/> is not positive.</exception>
+    ValueTask<bool> TryAcquireLeadershipAsync(string name, string owner, TimeSpan lease, CancellationToken cancellationToken);
+
+    /// <summary>Gives up the leader lock <paramref name="name"/> if <paramref name="owner"/> holds it, so another owner can take it at once.</summary>
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="owner"/> is not a valid key.</exception>
+    ValueTask ReleaseLeadershipAsync(string name, string owner, CancellationToken cancellationToken);
 
     /// <summary>
     /// Claims up to <paramref name="maxCount"/> jobs of <paramref name="queue"/> that are due, oldest run
@@ -57,7 +82,8 @@ public interface IJobStore
     /// <summary>
     /// Moves the dead-lettered jobs among <paramref name="ids"/> back to <see cref="JobState.Enqueued"/>,
     /// ready to be claimed now with all their attempts, and returns how many moved. An id that is not
-    /// stored, or whose job is not dead-lettered, is skipped.
+    /// stored, or whose job is not dead-lettered, is skipped; so is a job whose unique key another
+    /// pending job holds, and of several with the same kind and unique key only one moves.
     /// </summary>
     ValueTask<int> RequeueAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
 

@@ -375,6 +375,214 @@ public abstract class JobStoreContract
         Assert.Empty(await store.ClaimAsync(Queue, 1, _lease, None));
     }
 
+    [StoreFact]
+    public async Task DelayedJob_IsClaimedAtItsRunAt_AndNotBefore()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        DateTimeOffset at = Clock.GetUtcNow().AddHours(1);
+        NewJob now = Job(Queue);
+        NewJob later = Keyed(Queue, runAt: at);
+        NewJob latest = Keyed(Queue, runAt: at.AddHours(1));
+        await store.EnqueueAsync(new[] { latest, now, later }, None);
+
+        IReadOnlyList<ClaimedJob> first = await store.ClaimAsync(Queue, 10, _lease, None);
+        Assert.Equal(first.Count, await store.CompleteAsync(first.Select(static c => c.Lease).ToArray(), None));
+        JobSnapshot waiting = (await store.GetAsync(later.Id, None))!;
+        Clock.Advance(TimeSpan.FromHours(1) - TimeSpan.FromTicks(1));
+        IReadOnlyList<ClaimedJob> early = await store.ClaimAsync(Queue, 10, _lease, None);
+        Clock.Advance(TimeSpan.FromTicks(1));
+        IReadOnlyList<ClaimedJob> due = await store.ClaimAsync(Queue, 10, _lease, None);
+
+        Assert.Equal(new[] { now.Id }, first.Select(static c => c.Id));
+        Assert.Equal((JobState.Enqueued, at), (waiting.State, waiting.RunAt));
+        Assert.Empty(early);
+        Assert.Equal(new[] { later.Id }, due.Select(static c => c.Id));
+    }
+
+    [StoreFact]
+    public async Task Batch_WithAKeyedJob_IsRejected_AndStoresNothing()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        NewJob plain = Job(Queue);
+
+        await Assert.ThrowsAsync<ArgumentException>(async () => await store.EnqueueAsync(new[] { plain, Keyed(Queue, uniqueKey: "k") }, None));
+        await Assert.ThrowsAsync<ArgumentException>(async () => await store.EnqueueAsync(new[] { Keyed(Queue, taskKey: "t", runAt: Clock.GetUtcNow().AddMinutes(1)) }, None));
+
+        Assert.Null(await store.GetAsync(plain.Id, None));
+    }
+
+    [StoreFact]
+    public async Task UniqueKey_WhilePending_GivesThePendingJob_AndOnceItSucceeds_ANewOne()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        NewJob first = Keyed(Queue, uniqueKey: "k");
+
+        Guid stored = await store.EnqueueOnceAsync(first, None);
+        NewJob whileEnqueued = Keyed(Queue, uniqueKey: "k");
+        Guid duplicate = await store.EnqueueOnceAsync(whileEnqueued, None);
+        ClaimedJob claimed = Assert.Single(await store.ClaimAsync(Queue, 10, _lease, None));
+        Guid whileProcessing = await store.EnqueueOnceAsync(Keyed(Queue, uniqueKey: "k"), None);
+        NewJob sameKey = Keyed(Queue, uniqueKey: "k");
+        var otherKind = new NewJob { Id = Guid.NewGuid(), Kind = "contract.other", Queue = Queue, Payload = sameKey.Payload, MaxAttempts = 1, UniqueKey = sameKey.UniqueKey };
+        Guid ofOtherKind = await store.EnqueueOnceAsync(otherKind, None);
+        Assert.Equal(1, await store.CompleteAsync(new[] { claimed.Lease }, None));
+        NewJob afterwards = Keyed(Queue, uniqueKey: "k");
+        Guid next = await store.EnqueueOnceAsync(afterwards, None);
+
+        Assert.Equal(first.Id, stored);
+        Assert.Equal(first.Id, duplicate);
+        Assert.Null(await store.GetAsync(whileEnqueued.Id, None));
+        Assert.Equal(first.Id, whileProcessing);
+        Assert.Equal(otherKind.Id, ofOtherKind);
+        Assert.Equal(afterwards.Id, next);
+    }
+
+    [StoreFact]
+    public async Task UniqueKey_IsFreed_WhenItsJobIsDeadLettered_AndHeldThroughARetry()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        NewJob first = Keyed(Queue, uniqueKey: "k");
+        await store.EnqueueOnceAsync(first, None);
+
+        ClaimedJob claimed = Assert.Single(await store.ClaimAsync(Queue, 10, _lease, None));
+        Assert.True(await store.RetryAsync(claimed.Lease, TimeSpan.Zero, "again", None));
+        Guid duringRetry = await store.EnqueueOnceAsync(Keyed(Queue, uniqueKey: "k"), None);
+        ClaimedJob retried = Assert.Single(await store.ClaimAsync(Queue, 10, _lease, None));
+        Assert.True(await store.DeadLetterAsync(retried.Lease, "poison", None));
+        NewJob afterwards = Keyed(Queue, uniqueKey: "k");
+        Guid next = await store.EnqueueOnceAsync(afterwards, None);
+
+        Assert.Equal(first.Id, duringRetry);
+        Assert.Equal(afterwards.Id, next);
+    }
+
+    [StoreFact]
+    public async Task TaskKey_StoresOneJobPerRunTime()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        DateTimeOffset at = Clock.GetUtcNow().AddMinutes(30);
+        NewJob run = Keyed(Queue, taskKey: "task", runAt: at);
+        NewJob again = Keyed(Queue, taskKey: "task", runAt: at);
+        NewJob nextRun = Keyed(Queue, taskKey: "task", runAt: at.AddHours(1));
+        NewJob otherTask = Keyed(Queue, taskKey: "other", runAt: at);
+
+        Guid first = await store.EnqueueOnceAsync(run, None);
+        Guid second = await store.EnqueueOnceAsync(again, None);
+        Guid third = await store.EnqueueOnceAsync(nextRun, None);
+        Guid fourth = await store.EnqueueOnceAsync(otherTask, None);
+
+        Assert.Equal((run.Id, run.Id, nextRun.Id, otherTask.Id), (first, second, third, fourth));
+        Assert.Null(await store.GetAsync(again.Id, None));
+        Assert.Equal(at, (await store.GetAsync(run.Id, None))!.RunAt);
+    }
+
+    [StoreFact]
+    public async Task TaskKey_WhoseUniqueKeyIsHeld_GivesTheHolder_ForThatRunFromThenOn()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        DateTimeOffset at = Clock.GetUtcNow().AddMinutes(30);
+        NewJob holder = Keyed(Queue, uniqueKey: "k");
+        await store.EnqueueOnceAsync(holder, None);
+
+        Guid run = await store.EnqueueOnceAsync(Keyed(Queue, uniqueKey: "k", taskKey: "task", runAt: at), None);
+        Guid runAgain = await store.EnqueueOnceAsync(Keyed(Queue, taskKey: "task", runAt: at), None);
+
+        Assert.Equal(holder.Id, run);
+        Assert.Equal(holder.Id, runAgain);
+    }
+
+    [StoreFact]
+    public async Task EnqueueOnce_WithNoKey_StoresTheJob_AndRejectsNull()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        NewJob plain = Job(Queue);
+
+        Assert.Equal(plain.Id, await store.EnqueueOnceAsync(plain, None));
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await store.EnqueueOnceAsync(null!, None));
+        Assert.Single(await store.ClaimAsync(Queue, 10, _lease, None));
+    }
+
+    [StoreFact]
+    public async Task Requeue_SkipsAJob_WhoseUniqueKeyIsHeld_AndMovesOneOfTwoThatShareIt()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        NewJob first = await DeadLetteredAsync(store, Keyed(Queue, uniqueKey: "k"));
+        NewJob second = await DeadLetteredAsync(store, Keyed(Queue, uniqueKey: "k"));
+        NewJob holder = Keyed(Queue, uniqueKey: "k");
+        await store.EnqueueOnceAsync(holder, None);
+
+        int whileHeld = await store.RequeueAsync(new[] { first.Id, second.Id }, None);
+        ClaimedJob held = Assert.Single(await store.ClaimAsync(Queue, 10, _lease, None));
+        Assert.Equal(1, await store.CompleteAsync(new[] { held.Lease }, None));
+        int once = await store.RequeueAsync(new[] { first.Id, second.Id }, None);
+
+        Assert.Equal(0, whileHeld);
+        Assert.Equal(1, once);
+        Assert.Single(await store.ClaimAsync(Queue, 10, _lease, None));
+    }
+
+    [StoreFact]
+    public async Task Leadership_IsHeldByOneOwner_UntilReleasedOrItsLeaseRunsOut()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        string name = "lead-" + Queue;
+
+        bool first = await store.TryAcquireLeadershipAsync(name, "a", _lease, None);
+        bool rival = await store.TryAcquireLeadershipAsync(name, "b", _lease, None);
+        Clock.Advance(_lease - TimeSpan.FromTicks(1));
+        bool renewed = await store.TryAcquireLeadershipAsync(name, "a", _lease, None);
+        Clock.Advance(_lease - TimeSpan.FromTicks(1));
+        bool rivalBeforeExpiry = await store.TryAcquireLeadershipAsync(name, "b", _lease, None);
+        Clock.Advance(TimeSpan.FromTicks(1));
+        bool rivalAfterExpiry = await store.TryAcquireLeadershipAsync(name, "b", _lease, None);
+        bool formerLeader = await store.TryAcquireLeadershipAsync(name, "a", _lease, None);
+        await store.ReleaseLeadershipAsync(name, "a", None);
+        bool stillB = await store.TryAcquireLeadershipAsync(name, "a", _lease, None);
+        await store.ReleaseLeadershipAsync(name, "b", None);
+        bool afterRelease = await store.TryAcquireLeadershipAsync(name, "a", _lease, None);
+        bool otherLock = await store.TryAcquireLeadershipAsync(name + "-x", "b", _lease, None);
+
+        Assert.Equal((true, false, true), (first, rival, renewed));
+        Assert.Equal((false, true, false), (rivalBeforeExpiry, rivalAfterExpiry, formerLeader));
+        Assert.Equal((false, true, true), (stillB, afterRelease, otherLock));
+    }
+
+    [StoreFact]
+    public async Task Leadership_RejectsAnInvalidName_Owner_OrLease()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+
+        await Assert.ThrowsAnyAsync<ArgumentException>(async () => await store.TryAcquireLeadershipAsync(string.Empty, "a", _lease, None));
+        await Assert.ThrowsAnyAsync<ArgumentException>(async () => await store.TryAcquireLeadershipAsync("lead", "a b", _lease, None));
+        await Assert.ThrowsAnyAsync<ArgumentException>(async () => await store.TryAcquireLeadershipAsync(new string('n', JobLimits.MaxKeyLength + 1), "a", _lease, None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await store.TryAcquireLeadershipAsync("lead", "a", TimeSpan.Zero, None));
+        await Assert.ThrowsAnyAsync<ArgumentException>(async () => await store.ReleaseLeadershipAsync("lead", null!, None));
+
+        Assert.True(await store.TryAcquireLeadershipAsync("lead-" + Queue, new string('o', JobLimits.MaxKeyLength), TimeSpan.FromTicks(1), None));
+    }
+
+    private async Task<NewJob> DeadLetteredAsync(IJobStore store, NewJob job)
+    {
+        Assert.Equal(job.Id, await store.EnqueueOnceAsync(job, None));
+        ClaimedJob claimed = Assert.Single(await store.ClaimAsync(Queue, 10, _lease, None));
+        Assert.True(await store.DeadLetterAsync(claimed.Lease, "poison", None));
+        return job;
+    }
+
     private static NewJob Job(string queue, string payload = "{}", int maxAttempts = 5)
         => new NewJob { Id = Guid.NewGuid(), Kind = "contract.job", Queue = queue, Payload = Encoding.UTF8.GetBytes(payload), MaxAttempts = maxAttempts };
+
+    // Keys are suffixed with the test's own queue, so tests sharing a database never share a key.
+    private static NewJob Keyed(string queue, string? uniqueKey = null, string? taskKey = null, DateTimeOffset? runAt = null)
+        => new NewJob
+        {
+            Id = Guid.NewGuid(),
+            Kind = "contract.job",
+            Queue = queue,
+            Payload = Encoding.UTF8.GetBytes("{}"),
+            MaxAttempts = 5,
+            RunAt = runAt,
+            UniqueKey = uniqueKey is null ? null : uniqueKey + "-" + queue,
+            TaskKey = taskKey is null ? null : taskKey + "-" + queue,
+        };
 }
