@@ -26,6 +26,23 @@ public interface IMessageInbox
 
     /// <summary>Drops this delivery's claim after its handlers failed or were stopped, so the next delivery can claim the id at once.</summary>
     ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Claims the id of a message named <paramref name="messageName"/>, the call the
+    /// <see cref="MessageConsumer"/> makes. An inbox that overrides it keeps ids apart per name, so a
+    /// message of one name is never skipped because one of another name had the same id; this default
+    /// ignores the name.
+    /// </summary>
+    ValueTask<InboxClaim> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
+        => TryClaimAsync(messageId, cancellationToken);
+
+    /// <summary>Records that the handlers of the message named <paramref name="messageName"/> succeeded; see <see cref="TryClaimAsync(string, string, CancellationToken)"/>.</summary>
+    ValueTask CompleteAsync(string messageName, string messageId, CancellationToken cancellationToken)
+        => CompleteAsync(messageId, cancellationToken);
+
+    /// <summary>Drops the claim on the message named <paramref name="messageName"/>; see <see cref="TryClaimAsync(string, string, CancellationToken)"/>.</summary>
+    ValueTask ReleaseAsync(string messageName, string messageId, CancellationToken cancellationToken)
+        => ReleaseAsync(messageId, cancellationToken);
 }
 
 /// <summary>The answer an <see cref="IMessageInbox"/> gives to a claim on a message id.</summary>

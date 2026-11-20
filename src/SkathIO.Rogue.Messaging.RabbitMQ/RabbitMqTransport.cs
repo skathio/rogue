@@ -78,6 +78,12 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
 
     internal IReadOnlyList<string> Subscriptions => _subscriptions;
 
+    /// <summary>
+    /// The largest body a delivery may have, in bytes; a larger one is nacked to the queue's dead-letter
+    /// exchange as it arrives, before its body is copied. Registration sets it from the messaging options.
+    /// </summary>
+    internal int MaxMessageBytes { get; init; } = int.MaxValue;
+
     internal RabbitMqTransportOptions Options => _options;
 
     /// <inheritdoc />
@@ -379,13 +385,18 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
         return Task.CompletedTask;
     }
 
-    private Task OnReceivedAsync(IChannel channel, BasicDeliverEventArgs args)
+    private async Task OnReceivedAsync(IChannel channel, BasicDeliverEventArgs args)
     {
+        if (args.Body.Length > MaxMessageBytes)
+        {
+            // Never copied or handed to the consumer; the broker moves it to the dead-letter queue.
+            await channel.BasicNackAsync(args.DeliveryTag, false, false, CancellationToken.None).ConfigureAwait(false);
+            return;
+        }
         MessageEnvelope envelope = RabbitMqWire.ToEnvelope(_options, args);
         int count = RabbitMqWire.DeliveryCount(args.BasicProperties, args.Redelivered);
         var handle = new DeliveryHandle(channel, args.DeliveryTag, Volatile.Read(ref _generation));
         _deliveries.Writer.TryWrite(new Delivery(envelope, count, this, handle));
-        return Task.CompletedTask;
     }
 
     // Called under the connect gate.

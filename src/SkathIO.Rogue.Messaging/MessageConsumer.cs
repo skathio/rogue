@@ -28,6 +28,10 @@ namespace SkathIO.Rogue.Messaging;
 public sealed class MessageConsumer
 {
     private const string InvalidText = "(invalid)";
+
+    // The name tag of a delivery whose name no message type has: telemetry keeps one series for all of
+    // them, so a sender cannot add a series per made-up name.
+    private const string UnknownNameTag = "(unknown)";
     private const int MaxReasonLength = 1000;
 
     // The longest delay Task.Delay accepts.
@@ -129,7 +133,7 @@ public sealed class MessageConsumer
     internal async Task<string> HandleAsync(ReceivedMessage delivery, CancellationToken stoppingToken)
     {
         MessageEnvelope envelope = delivery.Envelope;
-        string name = Loggable(envelope.Name);
+        string name = envelope.Name is not null && _registry.TryGet(envelope.Name, out _) ? envelope.Name : UnknownNameTag;
         ActivityContext.TryParse(envelope.TraceParent, null, out ActivityContext parent);
         using Activity? activity = RogueMessagingTelemetry.Source.StartActivity(RogueMessagingTelemetry.ConsumeActivity, ActivityKind.Consumer, parent);
         activity?.SetTag(RogueMessagingTelemetry.NameTag, name);
@@ -274,6 +278,7 @@ public sealed class MessageConsumer
     private async Task<Outcome> RunThroughInboxAsync(ReceivedMessage delivery, BoundMessage bound, object message, CancellationToken stoppingToken)
     {
         IMessageInbox inbox = _inbox!;
+        string name = bound.Name;
         string id = delivery.Envelope.Id;
         if (!MessageLimits.IsValidId(id))
         {
@@ -283,7 +288,7 @@ public sealed class MessageConsumer
         InboxClaim claim;
         try
         {
-            claim = await inbox.TryClaimAsync(id, stoppingToken).ConfigureAwait(false);
+            claim = await inbox.TryClaimAsync(name, id, stoppingToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -306,11 +311,11 @@ public sealed class MessageConsumer
         {
             if (outcome.Name == RogueMessagingTelemetry.Succeeded)
             {
-                await inbox.CompleteAsync(id, CancellationToken.None).ConfigureAwait(false);
+                await inbox.CompleteAsync(name, id, CancellationToken.None).ConfigureAwait(false);
             }
             else
             {
-                await inbox.ReleaseAsync(id, CancellationToken.None).ConfigureAwait(false);
+                await inbox.ReleaseAsync(name, id, CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch (Exception ex)

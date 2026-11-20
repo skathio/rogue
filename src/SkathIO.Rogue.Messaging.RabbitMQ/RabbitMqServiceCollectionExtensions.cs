@@ -26,7 +26,10 @@ public static class RabbitMqServiceCollectionExtensions
 
         services.TryAddSingleton(sp => new RabbitMqTransport(
             options,
-            sp.GetServices<MessageBinding>().Where(static b => b.CanDispatch).Select(static b => b.Name)));
+            sp.GetServices<MessageBinding>().Where(static b => b.CanDispatch).Select(static b => b.Name))
+        {
+            MaxMessageBytes = sp.GetService<MessagingOptions>()?.MaxMessageBytes ?? new MessagingOptions().MaxMessageBytes,
+        });
         services.Replace(ServiceDescriptor.Singleton<IMessageTransport>(static sp => sp.GetRequiredService<RabbitMqTransport>()));
         return services;
     }

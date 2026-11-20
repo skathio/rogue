@@ -23,6 +23,8 @@ public static class MessagingServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         MessagingOptions options = MessagingOptions.Create(configure);
         services.TryAddSingleton(TimeProvider.System);
+        // A transport reads the size limit from here, to turn an oversized delivery away before copying it.
+        services.TryAddSingleton(options);
         services.TryAddSingleton(sp => new MessageRegistry(sp.GetServices<MessageBinding>(), options));
         services.TryAddSingleton(static sp => new MessageConsumer(sp.GetRequiredService<MessageRegistry>(), sp));
         services.TryAddSingleton(static sp => new MessageBus(sp));
