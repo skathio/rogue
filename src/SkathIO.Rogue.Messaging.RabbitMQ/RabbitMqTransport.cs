@@ -25,11 +25,12 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// </para>
 /// <para>
 /// RabbitMQ has no native delay, so the consumer waits out a retry delay itself. A message nacked for a
-/// retry is published back to the service's queue with its delivery count one higher, then acked; a
-/// dead-lettered one is published to the dead-letter queue with the reason in its
-/// <c>rogue-dead-letter-reason</c> header, then acked. Each copy is confirmed by the broker before the
-/// original is acked, so a message is delivered at least once; when a copy cannot be published, the
-/// original is handed back to the broker (requeued, or dead-lettered without a reason).
+/// retry is published back to the service's queue, then acked, its delivery count one higher kept by
+/// the transport, never read from a header the sender controls; a dead-lettered one is published to
+/// the dead-letter queue with the reason in its <c>rogue-dead-letter-reason</c> header, then acked.
+/// Each copy is confirmed by the broker before the original is acked, so a message is delivered at
+/// least once; when a copy cannot be published, the original is handed back to the broker (requeued,
+/// or dead-lettered without a reason).
 /// </para>
 /// </remarks>
 public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDisposable
@@ -47,6 +48,7 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
     private readonly SemaphoreSlim _publishGate = new SemaphoreSlim(1, 1);
     private readonly SemaphoreSlim _settleGate = new SemaphoreSlim(1, 1);
     private readonly Channel<Delivery> _deliveries = Channel.CreateUnbounded<Delivery>(new UnboundedChannelOptions { SingleWriter = true });
+    private readonly DeliveryCounts _counts = new DeliveryCounts();
     private IConnection? _connection;
     private IChannel? _publisher;
     private IChannel? _consumer;
@@ -172,6 +174,7 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
         if (IsCurrent(delivery))
         {
             await OnChannelAsync(delivery, channel => channel.BasicAckAsync(delivery.Tag, false, CancellationToken.None)).ConfigureAwait(false);
+            _counts.Forget(delivery.Handle.Key);
         }
     }
 
@@ -203,14 +206,20 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
         {
             return;
         }
+        // Recorded before the copy is published: the copy can be delivered before its confirm returns.
+        int? replaced = _counts.Record(delivery.Handle.Key, delivery.DeliveryCount + countsAs);
         try
         {
             await PublishCopyAsync(string.Empty, _options.ServiceName!, RabbitMqWire.ToProperties(delivery.Envelope, delivery.DeliveryCount + countsAs), delivery.Envelope.Body).ConfigureAwait(false);
         }
-        catch (Exception) when (IsCurrent(delivery))
+        catch (Exception)
         {
-            // Handed back as it is: delivered again, but not counted as another attempt.
-            await OnChannelAsync(delivery, channel => channel.BasicNackAsync(delivery.Tag, false, true, CancellationToken.None)).ConfigureAwait(false);
+            _counts.Restore(delivery.Handle.Key, replaced);
+            if (IsCurrent(delivery))
+            {
+                // Handed back as it is: delivered again, but not counted as another attempt.
+                await OnChannelAsync(delivery, channel => channel.BasicNackAsync(delivery.Tag, false, true, CancellationToken.None)).ConfigureAwait(false);
+            }
             throw;
         }
         await OnChannelAsync(delivery, channel => channel.BasicAckAsync(delivery.Tag, false, CancellationToken.None)).ConfigureAwait(false);
@@ -226,6 +235,8 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
         {
             return;
         }
+        // Settled for good, by the copy or by the queue's own dead-letter exchange.
+        _counts.Forget(delivery.Handle.Key);
         try
         {
             BasicProperties properties = RabbitMqWire.ToProperties(delivery.Envelope, delivery.DeliveryCount, reason);
@@ -411,9 +422,8 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
             return;
         }
         MessageEnvelope envelope = RabbitMqWire.ToEnvelope(_options, args);
-        int count = RabbitMqWire.DeliveryCount(args.BasicProperties, args.Redelivered);
-        var handle = new DeliveryHandle(channel, args.DeliveryTag, Volatile.Read(ref _generation));
-        _deliveries.Writer.TryWrite(new Delivery(envelope, count, this, handle));
+        var handle = new DeliveryHandle(channel, args.DeliveryTag, Volatile.Read(ref _generation), (envelope.Name, envelope.Id));
+        _deliveries.Writer.TryWrite(new Delivery(envelope, _counts.Of(handle.Key, args.Redelivered), this, handle));
     }
 
     // Called under the connect gate.
@@ -485,8 +495,8 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
         }
     }
 
-    /// <summary>Where a delivery came from: its channel, its tag on that channel, and the channel generation then.</summary>
-    private readonly record struct DeliveryHandle(IChannel Channel, ulong Tag, int Generation);
+    /// <summary>Where a delivery came from (channel, tag, channel generation), and its count's key, kept apart from the envelope.</summary>
+    private readonly record struct DeliveryHandle(IChannel Channel, ulong Tag, int Generation, (string Name, string Id) Key);
 
     private sealed class Delivery : ReceivedMessage
     {

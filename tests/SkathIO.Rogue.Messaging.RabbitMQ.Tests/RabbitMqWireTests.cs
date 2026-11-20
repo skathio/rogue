@@ -96,42 +96,12 @@ public sealed class RabbitMqWireTests
         Assert.Equal(expected, RabbitMqWire.ResolveName(_options, "legacy", routingKey, properties));
     }
 
-    public static TheoryData<object?, bool, int> Counts => new TheoryData<object?, bool, int>
-    {
-        { null, false, 1 },
-        { null, true, 2 },
-        { 3, false, 3 },
-        { 3, true, 4 },
-        { 3L, false, 3 },
-        { (short)2, false, 2 },
-        { (byte)2, false, 2 },
-        { 0, false, 1 },
-        { -5, false, 1 },
-        { long.MaxValue, false, RabbitMqWire.MaxDeliveryCount },
-        { RabbitMqWire.MaxDeliveryCount, true, RabbitMqWire.MaxDeliveryCount + 1 },
-        { Encoding.UTF8.GetBytes("3"), false, 1 },
-        { 2.5, false, 1 },
-    };
-
-    [Theory]
-    [MemberData(nameof(Counts))]
-    public void TheDeliveryCount_ComesFromTheTransportsHeader_PlusOneWhenRedelivered(object? header, bool redelivered, int expected)
-    {
-        var properties = new BasicProperties();
-        if (header is not null)
-        {
-            properties.Headers = new Dictionary<string, object?> { [RabbitMqWire.DeliveryCountHeader] = header };
-        }
-
-        Assert.Equal(expected, RabbitMqWire.DeliveryCount(properties, redelivered));
-    }
-
     [Fact]
-    public void AStampedCount_IsReadBack()
+    public void AStampedCount_TravelsInItsHeader()
     {
         BasicProperties properties = RabbitMqWire.ToProperties(new MessageEnvelope { Name = "orders.placed" }, 4, "because");
 
-        Assert.Equal(4, RabbitMqWire.DeliveryCount(properties, false));
+        Assert.Equal(4, Assert.IsType<int>(properties.Headers![RabbitMqWire.DeliveryCountHeader]));
         Assert.Equal("because", RabbitMqWire.HeaderString(properties, RabbitMqWire.DeadLetterReasonHeader));
     }
 

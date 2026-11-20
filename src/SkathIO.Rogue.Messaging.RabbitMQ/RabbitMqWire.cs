@@ -17,6 +17,10 @@ internal static class RabbitMqWire
     public const string CausationHeader = "rogue-causation-id";
     public const string TraceParentHeader = "traceparent";
     public const string OriginHeader = "rogue-origin";
+    /// <summary>
+    /// The delivery count stamped on a copy the transport sends back, for whoever reads the queue. It is
+    /// never read back: the sender controls every header, so the count comes from <see cref="DeliveryCounts"/>.
+    /// </summary>
     public const string DeliveryCountHeader = "rogue-delivery-count";
     public const string DeadLetterReasonHeader = "rogue-dead-letter-reason";
 
@@ -26,7 +30,7 @@ internal static class RabbitMqWire
     /// </summary>
     public const int MaxHeaderBytes = 1024;
 
-    /// <summary>The highest delivery count read from a header; a higher one is read as this.</summary>
+    /// <summary>The highest recorded delivery count a delivery is given; a higher one is read as this.</summary>
     public const int MaxDeliveryCount = 1_000_000;
 
     /// <summary>The persistent properties <paramref name="envelope"/> is published with.</summary>
@@ -112,29 +116,6 @@ internal static class RabbitMqWire
             return string.Empty;
         }
         return properties.Type;
-    }
-
-    /// <summary>
-    /// How many times a delivery has been delivered: the count the transport stamped when it sent the
-    /// message back for a retry (1 when there is none or it is not a positive whole number), one more
-    /// when the broker marks it redelivered after a delivery that was never settled.
-    /// </summary>
-    public static int DeliveryCount(IReadOnlyBasicProperties properties, bool redelivered)
-    {
-        long count = 1;
-        if (properties.Headers is { } headers && headers.TryGetValue(DeliveryCountHeader, out object? value))
-        {
-            count = value switch
-            {
-                int i => i,
-                long l => l,
-                short s => s,
-                byte b => b,
-                _ => 1,
-            };
-        }
-        count = Math.Clamp(count, 1, MaxDeliveryCount);
-        return (int)count + (redelivered ? 1 : 0);
     }
 
     /// <summary>A header's value as a string, when it is one of at most <see cref="MaxHeaderBytes"/> UTF-8 bytes; otherwise null.</summary>
