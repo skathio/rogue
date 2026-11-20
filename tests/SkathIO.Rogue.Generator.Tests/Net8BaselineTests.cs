@@ -196,11 +196,14 @@ public sealed class StreamLogBehavior<TRequest, TResponse> : IStreamPipelineBeha
     // ── Package pins ──────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void FluentValidation_IsPinnedToMajor12()
+    public void FluentValidation_IsPinnedToMajor12OrLater()
     {
+        // 12 is the first major that targets net8.0 only; later majors stay allowed so a routine
+        // bump does not fail this test.
         string? version = PinnedVersion("FluentValidation");
         Assert.NotNull(version);
-        Assert.StartsWith("12.", version, StringComparison.Ordinal);
+        Assert.True(Version.TryParse(version, out Version? parsed), $"Unparseable FluentValidation pin '{version}'");
+        Assert.True(parsed.Major >= 12, $"FluentValidation pin {version} is below major 12");
     }
 
     [Fact]
@@ -273,14 +276,15 @@ public sealed class StreamLogBehavior<TRequest, TResponse> : IStreamPipelineBeha
     // ── Changelog ─────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Changelog_UnreleasedSection_RecordsTheNetStandardDrop()
+    public void Changelog_RecordsTheNetStandardDropAsBreaking()
     {
+        // Searches the whole file, not just [Unreleased]: release prep moves the entry into the
+        // versioned section, and the record must survive that move.
         string[] lines = File.ReadAllLines(Path.Combine(RepoRoot(), "CHANGELOG.md"));
-        int start = Array.FindIndex(lines, static l => l.StartsWith("## [Unreleased]", StringComparison.Ordinal));
-        Assert.True(start >= 0, "CHANGELOG.md has no ## [Unreleased] section");
-        int end = Array.FindIndex(lines, start + 1, static l => l.StartsWith("## ", StringComparison.Ordinal));
-        IEnumerable<string> section = lines.Skip(start + 1).Take((end < 0 ? lines.Length : end) - start - 1);
-        Assert.Contains(section, static l => l.Contains("netstandard2.0", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(lines, static l =>
+            l.Contains("Breaking", StringComparison.Ordinal)
+            && l.Contains("netstandard2.0", StringComparison.Ordinal)
+            && l.Contains("no longer a target", StringComparison.Ordinal));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────
