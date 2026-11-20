@@ -17,6 +17,9 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 - AOT check (as CI runs it; needs `clang` and `zlib1g-dev`):
   `dotnet publish samples/SkathIO.Rogue.Aot.Sample/SkathIO.Rogue.Aot.Sample.csproj -c Release -r linux-x64`
   then run `samples/SkathIO.Rogue.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Aot.Sample`.
+  CI does the same for the jobs and messaging sample,
+  `samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample/SkathIO.Rogue.Jobs.Messaging.Aot.Sample.csproj`,
+  and runs its binary.
 - Benchmark smoke run, as CI runs it:
   `dotnet run --project bench/SkathIO.Rogue.Benchmarks/SkathIO.Rogue.Benchmarks.csproj -c Release -- --filter '*NoBehavior*' --job short --exporters json`
 
@@ -36,6 +39,14 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   reflection; do not add another.
 - `src/SkathIO.Rogue.Logging`, `src/SkathIO.Rogue.Validation.FluentValidation` (+ its own generator
   for validator auto-discovery).
+- Jobs family: `src/SkathIO.Rogue.Jobs` (scheduler, worker, `IJobStore`, in-memory store; the
+  `Jobs.Analyzers`/`Jobs.CodeFixes` projects ship inside it), `src/SkathIO.Rogue.Jobs.Postgres`,
+  `src/SkathIO.Rogue.Jobs.SqlServer` (their shared code is `src/SkathIO.Rogue.Jobs/StoreShared/`,
+  compiled into each).
+- Messaging family: `src/SkathIO.Rogue.Messaging` (bus, envelope, transport contract, in-memory
+  transport, consumer), `src/SkathIO.Rogue.Messaging.RabbitMQ`, `src/SkathIO.Rogue.Messaging.Outbox`
+  (outbox and inbox on the database job stores). Jobs and messaging have no generator of their own:
+  the core generator emits their code through feature modules (`JobsModule.cs`, `MessagingModule.cs`).
 - `tests/`: xunit. `Generator.Tests` drives the generator in-memory; `Smoke.*` is a deliberate
   multi-project solution (Infrastructure/Application/Api/Tests) that catches cross-assembly wiring bugs.
 - `samples/`, `bench/` (BenchmarkDotNet; committed baselines in `bench/results/<date>-<sha>/`,

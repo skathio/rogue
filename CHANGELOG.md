@@ -142,6 +142,27 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   publisher's trace. Register it with `AddRogueMessaging()` next to `AddRogue()` and an
   `IMessageTransport`; add `AddRogueMessageConsumer()` in each host that should consume. Targets
   `net8.0` and `net10.0`; no reflection, AOT-safe.
+- **New package: `SkathIO.Rogue.Messaging.RabbitMQ`**, the RabbitMQ transport for
+  `SkathIO.Rogue.Messaging`. Register it with `AddRogueRabbitMqTransport(options => ...)`. Every
+  message is published to one durable topic exchange (`rogue` by default) under its message name, with
+  publisher confirms. Each consuming service (`ServiceName`) gets its own durable queue bound to the
+  names it handles, and a dead-letter exchange and queue for the messages it gives up on. Messages are
+  taken with a prefetch limit and acked only after their handlers succeed. The connection reconnects
+  and recovers its topology on its own. JSON from systems that do not use Rogue is mapped to a Rogue
+  message by its routing key (`MapRoutingKey`) or by a header (`MapHeader`), never by a type name.
+  Targets `net8.0` and `net10.0`; depends on `RabbitMQ.Client`; no reflection.
+- **New package: `SkathIO.Rogue.Messaging.Outbox`**, a transactional outbox and inbox on the
+  Postgres and SQL Server job stores. Register it with `AddRogueMessagingOutbox()` next to
+  `AddRogueMessaging()` and `AddRogueJobs()` with a database store.
+  `IMessageOutbox.Publish(message, transaction)` stores the message as a job inside your own
+  `DbTransaction`: once the transaction commits, a job worker relays it to the transport, and if it
+  rolls back nothing is sent. The inbox, kept in the same store, records each message id the consumer
+  handles, so a message delivered twice runs its handlers once (`MessageOutboxOptions.InboxLease`
+  bounds how long one delivery holds the id). `IMessageInbox` is the consumer's inbox contract in
+  `SkathIO.Rogue.Messaging`. Targets `net8.0` and `net10.0`; adds no package of its own.
+- A native AOT sample for the jobs and messaging packages
+  (`samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample`): a job publishes a message that a handler
+  consumes. CI publishes it with native AOT and runs it on every pull request.
 
 ### Removed
 

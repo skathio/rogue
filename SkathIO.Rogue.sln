@@ -95,6 +95,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkathIO.Rogue.Messaging.Out
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkathIO.Rogue.Messaging.Outbox.Tests", "tests\SkathIO.Rogue.Messaging.Outbox.Tests\SkathIO.Rogue.Messaging.Outbox.Tests.csproj", "{A84E511C-C496-47F3-86D4-1CF433C7AE4A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkathIO.Rogue.Jobs.Messaging.Aot.Sample", "samples\SkathIO.Rogue.Jobs.Messaging.Aot.Sample\SkathIO.Rogue.Jobs.Messaging.Aot.Sample.csproj", "{E6728C6F-7AC6-4F53-86F7-1BD995868B17}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -621,6 +623,18 @@ Global
 		{A84E511C-C496-47F3-86D4-1CF433C7AE4A}.Release|x64.Build.0 = Release|Any CPU
 		{A84E511C-C496-47F3-86D4-1CF433C7AE4A}.Release|x86.ActiveCfg = Release|Any CPU
 		{A84E511C-C496-47F3-86D4-1CF433C7AE4A}.Release|x86.Build.0 = Release|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Debug|x64.Build.0 = Debug|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Debug|x86.Build.0 = Debug|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Release|x64.ActiveCfg = Release|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Release|x64.Build.0 = Release|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Release|x86.ActiveCfg = Release|Any CPU
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -650,5 +664,6 @@ Global
 		{3D039308-0A28-41B4-BBAD-A85D808149FD} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{B3FDED9B-6961-4143-960C-04AA97186E08} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A84E511C-C496-47F3-86D4-1CF433C7AE4A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{E6728C6F-7AC6-4F53-86F7-1BD995868B17} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal

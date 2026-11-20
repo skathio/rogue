@@ -62,6 +62,9 @@ builder.Services.<span class=k>AddRogue</span>();</pre>
 
 <span class=c>// the generator found the handler at
 // compile time: no scan, no reflection</span></pre></div></section>
+<section id="packages"><div class=eyebrow>Packages</div><h2>Jobs and messaging on the same generator</h2>
+<div class=grid><div class=f><b>SkathIO.Rogue.Jobs</b><span>Background jobs on your own commands. Mark one <code>[Job]</code>, enqueue it, and a worker runs its handler with retries, backoff, delays, recurring schedules and unique keys.</span></div><div class=f><b>Jobs.Postgres · Jobs.SqlServer</b><span>Durable job stores. Enqueue inside your own transaction, bulk insert in one round trip, and claim jobs in batches.</span></div><div class=f><b>SkathIO.Rogue.Messaging</b><span>A message bus between services. <code>[Message]</code> events and commands travel under stable names and reach ordinary Rogue handlers, with retries and dead-lettering.</span></div><div class=f><b>Messaging.RabbitMQ</b><span>RabbitMQ transport: a topic exchange, a queue per service, publisher confirms, recovery, and JSON from other systems mapped by routing key or header.</span></div><div class=f><b>Messaging.Outbox</b><span>Publish inside your database transaction: nothing is sent if it rolls back, and a message delivered twice runs its handlers once.</span></div><div class=f><b>SkathIO.Rogue.Validation</b><span>Source-generated request validation with attributes, a rules hook and async rules from DI. Nothing allocated on the valid path.</span></div></div>
+<p class=sub style="margin-top:16px">Dispatch and serialization for jobs and messages are generated at compile time, like the mediator's: no reflection, and native AOT ready.</p></section>
 <section id="why"><div class=eyebrow>Why Rogue</div><h2>Compared</h2>
 <table><tr><th></th><th>MediatR</th><th>martinothamar/Mediator</th><th>SkathIO.Rogue</th></tr>
 <tr><td>License</td><td>Commercial (v13+)</td><td>MIT</td><td class=r>MIT</td></tr>

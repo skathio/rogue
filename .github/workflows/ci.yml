@@ -58,6 +58,10 @@ jobs:
         run: dotnet publish samples/SkathIO.Rogue.Aot.Sample/SkathIO.Rogue.Aot.Sample.csproj -c Release -r linux-x64
       - name: Run AOT binary
         run: ./samples/SkathIO.Rogue.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Aot.Sample
+      - name: Publish jobs and messaging AOT sample
+        run: dotnet publish samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample/SkathIO.Rogue.Jobs.Messaging.Aot.Sample.csproj -c Release -r linux-x64
+      - name: Run jobs and messaging AOT binary
+        run: ./samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Jobs.Messaging.Aot.Sample
 
   bench-smoke:
     name: Benchmark smoke

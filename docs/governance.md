@@ -20,11 +20,17 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
   `Microsoft.Extensions.Logging.Abstractions` and `Microsoft.Extensions.Hosting.Abstractions`, the
   latter so the worker runs as a hosted service. `SkathIO.Rogue.Jobs.Postgres` adds `Npgsql`.
   `SkathIO.Rogue.Jobs.SqlServer` adds `Microsoft.Data.SqlClient` and its transitive tree.
+  `SkathIO.Rogue.Messaging` adds `Microsoft.Extensions.Logging.Abstractions` and
+  `Microsoft.Extensions.Hosting.Abstractions`, so the consumer runs as a hosted service.
+  `SkathIO.Rogue.Messaging.RabbitMQ` adds `RabbitMQ.Client` (and its dependency
+  `System.IO.Pipelines`). `SkathIO.Rogue.Messaging.Outbox` adds no package: it builds on
+  `SkathIO.Rogue.Jobs` and `SkathIO.Rogue.Messaging`.
 - **Transitive dependency allow-list.** The `license-check` CI job runs
   `dotnet list <project> package --include-transitive --format json` for each packable project
   (`SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`, `SkathIO.Rogue.MediatR`, `SkathIO.Rogue.Logging`,
   `SkathIO.Rogue.Validation.FluentValidation`, `SkathIO.Rogue.Validation`, `SkathIO.Rogue.Jobs`,
-  `SkathIO.Rogue.Jobs.Postgres`, `SkathIO.Rogue.Jobs.SqlServer`;
+  `SkathIO.Rogue.Jobs.Postgres`, `SkathIO.Rogue.Jobs.SqlServer`, `SkathIO.Rogue.Messaging`,
+  `SkathIO.Rogue.Messaging.RabbitMQ`, `SkathIO.Rogue.Messaging.Outbox`;
   a new package is added to the job's list when it is created), unions the resulting
   top-level + transitive package ids across all target frameworks, and **fails the build** if any id
   is not listed in [`.github/allowed-packages.txt`](../.github/allowed-packages.txt). **Adding a new
@@ -93,7 +99,9 @@ loads analyzers only from that target.
 ## Quality bar
 
 - `TreatWarningsAsErrors = true` across all target frameworks — zero warnings.
-- AOT/trim clean: the AOT sample publishes with no IL trim or AOT warnings.
+- AOT/trim clean: the AOT samples (`samples/SkathIO.Rogue.Aot.Sample`, and
+  `samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample` for the jobs and messaging families) publish
+  with no IL trim or AOT warnings.
 - Security NFRs: reflection-free dispatch; payload logging off by default.
 
 ## Release readiness
