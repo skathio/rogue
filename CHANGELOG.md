@@ -133,7 +133,9 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   `InMemoryTransport` keeps messages in memory, for tests and single-process development. The
   `MessageConsumer` runs at most `MaxConcurrency` handlers at once, each in its own service scope,
   redelivers a failed message after a doubling, capped delay until `MaxAttempts` deliveries have
-  failed, then dead-letters it. A message with an unknown name, a body over `MaxMessageBytes`, or a
+  failed, then dead-letters it. On a transport without native delay the consumer waits out the
+  retry delay itself, but a message waiting does not hold one of the `MaxConcurrency` slots, so
+  failing messages cannot stall the others. A message with an unknown name, a body over `MaxMessageBytes`, or a
   body that is not JSON of its type within `MaxJsonDepth` is dead-lettered at once without running
   any handler. The reason sent with a dead-lettered message names the exception's type but never its
   message, which stays in the log. Logs carry a message's id and name, never its body. Bodies go through your

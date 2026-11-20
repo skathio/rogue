@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -79,19 +80,25 @@ public sealed class MessageConsumer
     /// Consumes messages until <paramref name="stoppingToken"/> is cancelled, at most
     /// <see cref="MessagingOptions.MaxConcurrency"/> at a time, and returns once the running handlers
     /// have stopped and their messages are settled. It receives again as soon as a handler finishes,
-    /// and waits <see cref="MessagingOptions.PollInterval"/> when nothing was ready.
+    /// and waits <see cref="MessagingOptions.PollInterval"/> when nothing was ready. A failed message
+    /// waiting out its retry delay does not count against the limit.
     /// </summary>
     public async Task RunAsync(CancellationToken stoppingToken)
     {
         MessagingOptions options = _registry.Options;
+
+        // A slot ends when its handlers are done, before any retry delay; a settle task ends once the
+        // message is settled with the transport.
         var running = new List<Task>(options.MaxConcurrency);
+        var settling = new List<Task>(options.MaxConcurrency);
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
                 running.RemoveAll(static t => t.IsCompleted);
+                settling.RemoveAll(static t => t.IsCompleted);
                 int free = options.MaxConcurrency - running.Count;
-                if (free > 0 && await StartReceivedAsync(running, Math.Min(free, options.BatchSize), stoppingToken).ConfigureAwait(false) > 0)
+                if (free > 0 && await StartReceivedAsync(running, settling, Math.Min(free, options.BatchSize), stoppingToken).ConfigureAwait(false) > 0)
                 {
                     continue;
                 }
@@ -106,7 +113,7 @@ public sealed class MessageConsumer
         finally
         {
             // HandleAsync never throws, so this returns once every received message is settled.
-            await Task.WhenAll(running).ConfigureAwait(false);
+            await Task.WhenAll(settling).ConfigureAwait(false);
         }
     }
 
@@ -121,16 +128,37 @@ public sealed class MessageConsumer
         IReadOnlyList<ReceivedMessage> received = await _transport.ReceiveAsync(options.BatchSize, cancellationToken).ConfigureAwait(false);
 
         // The loop itself is not cancellable: every received message must be settled, never abandoned.
+        // A message holds its place in the loop only until its handlers are done, not through its retry delay.
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = options.MaxConcurrency };
-        await Parallel.ForEachAsync(received, parallel, async (delivery, _) => await HandleAsync(delivery, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        var settling = new Task[received.Count];
+        await Parallel.ForEachAsync(Enumerable.Range(0, received.Count), parallel, async (i, _) =>
+        {
+            TaskCompletionSource slot = NewSlot();
+            settling[i] = HandleAsync(received[i], cancellationToken, slot);
+            await slot.Task.ConfigureAwait(false);
+        }).ConfigureAwait(false);
+        await Task.WhenAll(settling).ConfigureAwait(false);
         return received.Count;
     }
 
     /// <summary>
     /// Handles one delivery and settles it with the transport; returns the outcome's telemetry name.
-    /// Never throws.
+    /// Never throws. <paramref name="slot"/>, when given, is set once the delivery no longer needs a
+    /// concurrency slot: when its handlers are done, before any retry delay waited here.
     /// </summary>
-    internal async Task<string> HandleAsync(ReceivedMessage delivery, CancellationToken stoppingToken)
+    internal async Task<string> HandleAsync(ReceivedMessage delivery, CancellationToken stoppingToken, TaskCompletionSource? slot = null)
+    {
+        try
+        {
+            return await DecideAndSettleAsync(delivery, stoppingToken, slot).ConfigureAwait(false);
+        }
+        finally
+        {
+            slot?.TrySetResult();
+        }
+    }
+
+    private async Task<string> DecideAndSettleAsync(ReceivedMessage delivery, CancellationToken stoppingToken, TaskCompletionSource? slot)
     {
         MessageEnvelope envelope = delivery.Envelope;
         string name = envelope.Name is not null && _registry.TryGet(envelope.Name, out _) ? envelope.Name : UnknownNameTag;
@@ -140,7 +168,7 @@ public sealed class MessageConsumer
         activity?.SetTag(RogueMessagingTelemetry.AttemptTag, delivery.DeliveryCount);
 
         Outcome outcome = await DecideAsync(delivery, stoppingToken).ConfigureAwait(false);
-        await SettleAsync(delivery, outcome, stoppingToken).ConfigureAwait(false);
+        await SettleAsync(delivery, outcome, stoppingToken, slot).ConfigureAwait(false);
 
         var tags = new TagList
         {
@@ -196,9 +224,11 @@ public sealed class MessageConsumer
         return reason.Length <= MaxReasonLength ? reason : reason.Substring(0, MaxReasonLength);
     }
 
+    private static TaskCompletionSource NewSlot() => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
     // Receives up to maxCount messages and starts handling each; returns how many. A failed receive is
     // logged and counts as none, so the caller waits its poll interval before trying again.
-    private async Task<int> StartReceivedAsync(List<Task> running, int maxCount, CancellationToken stoppingToken)
+    private async Task<int> StartReceivedAsync(List<Task> running, List<Task> settling, int maxCount, CancellationToken stoppingToken)
     {
         IReadOnlyList<ReceivedMessage> received;
         try
@@ -212,7 +242,9 @@ public sealed class MessageConsumer
         }
         foreach (ReceivedMessage delivery in received)
         {
-            running.Add(HandleAsync(delivery, stoppingToken));
+            TaskCompletionSource slot = NewSlot();
+            settling.Add(HandleAsync(delivery, stoppingToken, slot));
+            running.Add(slot.Task);
         }
         return received.Count;
     }
@@ -348,7 +380,7 @@ public sealed class MessageConsumer
         }
     }
 
-    private async Task SettleAsync(ReceivedMessage delivery, Outcome outcome, CancellationToken stoppingToken)
+    private async Task SettleAsync(ReceivedMessage delivery, Outcome outcome, CancellationToken stoppingToken, TaskCompletionSource? slot)
     {
         MessageEnvelope envelope = delivery.Envelope;
         string id = Loggable(envelope.Id);
@@ -362,7 +394,7 @@ public sealed class MessageConsumer
                     break;
                 case RogueMessagingTelemetry.Retried:
                     _logRetry(_logger, id, Loggable(envelope.Name), delivery.DeliveryCount, _registry.Options.MaxAttempts, outcome.Delay, outcome.Exception);
-                    TimeSpan delay = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken).ConfigureAwait(false);
+                    TimeSpan delay = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken, slot).ConfigureAwait(false);
                     await _transport.NackAsync(delivery, delay, CancellationToken.None).ConfigureAwait(false);
                     break;
                 case RogueMessagingTelemetry.DeadLettered:
@@ -374,7 +406,7 @@ public sealed class MessageConsumer
                     await _transport.DeadLetterAsync(delivery, TrimReason(reason), CancellationToken.None).ConfigureAwait(false);
                     break;
                 default:
-                    TimeSpan later = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken).ConfigureAwait(false);
+                    TimeSpan later = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken, slot).ConfigureAwait(false);
                     await _transport.NackAsync(delivery, later, CancellationToken.None).ConfigureAwait(false);
                     break;
             }
@@ -386,13 +418,15 @@ public sealed class MessageConsumer
     }
 
     // A transport that cannot hold a nacked message for a delay gets it back at once, so the delay is
-    // waited out here, in the message's slot. Shutting down cuts the wait short.
-    private async Task<TimeSpan> WaitUnlessNativeAsync(TimeSpan delay, CancellationToken stoppingToken)
+    // waited out here. The slot is given up first: otherwise MaxConcurrency failing messages would stop
+    // every other message for their whole delay. Shutting down cuts the wait short.
+    private async Task<TimeSpan> WaitUnlessNativeAsync(TimeSpan delay, CancellationToken stoppingToken, TaskCompletionSource? slot)
     {
         if ((_transport.Capabilities & TransportCapabilities.NativeDelay) != 0 || delay <= TimeSpan.Zero)
         {
             return delay;
         }
+        slot?.TrySetResult();
         try
         {
             // One Task.Delay waits at most _longestWait, so a longer delay is waited in parts.
