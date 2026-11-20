@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using Xunit;
 
 namespace SkathIO.Rogue.Messaging.RabbitMQ.Tests;
@@ -44,6 +45,22 @@ public sealed class RabbitMqFactAttribute : FactAttribute
             Path.Combine(home, ".docker", "desktop", "docker.sock"),
             @"\\.\pipe\docker_engine",
         };
-        return sockets.Any(static s => s.Length > 0 && File.Exists(s));
+        return sockets.Any(static s => s.Length > 0 && File.Exists(s) && (s.StartsWith(@"\\.\pipe\", StringComparison.Ordinal) || Accepts(s)));
+    }
+
+    // A socket file can exist while this user may not connect to it (not in the docker group), and the
+    // container would then fail every test in the collection instead of skipping them.
+    private static bool Accepts(string socketPath)
+    {
+        try
+        {
+            using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            socket.Connect(new UnixDomainSocketEndPoint(socketPath));
+            return true;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
     }
 }
