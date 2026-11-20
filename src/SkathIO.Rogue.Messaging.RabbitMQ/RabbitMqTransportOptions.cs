@@ -77,6 +77,7 @@ public sealed class RabbitMqTransportOptions
     /// Receives JSON another system publishes to <paramref name="exchange"/> with exactly
     /// <paramref name="routingKey"/> as the message named <paramref name="messageName"/>. The service's
     /// queue is bound to the exchange with that key; the exchange must exist when the transport connects.
+    /// It cannot be the service's own <see cref="Exchange"/>, where the routing key always names the message.
     /// </summary>
     /// <param name="exchange">The exchange the other system publishes to.</param>
     /// <param name="routingKey">The routing key it publishes with; no <c>*</c> or <c>#</c> wildcard.</param>
@@ -116,9 +117,10 @@ public sealed class RabbitMqTransportOptions
 
     /// <summary>
     /// Receives JSON whose <paramref name="header"/> header is the string <paramref name="value"/> as the
-    /// message named <paramref name="messageName"/>, whichever exchange it came through. The first header
-    /// map that matches wins, before any routing-key map; bring the messages to the service's queue with
-    /// <see cref="Bind"/> or <see cref="MapRoutingKey"/>.
+    /// message named <paramref name="messageName"/>, whichever other system's exchange it came through.
+    /// The first header map that matches wins, before any routing-key map; bring the messages to the
+    /// service's queue with <see cref="Bind"/> or <see cref="MapRoutingKey"/>. A message on the service's
+    /// own <see cref="Exchange"/> is always named by its routing key, never by a header map.
     /// </summary>
     /// <param name="header">The header that names the message type in the other system.</param>
     /// <param name="value">The header's value for this message type, compared ordinally.</param>
@@ -157,6 +159,13 @@ public sealed class RabbitMqTransportOptions
             if (ServiceName.StartsWith("amq.", StringComparison.Ordinal))
             {
                 throw new ArgumentException("Queue names starting with 'amq.' are reserved by the broker.", nameof(ServiceName));
+            }
+        }
+        foreach (RoutingKeyMap map in _routingKeyMaps)
+        {
+            if (string.Equals(map.Exchange, Exchange, StringComparison.Ordinal))
+            {
+                throw new ArgumentException("A routing-key map cannot name the service's own exchange, where the routing key always names the message.", nameof(Exchange));
             }
         }
         ArgumentOutOfRangeException.ThrowIfLessThan(PrefetchCount, 1, nameof(PrefetchCount));

@@ -158,7 +158,9 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   taken with a prefetch limit and acked only after their handlers succeed. The connection reconnects
   and recovers its topology on its own. JSON from systems that do not use Rogue is mapped to a Rogue
   message by its routing key (`MapRoutingKey`) or by a header (`MapHeader`), never by a type name;
-  a message from another exchange that no map names is dead-lettered unread. The transport's service
+  a message from another exchange that no map names is dead-lettered unread. A message on the
+  service's own exchange is always named by its routing key, which its queue was bound by: a header
+  map never renames it, and a routing-key map for the own exchange fails registration. The transport's service
   name is its `ServiceName`, and an event's origin travels in the `rogue-origin` header.
   A message's delivery count is signed by the transport on each copy it sends back for a retry
   (`rogue-delivery-stamp`, an HMAC-SHA256 under `DeliveryStampKey`), and read only from that

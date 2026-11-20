@@ -31,6 +31,10 @@ public sealed class RabbitMqTransportOptionsTests
         { static o => o.ConnectionUri = new Uri("amqps://broker:5671/vhost"), null },
         { static o => o.ConnectionUri = new Uri("http://broker"), typeof(ArgumentException) },
         { static o => o.ConnectionUri = new Uri("/relative", UriKind.Relative), typeof(ArgumentException) },
+        { static o => o.MapRoutingKey("legacy", "legacy.order", "orders.placed"), null },
+        { static o => o.MapRoutingKey("rogue", "legacy.order", "orders.placed"), typeof(ArgumentException) },
+        { static o => o.MapRoutingKey("shop", "legacy.order", "orders.placed").Exchange = "shop", typeof(ArgumentException) },
+        { static o => o.MapRoutingKey("rogue", "legacy.order", "orders.placed").Exchange = "shop", null },
     };
 
     [Theory]

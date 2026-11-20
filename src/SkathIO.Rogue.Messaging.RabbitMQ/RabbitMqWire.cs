@@ -85,14 +85,21 @@ internal static class RabbitMqWire
     }
 
     /// <summary>
-    /// The stable name of a delivery: from the first header map whose header holds its value, else from
-    /// a routing-key map for the exchange and key, else the routing key when the delivery came through
-    /// the transport's own exchange, else, on the default exchange only, the AMQP type property, which
-    /// names the copies the transport sends back there. Empty when none applies, which the consumer
+    /// The stable name of a delivery: the routing key when the delivery came through the transport's own
+    /// exchange, else from the first header map whose header holds its value, else from a routing-key map
+    /// for the exchange and key, else, on the default exchange only, the AMQP type property, which names
+    /// the copies the transport sends back there. Empty when none applies, which the consumer
     /// dead-letters as an unknown name.
     /// </summary>
     public static string ResolveName(RabbitMqTransportOptions options, string exchange, string routingKey, IReadOnlyBasicProperties properties)
     {
+        // On the own exchange the routing key is what the queue was bound by, so neither a header the
+        // sender sets nor its type property can name it something else and reach a handler the binding
+        // never let through.
+        if (string.Equals(exchange, options.Exchange, StringComparison.Ordinal))
+        {
+            return routingKey;
+        }
         foreach (RabbitMqTransportOptions.HeaderMap map in options.HeaderMaps)
         {
             if (string.Equals(HeaderString(properties, map.Header), map.Value, StringComparison.Ordinal))
@@ -106,12 +113,6 @@ internal static class RabbitMqWire
             {
                 return map.MessageName;
             }
-        }
-        // On the own exchange the routing key is what the queue was bound by, so the sender's type
-        // property cannot name it something else and reach a handler the binding never let through.
-        if (string.Equals(exchange, options.Exchange, StringComparison.Ordinal))
-        {
-            return routingKey;
         }
         // On another system's exchange only a map names a delivery: its sender's type property could
         // otherwise pick any message name and reach a handler no map lets through.
