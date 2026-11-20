@@ -26,8 +26,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   for `[Job]` commands, the same commands the build checks (ROGUE019), so adding the package never
   fails startup without a build warning. Every claimed job keeps its lease,
   renewed while it waits for a slot or runs, until its outcome is stored, and a lease the store no
-  longer holds is logged as a warning. `JobsOptions.LeaseDuration` is at most 30 days
-  (`JobsOptions.MaxLeaseDuration`), so a store adding it to the current time never overflows. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
+  longer holds is logged as a warning. `JobsOptions.LeaseDuration` and `LeaderLeaseDuration` are at
+  most 30 days (`JobsOptions.MaxLeaseDuration`), so a store adding either to the current time never overflows. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
   follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. Register it
   with `AddRogueJobs()` next to `AddRogue()`, which is enough to enqueue; add `AddRogueJobWorker()`
   in each host that should run jobs, which registers a hosted service that runs the worker while the

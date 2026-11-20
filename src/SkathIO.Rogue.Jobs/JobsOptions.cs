@@ -11,8 +11,8 @@ public sealed class JobsOptions
     public const int MaxBatchSize = 10_000;
 
     /// <summary>
-    /// The longest <see cref="LeaseDuration"/>: 30 days. A store adds the lease to the current time, and
-    /// a bounded lease keeps that sum a valid time.
+    /// The longest <see cref="LeaseDuration"/> and <see cref="LeaderLeaseDuration"/>: 30 days. A store
+    /// adds a lease to the current time, and a bounded lease keeps that sum a valid time.
     /// </summary>
     public static readonly TimeSpan MaxLeaseDuration = TimeSpan.FromDays(30);
 
@@ -78,6 +78,7 @@ public sealed class JobsOptions
     /// <summary>
     /// How long the host that stores recurring jobs' occurrences stays their leader without renewing;
     /// it renews every third of this. When it stops, another host takes over once the lease runs out.
+    /// At most <see cref="MaxLeaseDuration"/>.
     /// </summary>
     public TimeSpan LeaderLeaseDuration { get; set; } = TimeSpan.FromMinutes(1);
 
@@ -104,5 +105,6 @@ public sealed class JobsOptions
         ArgumentOutOfRangeException.ThrowIfGreaterThan(LeaseDuration, MaxLeaseDuration, nameof(LeaseDuration));
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxPayloadBytes, 1, nameof(MaxPayloadBytes));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(LeaderLeaseDuration, TimeSpan.Zero, nameof(LeaderLeaseDuration));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(LeaderLeaseDuration, MaxLeaseDuration, nameof(LeaderLeaseDuration));
     }
 }
