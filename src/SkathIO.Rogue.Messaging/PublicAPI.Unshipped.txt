@@ -104,3 +104,14 @@ static SkathIO.Rogue.Messaging.MessageLimits.IsValidName(string? name) -> bool
 static SkathIO.Rogue.Messaging.MessagingServiceCollectionExtensions.AddMessageBinding(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, SkathIO.Rogue.Messaging.MessageBinding! binding) -> void
 static SkathIO.Rogue.Messaging.MessagingServiceCollectionExtensions.AddRogueMessageConsumer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static SkathIO.Rogue.Messaging.MessagingServiceCollectionExtensions.AddRogueMessaging(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<SkathIO.Rogue.Messaging.MessagingOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+const SkathIO.Rogue.Messaging.MessageLimits.MaxIdLength = 200 -> int
+SkathIO.Rogue.Messaging.IMessageBus.CreateEnvelope<TMessage>(TMessage message) -> SkathIO.Rogue.Messaging.MessageEnvelope!
+SkathIO.Rogue.Messaging.IMessageInbox
+SkathIO.Rogue.Messaging.IMessageInbox.CompleteAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.ReleaseAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.TryClaimAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Messaging.InboxClaim>
+SkathIO.Rogue.Messaging.InboxClaim
+SkathIO.Rogue.Messaging.InboxClaim.Busy = 2 -> SkathIO.Rogue.Messaging.InboxClaim
+SkathIO.Rogue.Messaging.InboxClaim.Claimed = 0 -> SkathIO.Rogue.Messaging.InboxClaim
+SkathIO.Rogue.Messaging.InboxClaim.Handled = 1 -> SkathIO.Rogue.Messaging.InboxClaim
+static SkathIO.Rogue.Messaging.MessageLimits.IsValidId(string? id) -> bool

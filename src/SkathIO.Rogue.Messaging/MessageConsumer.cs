@@ -16,7 +16,8 @@ namespace SkathIO.Rogue.Messaging;
 /// exponential delay until <see cref="MessagingOptions.MaxAttempts"/> deliveries have failed, then
 /// dead-lettered. A message with an unknown name, a body over <see cref="MessagingOptions.MaxMessageBytes"/>,
 /// or a body that is not JSON of its type within <see cref="MessagingOptions.MaxJsonDepth"/> is
-/// dead-lettered at once, without running any handler.
+/// dead-lettered at once, without running any handler. When an <see cref="IMessageInbox"/> is registered,
+/// a message whose id it reports handled is acked without running its handlers.
 /// </summary>
 /// <remarks>
 /// Logs carry a message's id and name, never its body. <c>AddRogueMessageConsumer</c> registers a hosted
@@ -45,11 +46,16 @@ public sealed class MessageConsumer
         LoggerMessage.Define(LogLevel.Error, new EventId(4, "MessageReceiveFailed"),
             "Receiving messages failed; the consumer tries again after its poll interval.");
 
+    private static readonly Action<ILogger, string, Exception?> _logInboxNotUpdated =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(5, "MessageInboxNotUpdated"),
+            "The inbox could not record the outcome of message {MessageId}; a later delivery of it may run its handlers again once its claim runs out.");
+
     private readonly MessageRegistry _registry;
     private readonly IMessageTransport _transport;
     private readonly IServiceScopeFactory _scopes;
     private readonly TimeProvider _time;
     private readonly ILogger _logger;
+    private readonly IMessageInbox? _inbox;
 
     // Built only by AddRogueMessaging, which registers every service read here, the transport aside.
     internal MessageConsumer(MessageRegistry registry, IServiceProvider services)
@@ -59,6 +65,7 @@ public sealed class MessageConsumer
         _scopes = services.GetRequiredService<IServiceScopeFactory>();
         _time = services.GetRequiredService<TimeProvider>();
         _logger = (ILogger?)services.GetService<ILoggerFactory>()?.CreateLogger("SkathIO.Rogue.Messaging." + nameof(MessageConsumer)) ?? NullLogger.Instance;
+        _inbox = services.GetService<IMessageInbox>();
     }
 
     /// <summary>
@@ -237,9 +244,16 @@ public sealed class MessageConsumer
             return Outcome.DeadLetter("The body is not a '" + bound.Name + "' message in JSON nested at most " + options.MaxJsonDepth + " deep (" + ex.GetType().Name + ").");
         }
 
+        return _inbox is null
+            ? await RunHandlersAsync(delivery, bound, message, stoppingToken).ConfigureAwait(false)
+            : await RunThroughInboxAsync(delivery, bound, message, stoppingToken).ConfigureAwait(false);
+    }
+
+    private async Task<Outcome> RunHandlersAsync(ReceivedMessage delivery, BoundMessage bound, object message, CancellationToken stoppingToken)
+    {
         try
         {
-            await DispatchAsync(bound, envelope, message, stoppingToken).ConfigureAwait(false);
+            await DispatchAsync(bound, delivery.Envelope, message, stoppingToken).ConfigureAwait(false);
             return Outcome.Ack;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -248,12 +262,71 @@ public sealed class MessageConsumer
         }
         catch (Exception ex)
         {
-            if (delivery.DeliveryCount >= options.MaxAttempts)
-            {
-                return Outcome.DeadLetter("The handler failed on delivery " + delivery.DeliveryCount + " of " + options.MaxAttempts + ".", ex);
-            }
-            return Outcome.Retry(RetryDelay(options.RetryDelay, delivery.DeliveryCount, options.MaxRetryDelay), ex);
+            return Failed(delivery, ex);
         }
+    }
+
+    // Runs the handlers only when the inbox lets this delivery claim the message id, then records the
+    // outcome: handled after success, and otherwise the claim dropped so the next delivery can take it.
+    private async Task<Outcome> RunThroughInboxAsync(ReceivedMessage delivery, BoundMessage bound, object message, CancellationToken stoppingToken)
+    {
+        IMessageInbox inbox = _inbox!;
+        string id = delivery.Envelope.Id;
+        if (!MessageLimits.IsValidId(id))
+        {
+            return Outcome.DeadLetter("The message id is not 1 to " + MessageLimits.MaxIdLength + " characters without white space, so the inbox cannot tell its deliveries apart.");
+        }
+
+        InboxClaim claim;
+        try
+        {
+            claim = await inbox.TryClaimAsync(id, stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return Outcome.Release;
+        }
+        catch (Exception ex)
+        {
+            return Failed(delivery, ex);
+        }
+        switch (claim)
+        {
+            case InboxClaim.Handled:
+                return Outcome.Duplicate;
+            case InboxClaim.Busy:
+                return Outcome.Defer(_registry.Options.RetryDelay);
+        }
+
+        Outcome outcome = await RunHandlersAsync(delivery, bound, message, stoppingToken).ConfigureAwait(false);
+        try
+        {
+            if (outcome.Name == RogueMessagingTelemetry.Succeeded)
+            {
+                await inbox.CompleteAsync(id, CancellationToken.None).ConfigureAwait(false);
+            }
+            else
+            {
+                await inbox.ReleaseAsync(id, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            // The handlers' outcome stands; only the guard against a later duplicate is weaker.
+            _logInboxNotUpdated(_logger, Loggable(id), ex);
+        }
+        return outcome;
+    }
+
+    // A failed delivery is delivered again after its retry delay, or dead-lettered on its last attempt.
+    private Outcome Failed(ReceivedMessage delivery, Exception ex)
+    {
+        MessagingOptions options = _registry.Options;
+        if (delivery.DeliveryCount >= options.MaxAttempts)
+        {
+            return Outcome.DeadLetter("The handler failed on delivery " + delivery.DeliveryCount + " of " + options.MaxAttempts + ".", ex);
+        }
+        return Outcome.Retry(RetryDelay(options.RetryDelay, delivery.DeliveryCount, options.MaxRetryDelay), ex);
     }
 
     // An async method of its own, so the inbound context it enters ends when the handlers return.
@@ -276,6 +349,7 @@ public sealed class MessageConsumer
             switch (outcome.Name)
             {
                 case RogueMessagingTelemetry.Succeeded:
+                case RogueMessagingTelemetry.Duplicate:
                     await _transport.AckAsync(delivery, CancellationToken.None).ConfigureAwait(false);
                     break;
                 case RogueMessagingTelemetry.Retried:
@@ -289,7 +363,8 @@ public sealed class MessageConsumer
                     await _transport.DeadLetterAsync(delivery, TrimReason(reason), CancellationToken.None).ConfigureAwait(false);
                     break;
                 default:
-                    await _transport.NackAsync(delivery, TimeSpan.Zero, CancellationToken.None).ConfigureAwait(false);
+                    TimeSpan later = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken).ConfigureAwait(false);
+                    await _transport.NackAsync(delivery, later, CancellationToken.None).ConfigureAwait(false);
                     break;
             }
         }
@@ -333,6 +408,9 @@ public sealed class MessageConsumer
         /// <summary>Nacked with no delay: the consumer is stopping, so the message is left to the next one.</summary>
         public static Outcome Release => new Outcome(RogueMessagingTelemetry.Released, TimeSpan.Zero, null, null);
 
+        /// <summary>Acked unhandled: the inbox says the message has been handled before.</summary>
+        public static Outcome Duplicate => new Outcome(RogueMessagingTelemetry.Duplicate, TimeSpan.Zero, null, null);
+
         public string Name { get; }
 
         public TimeSpan Delay { get; }
@@ -342,6 +420,9 @@ public sealed class MessageConsumer
 
         /// <summary>The handler's exception, the only exception an outcome keeps.</summary>
         public Exception? Exception { get; }
+
+        /// <summary>Nacked unhandled, to come back after <paramref name="delay"/>: another delivery holds its id.</summary>
+        public static Outcome Defer(TimeSpan delay) => new Outcome(RogueMessagingTelemetry.Released, delay, null, null);
 
         public static Outcome Retry(TimeSpan delay, Exception exception) => new Outcome(RogueMessagingTelemetry.Retried, delay, null, exception);
 

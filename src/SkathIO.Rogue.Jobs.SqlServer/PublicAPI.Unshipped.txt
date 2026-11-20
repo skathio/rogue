@@ -23,3 +23,6 @@ static SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsServiceCollectionExtensions.Add
 SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.EnqueueOnceAsync(SkathIO.Rogue.Jobs.NewJob! job, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Guid>
 SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.ReleaseLeadershipAsync(string! name, string! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.TryAcquireLeadershipAsync(string! name, string! owner, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.CompleteMessageAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.ReleaseMessageAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaim>

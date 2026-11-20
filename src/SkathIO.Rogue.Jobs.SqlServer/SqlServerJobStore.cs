@@ -18,7 +18,7 @@ namespace SkathIO.Rogue.Jobs.SqlServer;
 /// every process sharing the database must keep its clock in sync. The store creates or upgrades its
 /// schema before its first command unless <see cref="DatabaseJobsOptions.AutoMigrate"/> is off.
 /// </remarks>
-public sealed class SqlServerJobStore : IJobStore, IDatabaseJobStore
+public sealed partial class SqlServerJobStore : IJobStore, IDatabaseJobStore
 {
     private const string OrphanError = "The job's lease ran out on its last attempt; its worker stopped without finishing it.";
 
@@ -181,6 +181,11 @@ public sealed class SqlServerJobStore : IJobStore, IDatabaseJobStore
     {
         DateTime now = Now();
         await ExecuteAsync(_sql.PruneRuns, cancellationToken, Time("@before", now - _options.SucceededRetention)).ConfigureAwait(false);
+        await StoreSupport.DeleteInBatchesAsync(ct => ExecuteAsync(
+            _sql.Inbox.Prune,
+            ct,
+            Time("@before", now - _options.SucceededRetention),
+            Int("@batch", _options.PruneBatchSize)), _options.PruneBatchSize, cancellationToken).ConfigureAwait(false);
         return await StoreSupport.DeleteInBatchesAsync(ct => ExecuteAsync(
             _sql.Prune,
             ct,

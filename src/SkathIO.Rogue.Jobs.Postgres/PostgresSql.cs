@@ -22,7 +22,8 @@ internal sealed class PostgresSql
         string sequence = s + ".job_seq";
 
         Scheduling = new PostgresSchedulingSql(s, Jobs);
-        Migrations = new[] { CreateJobsTable(Jobs, sequence), Scheduling.Migration };
+        Inbox = new PostgresInboxSql(s);
+        Migrations = new[] { CreateJobsTable(Jobs, sequence), Scheduling.Migration, Inbox.Migration };
 
         MigrationPrologue =
             "SELECT pg_advisory_xact_lock(1919381317, hashtext(@schema));\n"
@@ -137,6 +138,9 @@ internal sealed class PostgresSql
 
     /// <summary>The statements for delayed and recurring jobs, unique keys and the leader lock.</summary>
     public PostgresSchedulingSql Scheduling { get; }
+
+    /// <summary>The statements for a message consumer's inbox.</summary>
+    public PostgresInboxSql Inbox { get; }
 
     public string Insert { get; }
 

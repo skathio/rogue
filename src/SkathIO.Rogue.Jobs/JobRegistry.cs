@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json.Serialization;
 
 namespace SkathIO.Rogue.Jobs;
 
@@ -82,16 +81,10 @@ internal sealed class JobRegistry
         throw new InvalidOperationException(typeof(TCommand) + " is not a job. A job is a command marked [Job] with a handler, in a project that references SkathIO.Rogue.Jobs; enqueue it by its own type.");
     }
 
-    // Binds the definition to the serializer context; false when there is no context or it does not
-    // cover the command. A kind already bound to the same command counts as bound.
+    // Binds the definition to its own type info or else the serializer context; false when neither
+    // covers the command. A kind already bound to the same command counts as bound.
     private bool TryBind(JobDefinition definition, JobsOptions options)
     {
-        JsonSerializerContext? context = options.SerializerContext;
-        if (context is null)
-        {
-            return false;
-        }
-
         if (_byKind.TryGetValue(definition.Kind, out JobBinding? existing))
         {
             if (existing.CommandType != definition.CommandType)
@@ -101,7 +94,7 @@ internal sealed class JobRegistry
             return true;
         }
 
-        JobBinding? binding = definition.Bind(context, options);
+        JobBinding? binding = definition.Bind(options.SerializerContext, options);
         if (binding is null)
         {
             return false;

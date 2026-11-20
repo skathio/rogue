@@ -19,4 +19,16 @@ public interface IMessageBus
     /// </exception>
     ValueTask Publish<TMessage>(TMessage message, CancellationToken cancellationToken = default)
         where TMessage : notnull;
+
+    /// <summary>
+    /// Serializes <paramref name="message"/> into the envelope <see cref="Publish{TMessage}"/> would
+    /// send, with its ids and trace context filled the same way, without sending it: for an outbox that
+    /// stores the envelope and sends it through the <see cref="IMessageTransport"/> later.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The message's type is not marked <see cref="MessageAttribute"/> in a project that references this
+    /// package, or its body is larger than <see cref="MessagingOptions.MaxMessageBytes"/>.
+    /// </exception>
+    MessageEnvelope CreateEnvelope<TMessage>(TMessage message)
+        where TMessage : notnull;
 }

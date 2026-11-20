@@ -23,13 +23,15 @@ internal sealed class MessageBus : IMessageBus
 
     public ValueTask Publish<TMessage>(TMessage message, CancellationToken cancellationToken = default)
         where TMessage : notnull
+        => Send(BindingOf(message), message, cancellationToken);
+
+    public MessageEnvelope CreateEnvelope<TMessage>(TMessage message)
+        where TMessage : notnull
     {
-        ArgumentNullException.ThrowIfNull(message);
-        if (!Registry.TryGet(message.GetType(), out BoundMessage? bound))
-        {
-            throw new InvalidOperationException(message.GetType() + " is not a message. Mark it [Message(\"name\")] in a project that references SkathIO.Rogue.Messaging, and add [JsonSerializable(typeof(" + message.GetType().Name + "))] to MessagingOptions.SerializerContext.");
-        }
-        return Send(bound, message, cancellationToken);
+        BoundMessage bound = BindingOf(message);
+        byte[] body = Serialize(bound, message);
+        using Activity? activity = StartPublish(bound);
+        return Envelope(bound, body, activity);
     }
 
     /// <summary>The binding to forward <paramref name="event"/> with, or null when it is not sent to the bus.</summary>
@@ -52,17 +54,18 @@ internal sealed class MessageBus : IMessageBus
 
     internal async ValueTask Send(BoundMessage bound, object message, CancellationToken cancellationToken)
     {
-        byte[] body = bound.Serialize(message);
-        int limit = Registry.Options.MaxMessageBytes;
-        if (body.Length > limit)
-        {
-            throw new InvalidOperationException("The '" + bound.Name + "' message is " + body.Length + " bytes, over MessagingOptions.MaxMessageBytes (" + limit + "). Nothing was sent.");
-        }
+        byte[] body = Serialize(bound, message);
+        using Activity? activity = StartPublish(bound);
+        MessageEnvelope envelope = Envelope(bound, body, activity);
+        await Transport.SendAsync(new[] { envelope }, cancellationToken).ConfigureAwait(false);
+        RogueMessagingTelemetry.Published.Add(1, new TagList { { RogueMessagingTelemetry.NameTag, bound.Name } });
+    }
 
-        using Activity? activity = RogueMessagingTelemetry.Source.StartActivity(RogueMessagingTelemetry.PublishActivity, ActivityKind.Producer);
-        activity?.SetTag(RogueMessagingTelemetry.NameTag, bound.Name);
+    // The envelope of a message with this body: a new id, the ids of the inbound message being handled,
+    // if any, and the trace context of the publish activity or, without one, the current activity.
+    private static MessageEnvelope Envelope(BoundMessage bound, byte[] body, Activity? activity)
+    {
         Activity? trace = activity ?? Activity.Current;
-
         var envelope = new MessageEnvelope
         {
             Name = bound.Name,
@@ -73,8 +76,36 @@ internal sealed class MessageBus : IMessageBus
         MessageEnvelope? cause = InboundContext.Current?.Envelope;
         envelope.CorrelationId = cause is null ? envelope.Id : cause.CorrelationId ?? cause.Id;
         envelope.CausationId = cause?.Id;
+        return envelope;
+    }
 
-        await Transport.SendAsync(new[] { envelope }, cancellationToken).ConfigureAwait(false);
-        RogueMessagingTelemetry.Published.Add(1, new TagList { { RogueMessagingTelemetry.NameTag, bound.Name } });
+    private static Activity? StartPublish(BoundMessage bound)
+    {
+        Activity? activity = RogueMessagingTelemetry.Source.StartActivity(RogueMessagingTelemetry.PublishActivity, ActivityKind.Producer);
+        activity?.SetTag(RogueMessagingTelemetry.NameTag, bound.Name);
+        return activity;
+    }
+
+    private BoundMessage BindingOf<TMessage>(TMessage message)
+        where TMessage : notnull
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        if (!Registry.TryGet(message.GetType(), out BoundMessage? bound))
+        {
+            throw new InvalidOperationException(message.GetType() + " is not a message. Mark it [Message(\"name\")] in a project that references SkathIO.Rogue.Messaging, and add [JsonSerializable(typeof(" + message.GetType().Name + "))] to MessagingOptions.SerializerContext.");
+        }
+        return bound;
+    }
+
+    // The body, refused when it is over the size limit, so nothing too large is sent or stored.
+    private byte[] Serialize(BoundMessage bound, object message)
+    {
+        byte[] body = bound.Serialize(message);
+        int limit = Registry.Options.MaxMessageBytes;
+        if (body.Length > limit)
+        {
+            throw new InvalidOperationException("The '" + bound.Name + "' message is " + body.Length + " bytes, over MessagingOptions.MaxMessageBytes (" + limit + "). Nothing was sent.");
+        }
+        return body;
     }
 }

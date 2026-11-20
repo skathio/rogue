@@ -10,7 +10,9 @@ namespace SkathIO.Rogue.Messaging;
 /// </summary>
 /// <remarks>
 /// Instruments: <c>rogue.messaging.published</c> (counter) and <c>rogue.messaging.consumed</c> (counter,
-/// tagged with <c>outcome</c>: succeeded, retried, dead_lettered, or released when the consumer stopped while the handlers ran). Each publish is a
+/// tagged with <c>outcome</c>: succeeded, retried, dead_lettered, duplicate when the inbox found the message
+/// handled before, or released when the consumer stopped while the handlers ran or another delivery held
+/// the message's id). Each publish is a
 /// <c>rogue.message.publish</c> activity, and each delivery handled is a <c>rogue.message.consume</c>
 /// activity whose parent is the publisher's trace context from the envelope.
 /// </remarks>
@@ -30,6 +32,7 @@ public static class RogueMessagingTelemetry
     internal const string Retried = "retried";
     internal const string DeadLettered = "dead_lettered";
     internal const string Released = "released";
+    internal const string Duplicate = "duplicate";
 
     internal static readonly ActivitySource Source = new ActivitySource(Name);
 

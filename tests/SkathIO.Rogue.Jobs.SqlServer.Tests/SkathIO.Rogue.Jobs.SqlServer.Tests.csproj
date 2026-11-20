@@ -5,9 +5,16 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs.SqlServer\SkathIO.Rogue.Jobs.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging\SkathIO.Rogue.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging.Outbox\SkathIO.Rogue.Messaging.Outbox.csproj" />
     <ProjectReference Include="..\SkathIO.Rogue.Jobs.StoreContract\SkathIO.Rogue.Jobs.StoreContract.csproj" />
+    <!-- The core generator emits the dispatcher and the message bindings for the outbox tests. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

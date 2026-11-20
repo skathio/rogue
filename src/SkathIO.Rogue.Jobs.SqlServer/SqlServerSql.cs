@@ -42,7 +42,8 @@ internal sealed class SqlServerSql
         LeaseRows = _schema + ".[lease_rows]";
         IdRows = _schema + ".[id_rows]";
         MigrationPrologue = Prologue();
-        Migrations = new[] { Migration(1, CreateJobsTable()), Migration(2, AddSchedulingTables()) };
+        Inbox = new SqlServerInboxSql(_schema);
+        Migrations = new[] { Migration(1, CreateJobsTable()), Migration(2, AddSchedulingTables()), Migration(3, Inbox.Migration) };
 
         // One statement for the whole batch: a duplicate id fails it all. The sequence numbers follow
         // the batch order, so jobs enqueued together are claimed in that order.
@@ -82,6 +83,9 @@ internal sealed class SqlServerSql
     }
 
     public string Schema { get; }
+
+    /// <summary>The statements for a message consumer's inbox.</summary>
+    public SqlServerInboxSql Inbox { get; }
 
     /// <summary>The table type of a job batch.</summary>
     public string JobRows { get; }
@@ -160,7 +164,9 @@ internal sealed class SqlServerSql
     // Migration 1: one row per job, state as a column. The filtered indexes keep the claim and the
     // orphan rescue on the small set of live rows, and the pruner on finished ones. The ready index is
     // unique: seq comes from one sequence, so no two ready jobs share a place in a queue's order. The
-    // table types carry batches of jobs, leases and ids as table-valued parameters.
+    // table types carry batches of jobs, leases and ids as table-valued parameters; a job batch row
+    // carries the job's run time, null for now. A table type cannot be altered, so it is created once
+    // here in its final shape.
     private string[] CreateJobsTable() => new[]
     {
         "CREATE SEQUENCE " + _schema + ".[job_seq] AS bigint START WITH 1 INCREMENT BY 1",
@@ -182,7 +188,7 @@ internal sealed class SqlServerSql
         "CREATE NONCLUSTERED INDEX jobs_finished ON " + _jobs + " (finished_at) WHERE state IN (" + Succeeded + ", " + DeadLettered + ")",
         "CREATE TYPE " + JobRows + " AS TABLE (ord int NOT NULL PRIMARY KEY, id uniqueidentifier NOT NULL, "
             + "kind nvarchar(" + JobLimits.MaxKindLength + ") NOT NULL, queue nvarchar(" + JobLimits.MaxQueueLength + ") NOT NULL, "
-            + "payload varbinary(max) NOT NULL, max_attempts int NOT NULL)",
+            + "payload varbinary(max) NOT NULL, max_attempts int NOT NULL, run_at datetime2(7) NULL)",
         "CREATE TYPE " + LeaseRows + " AS TABLE (id uniqueidentifier NOT NULL, attempt int NOT NULL, PRIMARY KEY (id, attempt))",
         "CREATE TYPE " + IdRows + " AS TABLE (id uniqueidentifier NOT NULL PRIMARY KEY)",
     };
@@ -190,7 +196,7 @@ internal sealed class SqlServerSql
     // Migration 2: delayed and recurring jobs, unique keys and the leader lock. A unique key is held by
     // the pending jobs of its kind only, under a filtered unique index; a recurring run is stored once
     // per task key and run time, which the run ledger keeps apart from the job's own run_at, since a
-    // retry moves that. The new batch type carries each job's run time.
+    // retry moves that.
     private string[] AddSchedulingTables() => new[]
     {
         "ALTER TABLE " + _jobs + " ADD unique_key nvarchar(" + JobLimits.MaxKeyLength + ") NULL",
@@ -204,9 +210,6 @@ internal sealed class SqlServerSql
             + "name nvarchar(" + JobLimits.MaxKeyLength + ") NOT NULL PRIMARY KEY, "
             + "owner nvarchar(" + JobLimits.MaxKeyLength + ") NOT NULL, "
             + "lease_until datetime2(7) NOT NULL)",
-        "CREATE TYPE " + JobRows + " AS TABLE (ord int NOT NULL PRIMARY KEY, id uniqueidentifier NOT NULL, "
-            + "kind nvarchar(" + JobLimits.MaxKindLength + ") NOT NULL, queue nvarchar(" + JobLimits.MaxQueueLength + ") NOT NULL, "
-            + "payload varbinary(max) NOT NULL, max_attempts int NOT NULL, run_at datetime2(7) NULL)",
     };
 
     // One transaction: the run ledger first, then the pending holder of the unique key, then the

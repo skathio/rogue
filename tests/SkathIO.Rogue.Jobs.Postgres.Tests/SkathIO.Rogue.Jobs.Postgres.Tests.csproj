@@ -8,8 +8,11 @@
     <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs.Postgres\SkathIO.Rogue.Jobs.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging\SkathIO.Rogue.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging.Outbox\SkathIO.Rogue.Messaging.Outbox.csproj" />
     <ProjectReference Include="..\SkathIO.Rogue.Jobs.StoreContract\SkathIO.Rogue.Jobs.StoreContract.csproj" />
-    <!-- The core generator emits the dispatcher and job definitions for the end-to-end test's job. -->
+    <!-- The core generator emits the dispatcher, the job definitions and the message bindings for the
+         end-to-end tests. -->
     <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />

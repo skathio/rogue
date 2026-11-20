@@ -35,6 +35,20 @@ public sealed class InMemoryJobStoreTests
     }
 
     [Fact]
+    public async Task HandledMessageIds_PastTheRetention_AreDroppedOldestFirst()
+    {
+        var store = new InMemoryJobStore(TimeProvider.System, finishedRetention: 1);
+        await store.CompleteMessageAsync("first", CancellationToken.None);
+        MessageClaim kept = await store.TryClaimMessageAsync("first", TimeSpan.FromMinutes(1), CancellationToken.None);
+
+        await store.CompleteMessageAsync("second", CancellationToken.None);
+
+        Assert.Equal(MessageClaim.Handled, kept);
+        Assert.Equal(MessageClaim.Claimed, await store.TryClaimMessageAsync("first", TimeSpan.FromMinutes(1), CancellationToken.None));
+        Assert.Equal(MessageClaim.Handled, await store.TryClaimMessageAsync("second", TimeSpan.FromMinutes(1), CancellationToken.None));
+    }
+
+    [Fact]
     public void Retention_RejectsANegativeValue_AndAcceptsZero()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new InMemoryJobStore(TimeProvider.System, -1));

@@ -26,7 +26,8 @@ internal sealed class MessagingHost : IAsyncDisposable
     public static MessagingHost Create(
         Action<MessagingOptions>? configure = null,
         TransportCapabilities capabilities = TransportCapabilities.NativeDelay | TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend,
-        bool realTime = false)
+        bool realTime = false,
+        Action<IServiceCollection>? services = null)
     {
         // On real time the consumer's idle wait and the transport's delays pass on their own; on the
         // step clock only when the test moves it.
@@ -37,6 +38,7 @@ internal sealed class MessagingHost : IAsyncDisposable
         collection.AddSingleton<TimeProvider>(realTime ? TimeProvider.System : clock);
         collection.AddSingleton<MessageProbe>();
         collection.AddSingleton<IMessageTransport>(transport);
+        services?.Invoke(collection);
         collection.AddRogue();
         collection.AddRogueMessaging(options =>
         {

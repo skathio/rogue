@@ -20,7 +20,7 @@ namespace SkathIO.Rogue.Jobs.Postgres;
 /// every process sharing the database must keep its clock in sync. The store creates or upgrades its
 /// schema before its first command unless <see cref="PostgresJobsOptions.AutoMigrate"/> is off.
 /// </remarks>
-public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
+public sealed partial class PostgresJobStore : IJobStore, IDatabaseJobStore
 {
     // Above this many jobs an enqueue streams them through binary COPY; below, one INSERT is cheaper.
     private const int CopyThreshold = 2;
@@ -282,6 +282,7 @@ public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
         await ReadyAsync(cancellationToken).ConfigureAwait(false);
         DateTimeOffset now = _time.GetUtcNow();
         await _scheduling.ForgetRunsBeforeAsync((now - _options.SucceededRetention).UtcDateTime, cancellationToken).ConfigureAwait(false);
+        await ForgetMessagesBeforeAsync((now - _options.SucceededRetention).UtcDateTime, cancellationToken).ConfigureAwait(false);
         return await StoreSupport.DeleteInBatchesAsync(async ct =>
         {
             await using NpgsqlCommand command = _dataSource.CreateCommand(_sql.Prune);

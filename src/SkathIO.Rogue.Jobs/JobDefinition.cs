@@ -47,8 +47,9 @@ public abstract class JobDefinition
         static async ValueTask AwaitAsync(ValueTask<TResult> pending) => await pending.ConfigureAwait(false);
     }
 
-    // Null when the serializer context does not cover the command type.
-    internal abstract JobBinding? Bind(JsonSerializerContext context, JobsOptions options);
+    // Null when the definition has no type info of its own and the serializer context, if any, does
+    // not cover the command type.
+    internal abstract JobBinding? Bind(JsonSerializerContext? context, JobsOptions options);
 }
 
 /// <summary>The job definition of the command <typeparamref name="TCommand"/>.</summary>
@@ -57,6 +58,7 @@ public sealed class JobDefinition<TCommand> : JobDefinition
     where TCommand : notnull
 {
     private readonly Func<RogueDispatcher, TCommand, CancellationToken, ValueTask> _invoke;
+    private readonly JsonTypeInfo<TCommand>? _typeInfo;
 
     /// <summary>Creates the definition; generated code calls this once per command.</summary>
     /// <param name="kind">The stable name the job is stored under.</param>
@@ -69,14 +71,35 @@ public sealed class JobDefinition<TCommand> : JobDefinition
         _invoke = invoke;
     }
 
+    /// <summary>
+    /// Creates the definition of a job a package ships for its own use, such as a relay, whose command
+    /// the application's <see cref="JobsOptions.SerializerContext"/> does not cover: it is serialized
+    /// with <paramref name="typeInfo"/> instead, and is a job without <see cref="JobAttribute"/>.
+    /// </summary>
+    /// <param name="kind">The stable name the job is stored under.</param>
+    /// <param name="defaults">The job's defaults; not <see cref="JobDefaults.None"/>, which marks a command that is not a job.</param>
+    /// <param name="typeInfo">The source-generated serializer of the command.</param>
+    /// <param name="invoke">Runs the job, given the dispatcher of the job's scope.</param>
+    /// <exception cref="ArgumentException"><paramref name="kind"/> is not a valid kind, or <paramref name="defaults"/> is <see cref="JobDefaults.None"/>.</exception>
+    public JobDefinition(string kind, JobDefaults defaults, JsonTypeInfo<TCommand> typeInfo, Func<RogueDispatcher, TCommand, CancellationToken, ValueTask> invoke)
+        : this(kind, defaults, invoke)
+    {
+        ArgumentNullException.ThrowIfNull(typeInfo);
+        if (ReferenceEquals(defaults, JobDefaults.None))
+        {
+            throw new ArgumentException("A job with its own serializer is a job: give it defaults, not JobDefaults.None.", nameof(defaults));
+        }
+        _typeInfo = typeInfo;
+    }
+
     /// <inheritdoc />
     public override Type CommandType => typeof(TCommand);
 
     internal ValueTask Invoke(RogueDispatcher dispatcher, TCommand command, CancellationToken cancellationToken)
         => _invoke(dispatcher, command, cancellationToken);
 
-    internal override JobBinding? Bind(JsonSerializerContext context, JobsOptions options)
-        => context.GetTypeInfo(typeof(TCommand)) is JsonTypeInfo<TCommand> typeInfo
+    internal override JobBinding? Bind(JsonSerializerContext? context, JobsOptions options)
+        => (_typeInfo ?? context?.GetTypeInfo(typeof(TCommand)) as JsonTypeInfo<TCommand>) is { } typeInfo
             ? new JobBinding<TCommand>(this, typeInfo, options)
             : null;
 }

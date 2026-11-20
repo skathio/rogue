@@ -35,8 +35,8 @@ public sealed class SqlServerJobStoreTests
         await Task.WhenAll(stores.Select(static s => s.MigrateAsync()));
         await stores[0].MigrateAsync();
 
-        Assert.Equal(2, await ScalarAsync<int>("SELECT count(*) FROM [" + _schema + "].[schema_version]"));
-        Assert.Equal(2, await ScalarAsync<int>("SELECT max(version) FROM [" + _schema + "].[schema_version]"));
+        Assert.Equal(3, await ScalarAsync<int>("SELECT count(*) FROM [" + _schema + "].[schema_version]"));
+        Assert.Equal(3, await ScalarAsync<int>("SELECT max(version) FROM [" + _schema + "].[schema_version]"));
     }
 
     [StoreFact]

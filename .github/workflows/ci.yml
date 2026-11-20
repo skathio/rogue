@@ -191,6 +191,7 @@ jobs:
             "src/SkathIO.Rogue.Jobs.SqlServer/SkathIO.Rogue.Jobs.SqlServer.csproj"
             "src/SkathIO.Rogue.Messaging/SkathIO.Rogue.Messaging.csproj"
             "src/SkathIO.Rogue.Messaging.RabbitMQ/SkathIO.Rogue.Messaging.RabbitMQ.csproj"
+            "src/SkathIO.Rogue.Messaging.Outbox/SkathIO.Rogue.Messaging.Outbox.csproj"
           )
 
           : > closure-ids.txt
