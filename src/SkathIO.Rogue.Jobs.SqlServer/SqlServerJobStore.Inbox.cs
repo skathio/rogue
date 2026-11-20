@@ -39,32 +39,39 @@ public sealed partial class SqlServerJobStore : ITransactionalJobStore, IMessage
     }
 
     /// <inheritdoc />
-    public async ValueTask<MessageClaim> TryClaimMessageAsync(string messageId, TimeSpan lease, CancellationToken cancellationToken)
+    /// <remarks>The token is the lease_until the claim wrote, in UTC ticks.</remarks>
+    public async ValueTask<MessageClaimResult> TryClaimMessageAsync(string messageId, TimeSpan lease, CancellationToken cancellationToken)
     {
         JobLimits.CheckKey(messageId, nameof(messageId));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lease, TimeSpan.Zero);
         DateTime now = Now();
+        DateTime leaseEnd = now + lease;
         await using SqlConnection connection = await OpenReadyAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new SqlCommand(_sql.Inbox.Claim, connection);
         command.Parameters.Add(MessageId(messageId));
         command.Parameters.Add(Time("@now", now));
-        command.Parameters.Add(Time("@lease_until", now + lease));
-        return (MessageClaim)(int)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        command.Parameters.Add(Time("@lease_until", leaseEnd));
+        var claim = (MessageClaim)(int)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        return new MessageClaimResult(claim, claim == MessageClaim.Claimed ? leaseEnd.Ticks : 0);
     }
 
     /// <inheritdoc />
-    public async ValueTask CompleteMessageAsync(string messageId, CancellationToken cancellationToken)
+    public async ValueTask CompleteMessageAsync(string messageId, long claimToken, CancellationToken cancellationToken)
     {
         JobLimits.CheckKey(messageId, nameof(messageId));
-        await ExecuteAsync(_sql.Inbox.Complete, cancellationToken, MessageId(messageId), Time("@now", Now())).ConfigureAwait(false);
+        await ExecuteAsync(_sql.Inbox.Complete, cancellationToken, MessageId(messageId), ClaimLeaseEnd(claimToken), Time("@now", Now())).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public async ValueTask ReleaseMessageAsync(string messageId, CancellationToken cancellationToken)
+    public async ValueTask ReleaseMessageAsync(string messageId, long claimToken, CancellationToken cancellationToken)
     {
         JobLimits.CheckKey(messageId, nameof(messageId));
-        await ExecuteAsync(_sql.Inbox.Release, cancellationToken, MessageId(messageId)).ConfigureAwait(false);
+        await ExecuteAsync(_sql.Inbox.Release, cancellationToken, MessageId(messageId), ClaimLeaseEnd(claimToken)).ConfigureAwait(false);
     }
+
+    // The claim a complete or release acts on, named by the lease end its token holds.
+    private static SqlParameter ClaimLeaseEnd(long claimToken)
+        => new SqlParameter("@lease_until", SqlDbType.DateTime2) { Scale = 7, Value = (object?)StoreSupport.InboxLeaseEnd(claimToken) ?? DBNull.Value };
 
     private static SqlParameter MessageId(string messageId) => new SqlParameter("@id", SqlDbType.NVarChar, JobLimits.MaxKeyLength) { Value = messageId };
 }

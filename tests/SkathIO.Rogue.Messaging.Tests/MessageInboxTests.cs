@@ -281,7 +281,7 @@ public sealed class MessageInboxTests
 
         public bool FailCompletes { get; init; }
 
-        public ValueTask<InboxClaim> TryClaimAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken)
         {
             Calls.Enqueue("claim:" + messageId);
             if (FailClaims)
@@ -289,10 +289,10 @@ public sealed class MessageInboxTests
                 throw new InvalidOperationException("The inbox is down.");
             }
             InboxClaim claim = _handled.Contains(messageId) ? InboxClaim.Handled : Busy.Contains(messageId) ? InboxClaim.Busy : InboxClaim.Claimed;
-            return new ValueTask<InboxClaim>(claim);
+            return new ValueTask<InboxClaimResult>(new InboxClaimResult(claim, 0));
         }
 
-        public ValueTask CompleteAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken)
         {
             Calls.Enqueue("complete:" + messageId);
             if (FailCompletes)
@@ -303,7 +303,7 @@ public sealed class MessageInboxTests
             return default;
         }
 
-        public ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken)
         {
             Calls.Enqueue("release:" + messageId);
             return default;

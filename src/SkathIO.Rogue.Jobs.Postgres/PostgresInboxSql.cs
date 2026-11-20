@@ -41,10 +41,14 @@ internal sealed class PostgresInboxSql
             + "UNION ALL\n"
             + "SELECT CASE WHEN handled_at IS NULL THEN " + Busy + " ELSE " + Handled + " END FROM " + inbox + "\n"
             + "WHERE message_id = @id AND NOT EXISTS (SELECT 1 FROM claim);";
+        // Complete and release act on the claim whose lease end is @lease_until only, so a delivery
+        // whose lease ran out cannot touch the claim of one that took the id over. With no row, no
+        // claim holds the id and complete records it handled.
         Complete =
-            "INSERT INTO " + inbox + " (message_id, handled_at) VALUES (@id, @now)\n"
-            + "ON CONFLICT (message_id) DO UPDATE SET handled_at = excluded.handled_at, lease_until = NULL;";
-        Release = "DELETE FROM " + inbox + " WHERE message_id = @id AND handled_at IS NULL;";
+            "INSERT INTO " + inbox + " AS i (message_id, handled_at) VALUES (@id, @now)\n"
+            + "ON CONFLICT (message_id) DO UPDATE SET handled_at = excluded.handled_at, lease_until = NULL\n"
+            + "WHERE i.handled_at IS NULL AND i.lease_until = @lease_until;";
+        Release = "DELETE FROM " + inbox + " WHERE message_id = @id AND handled_at IS NULL AND lease_until = @lease_until;";
 
         // Handled ids past retention, and claims whose lease ended that long ago (their message never
         // came back), a batch per statement.

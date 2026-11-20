@@ -16,7 +16,8 @@ public sealed partial class InMemoryJobStore : IMessageInboxStore
     private readonly Queue<string> _handledOrder = new Queue<string>();
 
     /// <inheritdoc />
-    public ValueTask<MessageClaim> TryClaimMessageAsync(string messageId, TimeSpan lease, CancellationToken cancellationToken)
+    /// <remarks>The token is the claim's lease end, in UTC ticks.</remarks>
+    public ValueTask<MessageClaimResult> TryClaimMessageAsync(string messageId, TimeSpan lease, CancellationToken cancellationToken)
     {
         JobLimits.CheckKey(messageId, nameof(messageId));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lease, TimeSpan.Zero);
@@ -25,26 +26,35 @@ public sealed partial class InMemoryJobStore : IMessageInboxStore
         {
             if (_handledMessages.Contains(messageId))
             {
-                return new ValueTask<MessageClaim>(MessageClaim.Handled);
+                return new ValueTask<MessageClaimResult>(new MessageClaimResult(MessageClaim.Handled, 0));
             }
             DateTimeOffset now = _time.GetUtcNow();
             if (_claimedMessages.TryGetValue(messageId, out DateTimeOffset until) && until > now)
             {
-                return new ValueTask<MessageClaim>(MessageClaim.Busy);
+                return new ValueTask<MessageClaimResult>(new MessageClaimResult(MessageClaim.Busy, 0));
             }
-            _claimedMessages[messageId] = now + lease;
-            return new ValueTask<MessageClaim>(MessageClaim.Claimed);
+            DateTimeOffset leaseEnd = now + lease;
+            _claimedMessages[messageId] = leaseEnd;
+            return new ValueTask<MessageClaimResult>(new MessageClaimResult(MessageClaim.Claimed, leaseEnd.UtcTicks));
         }
     }
 
     /// <inheritdoc />
-    public ValueTask CompleteMessageAsync(string messageId, CancellationToken cancellationToken)
+    public ValueTask CompleteMessageAsync(string messageId, long claimToken, CancellationToken cancellationToken)
     {
         JobLimits.CheckKey(messageId, nameof(messageId));
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            _claimedMessages.Remove(messageId);
+            if (_claimedMessages.TryGetValue(messageId, out DateTimeOffset until))
+            {
+                // Another claim took the id over: its delivery records the outcome.
+                if (until.UtcTicks != claimToken)
+                {
+                    return default;
+                }
+                _claimedMessages.Remove(messageId);
+            }
             if (_handledMessages.Add(messageId))
             {
                 _handledOrder.Enqueue(messageId);
@@ -58,13 +68,16 @@ public sealed partial class InMemoryJobStore : IMessageInboxStore
     }
 
     /// <inheritdoc />
-    public ValueTask ReleaseMessageAsync(string messageId, CancellationToken cancellationToken)
+    public ValueTask ReleaseMessageAsync(string messageId, long claimToken, CancellationToken cancellationToken)
     {
         JobLimits.CheckKey(messageId, nameof(messageId));
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            _claimedMessages.Remove(messageId);
+            if (_claimedMessages.TryGetValue(messageId, out DateTimeOffset until) && until.UtcTicks == claimToken)
+            {
+                _claimedMessages.Remove(messageId);
+            }
         }
         return default;
     }

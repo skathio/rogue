@@ -113,18 +113,18 @@ public sealed class ShutdownReleaseDeferralTests
 
         public TaskCompletionSource Claiming { get; } = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async ValueTask<InboxClaim> TryClaimAsync(string messageId, CancellationToken cancellationToken)
+        public async ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken)
         {
             Claiming.TrySetResult();
             if (StallClaims)
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken);
             }
-            return InboxClaim.Claimed;
+            return new InboxClaimResult(InboxClaim.Claimed, 0);
         }
 
-        public ValueTask CompleteAsync(string messageId, CancellationToken cancellationToken) => default;
+        public ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken) => default;
 
-        public ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken) => default;
+        public ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken) => default;
     }
 }

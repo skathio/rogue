@@ -14,12 +14,12 @@ public sealed class JobStoreInboxKeyTests
         await using OutboxHost host = OutboxHost.Create();
         IMessageInbox inbox = host.Services.GetRequiredService<IMessageInbox>();
 
-        InboxClaim first = await inbox.TryClaimAsync("outbox.order-placed", "x", CancellationToken.None);
-        await inbox.CompleteAsync("outbox.order-placed", "x", CancellationToken.None);
-        InboxClaim otherName = await inbox.TryClaimAsync("outbox.refund", "x", CancellationToken.None);
-        InboxClaim sameName = await inbox.TryClaimAsync("outbox.order-placed", "x", CancellationToken.None);
+        InboxClaimResult first = await inbox.TryClaimAsync("outbox.order-placed", "x", CancellationToken.None);
+        await inbox.CompleteAsync("outbox.order-placed", "x", first.Token, CancellationToken.None);
+        InboxClaim otherName = (await inbox.TryClaimAsync("outbox.refund", "x", CancellationToken.None)).Outcome;
+        InboxClaim sameName = (await inbox.TryClaimAsync("outbox.order-placed", "x", CancellationToken.None)).Outcome;
 
-        Assert.Equal(InboxClaim.Claimed, first);
+        Assert.Equal(InboxClaim.Claimed, first.Outcome);
         Assert.Equal(InboxClaim.Claimed, otherName);
         Assert.Equal(InboxClaim.Handled, sameName);
     }
@@ -32,15 +32,15 @@ public sealed class JobStoreInboxKeyTests
         string name = new string('n', MessageLimits.MaxNameLength);
         string id = new string('i', MessageLimits.MaxIdLength);
 
-        InboxClaim first = await inbox.TryClaimAsync(name, id, CancellationToken.None);
-        await inbox.CompleteAsync(name, id, CancellationToken.None);
-        InboxClaim again = await inbox.TryClaimAsync(name, id, CancellationToken.None);
-        InboxClaim otherId = await inbox.TryClaimAsync(name, id.Substring(1) + "j", CancellationToken.None);
-        await inbox.ReleaseAsync(name, id.Substring(1) + "j", CancellationToken.None);
+        InboxClaimResult first = await inbox.TryClaimAsync(name, id, CancellationToken.None);
+        await inbox.CompleteAsync(name, id, first.Token, CancellationToken.None);
+        InboxClaim again = (await inbox.TryClaimAsync(name, id, CancellationToken.None)).Outcome;
+        InboxClaimResult otherId = await inbox.TryClaimAsync(name, id.Substring(1) + "j", CancellationToken.None);
+        await inbox.ReleaseAsync(name, id.Substring(1) + "j", otherId.Token, CancellationToken.None);
 
-        Assert.Equal(InboxClaim.Claimed, first);
+        Assert.Equal(InboxClaim.Claimed, first.Outcome);
         Assert.Equal(InboxClaim.Handled, again);
-        Assert.Equal(InboxClaim.Claimed, otherId);
+        Assert.Equal(InboxClaim.Claimed, otherId.Outcome);
     }
 
     [Fact]
@@ -52,9 +52,9 @@ public sealed class JobStoreInboxKeyTests
         string atLimit = new string('i', MessageLimits.MaxIdLength - 2);
         string pastLimit = atLimit + "i";
 
-        InboxClaim kept = await inbox.TryClaimAsync("a", atLimit, CancellationToken.None);
-        InboxClaim hashed = await inbox.TryClaimAsync("a", pastLimit, CancellationToken.None);
-        InboxClaim heldAsItIs = await inbox.TryClaimAsync("a/" + atLimit, CancellationToken.None);
+        InboxClaim kept = (await inbox.TryClaimAsync("a", atLimit, CancellationToken.None)).Outcome;
+        InboxClaim hashed = (await inbox.TryClaimAsync("a", pastLimit, CancellationToken.None)).Outcome;
+        InboxClaim heldAsItIs = (await inbox.TryClaimAsync("a/" + atLimit, CancellationToken.None)).Outcome;
 
         Assert.Equal(InboxClaim.Claimed, kept);
         Assert.Equal(InboxClaim.Claimed, hashed);

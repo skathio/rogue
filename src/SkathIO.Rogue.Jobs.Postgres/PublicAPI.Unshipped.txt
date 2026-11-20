@@ -28,6 +28,6 @@ static SkathIO.Rogue.Jobs.Postgres.PostgresJobsServiceCollectionExtensions.AddRo
 SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.EnqueueOnceAsync(SkathIO.Rogue.Jobs.NewJob! job, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Guid>
 SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.ReleaseLeadershipAsync(string! name, string! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.TryAcquireLeadershipAsync(string! name, string! owner, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
-SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.CompleteMessageAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.ReleaseMessageAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaim>
+SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.CompleteMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.ReleaseMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaimResult>

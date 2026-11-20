@@ -18,14 +18,26 @@ namespace SkathIO.Rogue.Messaging;
 /// </remarks>
 public interface IMessageInbox
 {
-    /// <summary>Claims <paramref name="messageId"/> for this delivery, unless it has been handled or another delivery holds it, and says which.</summary>
-    ValueTask<InboxClaim> TryClaimAsync(string messageId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Claims <paramref name="messageId"/> for this delivery, unless it has been handled or another
+    /// delivery holds it, and says which. A claim made carries the token that names it to
+    /// <see cref="CompleteAsync(string, long, CancellationToken)"/> and <see cref="ReleaseAsync(string, long, CancellationToken)"/>.
+    /// </summary>
+    ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken);
 
-    /// <summary>Records that the message's handlers succeeded, so later deliveries of it are skipped.</summary>
-    ValueTask CompleteAsync(string messageId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Records that the message's handlers succeeded, so later deliveries of it are skipped. It acts
+    /// only on the claim <paramref name="claimToken"/> names: once another delivery has taken the id
+    /// over after this claim's lease ran out, it changes nothing.
+    /// </summary>
+    ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken);
 
-    /// <summary>Drops this delivery's claim after its handlers failed or were stopped, so the next delivery can claim the id at once.</summary>
-    ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Drops the claim <paramref name="claimToken"/> names after its handlers failed or were stopped, so
+    /// the next delivery can claim the id at once. Once another delivery has taken the id over after this
+    /// claim's lease ran out, it changes nothing.
+    /// </summary>
+    ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken);
 
     /// <summary>
     /// Claims the id of a message named <paramref name="messageName"/>, the call the
@@ -33,16 +45,16 @@ public interface IMessageInbox
     /// message of one name is never skipped because one of another name had the same id; this default
     /// ignores the name.
     /// </summary>
-    ValueTask<InboxClaim> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
+    ValueTask<InboxClaimResult> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
         => TryClaimAsync(messageId, cancellationToken);
 
     /// <summary>Records that the handlers of the message named <paramref name="messageName"/> succeeded; see <see cref="TryClaimAsync(string, string, CancellationToken)"/>.</summary>
-    ValueTask CompleteAsync(string messageName, string messageId, CancellationToken cancellationToken)
-        => CompleteAsync(messageId, cancellationToken);
+    ValueTask CompleteAsync(string messageName, string messageId, long claimToken, CancellationToken cancellationToken)
+        => CompleteAsync(messageId, claimToken, cancellationToken);
 
     /// <summary>Drops the claim on the message named <paramref name="messageName"/>; see <see cref="TryClaimAsync(string, string, CancellationToken)"/>.</summary>
-    ValueTask ReleaseAsync(string messageName, string messageId, CancellationToken cancellationToken)
-        => ReleaseAsync(messageId, cancellationToken);
+    ValueTask ReleaseAsync(string messageName, string messageId, long claimToken, CancellationToken cancellationToken)
+        => ReleaseAsync(messageId, claimToken, cancellationToken);
 }
 
 /// <summary>The answer an <see cref="IMessageInbox"/> gives to a claim on a message id.</summary>
@@ -57,3 +69,14 @@ public enum InboxClaim
     /// <summary>Another delivery holds the id and may be running the handlers now; this one is put back for later.</summary>
     Busy = 2,
 }
+
+/// <summary>
+/// An <see cref="IMessageInbox"/>'s answer to a claim, with the token that names the claim to its
+/// complete and release calls.
+/// </summary>
+/// <param name="Outcome">Whether this delivery holds the id, or why not.</param>
+/// <param name="Token">
+/// Names this claim when <paramref name="Outcome"/> is <see cref="InboxClaim.Claimed"/>, and is zero
+/// otherwise. What it holds is the inbox's choice; callers only hand it back.
+/// </param>
+public readonly record struct InboxClaimResult(InboxClaim Outcome, long Token);

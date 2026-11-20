@@ -92,32 +92,32 @@ public sealed class ConsumerHardeningTests
 
         public ConcurrentQueue<string> Calls { get; } = new ConcurrentQueue<string>();
 
-        public ValueTask<InboxClaim> TryClaimAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken)
         {
             Calls.Enqueue("claim:" + messageId);
-            return new ValueTask<InboxClaim>(_handled.Contains(messageId) ? InboxClaim.Handled : InboxClaim.Claimed);
+            return new ValueTask<InboxClaimResult>(new InboxClaimResult(_handled.Contains(messageId) ? InboxClaim.Handled : InboxClaim.Claimed, 0));
         }
 
-        public ValueTask CompleteAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken)
         {
             Calls.Enqueue("complete:" + messageId);
             _handled.Add(messageId);
             return default;
         }
 
-        public ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken)
         {
             Calls.Enqueue("release:" + messageId);
             return default;
         }
 
-        public ValueTask<InboxClaim> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
+        public ValueTask<InboxClaimResult> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
             => TryClaimAsync(messageName + "/" + messageId, cancellationToken);
 
-        public ValueTask CompleteAsync(string messageName, string messageId, CancellationToken cancellationToken)
-            => CompleteAsync(messageName + "/" + messageId, cancellationToken);
+        public ValueTask CompleteAsync(string messageName, string messageId, long claimToken, CancellationToken cancellationToken)
+            => CompleteAsync(messageName + "/" + messageId, claimToken, cancellationToken);
 
-        public ValueTask ReleaseAsync(string messageName, string messageId, CancellationToken cancellationToken)
-            => ReleaseAsync(messageName + "/" + messageId, cancellationToken);
+        public ValueTask ReleaseAsync(string messageName, string messageId, long claimToken, CancellationToken cancellationToken)
+            => ReleaseAsync(messageName + "/" + messageId, claimToken, cancellationToken);
     }
 }

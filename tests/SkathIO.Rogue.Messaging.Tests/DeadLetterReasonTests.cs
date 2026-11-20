@@ -102,11 +102,11 @@ public sealed class DeadLetterReasonTests
     {
         public InboxUnavailableException Thrown { get; } = new InboxUnavailableException(InboxMessage);
 
-        public ValueTask<InboxClaim> TryClaimAsync(string messageId, CancellationToken cancellationToken) => throw Thrown;
+        public ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken) => throw Thrown;
 
-        public ValueTask CompleteAsync(string messageId, CancellationToken cancellationToken) => default;
+        public ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken) => default;
 
-        public ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken) => default;
+        public ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken) => default;
     }
 
     /// <summary>Records the exception of each dead-letter log entry.</summary>

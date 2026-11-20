@@ -44,12 +44,15 @@ internal sealed class SqlServerInboxSql
             + "  UPDATE " + inbox + " SET lease_until = @lease_until WHERE message_id = @id;\n"
             + "COMMIT TRANSACTION;\n"
             + "SELECT @outcome;";
+        // Complete and release act on the claim whose lease end is @lease_until only, so a delivery
+        // whose lease ran out cannot touch the claim of one that took the id over. With no row, no
+        // claim holds the id and complete records it handled.
         Complete =
             "MERGE " + inbox + " WITH (HOLDLOCK) AS i\n"
             + "USING (SELECT @id AS message_id) AS m ON i.message_id = m.message_id\n"
-            + "WHEN MATCHED THEN UPDATE SET handled_at = @now, lease_until = NULL\n"
+            + "WHEN MATCHED AND i.handled_at IS NULL AND i.lease_until = @lease_until THEN UPDATE SET handled_at = @now, lease_until = NULL\n"
             + "WHEN NOT MATCHED THEN INSERT (message_id, handled_at) VALUES (@id, @now);";
-        Release = "DELETE FROM " + inbox + " WHERE message_id = @id AND handled_at IS NULL;";
+        Release = "DELETE FROM " + inbox + " WHERE message_id = @id AND handled_at IS NULL AND lease_until = @lease_until;";
 
         // Handled ids past retention, and claims whose lease ended that long ago (their message never
         // came back), a batch per statement.

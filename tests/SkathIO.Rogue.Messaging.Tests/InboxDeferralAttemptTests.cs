@@ -154,21 +154,21 @@ public sealed class InboxDeferralAttemptTests
 
         public ScriptedInbox(IEnumerable<InboxClaim> script) => _script = new ConcurrentQueue<InboxClaim>(script);
 
-        public ValueTask<InboxClaim> TryClaimAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken)
         {
             if (_handled.ContainsKey(messageId))
             {
-                return new ValueTask<InboxClaim>(InboxClaim.Handled);
+                return new ValueTask<InboxClaimResult>(new InboxClaimResult(InboxClaim.Handled, 0));
             }
-            return new ValueTask<InboxClaim>(_script.TryDequeue(out InboxClaim next) ? next : InboxClaim.Claimed);
+            return new ValueTask<InboxClaimResult>(new InboxClaimResult(_script.TryDequeue(out InboxClaim next) ? next : InboxClaim.Claimed, 0));
         }
 
-        public ValueTask CompleteAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken)
         {
             _handled[messageId] = true;
             return default;
         }
 
-        public ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken) => default;
+        public ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken) => default;
     }
 }

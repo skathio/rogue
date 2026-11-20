@@ -170,9 +170,9 @@ internal sealed class TransactionalStore : ITransactionalJobStore, IMessageInbox
 
     public ValueTask<JobSnapshot?> GetAsync(Guid id, CancellationToken cancellationToken) => _inner.GetAsync(id, cancellationToken);
 
-    public ValueTask<MessageClaim> TryClaimMessageAsync(string messageId, TimeSpan lease, CancellationToken cancellationToken) => _inner.TryClaimMessageAsync(messageId, lease, cancellationToken);
+    public ValueTask<MessageClaimResult> TryClaimMessageAsync(string messageId, TimeSpan lease, CancellationToken cancellationToken) => _inner.TryClaimMessageAsync(messageId, lease, cancellationToken);
 
-    public ValueTask CompleteMessageAsync(string messageId, CancellationToken cancellationToken) => _inner.CompleteMessageAsync(messageId, cancellationToken);
+    public ValueTask CompleteMessageAsync(string messageId, long claimToken, CancellationToken cancellationToken) => _inner.CompleteMessageAsync(messageId, claimToken, cancellationToken);
 
-    public ValueTask ReleaseMessageAsync(string messageId, CancellationToken cancellationToken) => _inner.ReleaseMessageAsync(messageId, cancellationToken);
+    public ValueTask ReleaseMessageAsync(string messageId, long claimToken, CancellationToken cancellationToken) => _inner.ReleaseMessageAsync(messageId, claimToken, cancellationToken);
 }

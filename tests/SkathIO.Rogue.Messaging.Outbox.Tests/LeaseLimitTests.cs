@@ -82,8 +82,8 @@ public sealed class LeaseLimitTests
         await using OutboxHost host = OutboxHost.Create(store, o => o.InboxLease = limit);
         IMessageInbox inbox = host.Services.GetRequiredService<IMessageInbox>();
 
-        InboxClaim first = await inbox.TryClaimAsync("m-1", CancellationToken.None);
-        InboxClaim second = await inbox.TryClaimAsync("m-1", CancellationToken.None);
+        InboxClaim first = (await inbox.TryClaimAsync("m-1", CancellationToken.None)).Outcome;
+        InboxClaim second = (await inbox.TryClaimAsync("m-1", CancellationToken.None)).Outcome;
 
         Assert.Equal(InboxClaim.Claimed, first);
         Assert.Equal(InboxClaim.Busy, second);

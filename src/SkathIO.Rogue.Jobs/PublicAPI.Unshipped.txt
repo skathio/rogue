@@ -212,17 +212,31 @@ static SkathIO.Rogue.Jobs.JobLimits.CheckKey(string! key, string! parameter) -> 
 static SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions.AddRecurringJob(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, SkathIO.Rogue.Jobs.RecurringJob! job) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 SkathIO.Rogue.Jobs.IJobScheduler.CreateJobs<TCommand>(System.Collections.Generic.IReadOnlyList<TCommand>! commands) -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.NewJob!>!
 SkathIO.Rogue.Jobs.IMessageInboxStore
-SkathIO.Rogue.Jobs.IMessageInboxStore.CompleteMessageAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Jobs.IMessageInboxStore.ReleaseMessageAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Jobs.IMessageInboxStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaim>
+SkathIO.Rogue.Jobs.IMessageInboxStore.CompleteMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.IMessageInboxStore.ReleaseMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.IMessageInboxStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaimResult>
 SkathIO.Rogue.Jobs.ITransactionalJobStore
 SkathIO.Rogue.Jobs.ITransactionalJobStore.EnqueueAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.NewJob!>! jobs, System.Data.Common.DbTransaction! transaction, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Jobs.InMemoryJobStore.CompleteMessageAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Jobs.InMemoryJobStore.ReleaseMessageAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Jobs.InMemoryJobStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaim>
+SkathIO.Rogue.Jobs.InMemoryJobStore.CompleteMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.InMemoryJobStore.ReleaseMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.InMemoryJobStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaimResult>
 SkathIO.Rogue.Jobs.JobDefinition<TCommand>.JobDefinition(string! kind, SkathIO.Rogue.Jobs.JobDefaults! defaults, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TCommand>! typeInfo, System.Func<SkathIO.Rogue.RogueDispatcher!, TCommand, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! invoke) -> void
 SkathIO.Rogue.Jobs.MessageClaim
 SkathIO.Rogue.Jobs.MessageClaim.Busy = 2 -> SkathIO.Rogue.Jobs.MessageClaim
 SkathIO.Rogue.Jobs.MessageClaim.Claimed = 0 -> SkathIO.Rogue.Jobs.MessageClaim
 SkathIO.Rogue.Jobs.MessageClaim.Handled = 1 -> SkathIO.Rogue.Jobs.MessageClaim
 static readonly SkathIO.Rogue.Jobs.JobsOptions.MaxLeaseDuration -> System.TimeSpan
+~override SkathIO.Rogue.Jobs.MessageClaimResult.Equals(object obj) -> bool
+override SkathIO.Rogue.Jobs.MessageClaimResult.GetHashCode() -> int
+~override SkathIO.Rogue.Jobs.MessageClaimResult.ToString() -> string
+SkathIO.Rogue.Jobs.MessageClaimResult
+SkathIO.Rogue.Jobs.MessageClaimResult.Deconstruct(out SkathIO.Rogue.Jobs.MessageClaim Outcome, out long Token) -> void
+SkathIO.Rogue.Jobs.MessageClaimResult.Equals(SkathIO.Rogue.Jobs.MessageClaimResult other) -> bool
+SkathIO.Rogue.Jobs.MessageClaimResult.MessageClaimResult() -> void
+SkathIO.Rogue.Jobs.MessageClaimResult.MessageClaimResult(SkathIO.Rogue.Jobs.MessageClaim Outcome, long Token) -> void
+SkathIO.Rogue.Jobs.MessageClaimResult.Outcome.get -> SkathIO.Rogue.Jobs.MessageClaim
+SkathIO.Rogue.Jobs.MessageClaimResult.Outcome.init -> void
+SkathIO.Rogue.Jobs.MessageClaimResult.Token.get -> long
+SkathIO.Rogue.Jobs.MessageClaimResult.Token.init -> void
+static SkathIO.Rogue.Jobs.MessageClaimResult.operator !=(SkathIO.Rogue.Jobs.MessageClaimResult left, SkathIO.Rogue.Jobs.MessageClaimResult right) -> bool
+static SkathIO.Rogue.Jobs.MessageClaimResult.operator ==(SkathIO.Rogue.Jobs.MessageClaimResult left, SkathIO.Rogue.Jobs.MessageClaimResult right) -> bool

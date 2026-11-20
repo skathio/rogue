@@ -20,28 +20,32 @@ internal sealed class JobStoreInbox : IMessageInbox
         _lease = lease;
     }
 
-    public async ValueTask<InboxClaim> TryClaimAsync(string messageId, CancellationToken cancellationToken)
-        => await _store.TryClaimMessageAsync(messageId, _lease, cancellationToken).ConfigureAwait(false) switch
+    public async ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken)
+    {
+        MessageClaimResult claim = await _store.TryClaimMessageAsync(messageId, _lease, cancellationToken).ConfigureAwait(false);
+        InboxClaim outcome = claim.Outcome switch
         {
             MessageClaim.Claimed => InboxClaim.Claimed,
             MessageClaim.Handled => InboxClaim.Handled,
             _ => InboxClaim.Busy,
         };
+        return new InboxClaimResult(outcome, claim.Token);
+    }
 
-    public ValueTask CompleteAsync(string messageId, CancellationToken cancellationToken)
-        => _store.CompleteMessageAsync(messageId, cancellationToken);
+    public ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken)
+        => _store.CompleteMessageAsync(messageId, claimToken, cancellationToken);
 
-    public ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken)
-        => _store.ReleaseMessageAsync(messageId, cancellationToken);
+    public ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken)
+        => _store.ReleaseMessageAsync(messageId, claimToken, cancellationToken);
 
-    public ValueTask<InboxClaim> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
+    public ValueTask<InboxClaimResult> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
         => TryClaimAsync(Key(messageName, messageId), cancellationToken);
 
-    public ValueTask CompleteAsync(string messageName, string messageId, CancellationToken cancellationToken)
-        => CompleteAsync(Key(messageName, messageId), cancellationToken);
+    public ValueTask CompleteAsync(string messageName, string messageId, long claimToken, CancellationToken cancellationToken)
+        => CompleteAsync(Key(messageName, messageId), claimToken, cancellationToken);
 
-    public ValueTask ReleaseAsync(string messageName, string messageId, CancellationToken cancellationToken)
-        => ReleaseAsync(Key(messageName, messageId), cancellationToken);
+    public ValueTask ReleaseAsync(string messageName, string messageId, long claimToken, CancellationToken cancellationToken)
+        => ReleaseAsync(Key(messageName, messageId), claimToken, cancellationToken);
 
     /// <summary>
     /// The store key of a message: its name, '/', and its id, so ids of different names never meet. A

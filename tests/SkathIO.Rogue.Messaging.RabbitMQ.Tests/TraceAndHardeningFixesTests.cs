@@ -348,34 +348,34 @@ public sealed class TraceAndHardeningFixesTests
 
         public ConcurrentQueue<string> IdOnlyCalls { get; } = new ConcurrentQueue<string>();
 
-        public ValueTask<InboxClaim> TryClaimAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken)
         {
             IdOnlyCalls.Enqueue("claim:" + messageId);
-            return new ValueTask<InboxClaim>(InboxClaim.Claimed);
+            return new ValueTask<InboxClaimResult>(new InboxClaimResult(InboxClaim.Claimed, 0));
         }
 
-        public ValueTask CompleteAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken)
         {
             IdOnlyCalls.Enqueue("complete:" + messageId);
             return default;
         }
 
-        public ValueTask ReleaseAsync(string messageId, CancellationToken cancellationToken)
+        public ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken)
         {
             IdOnlyCalls.Enqueue("release:" + messageId);
             return default;
         }
 
-        public ValueTask<InboxClaim> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
+        public ValueTask<InboxClaimResult> TryClaimAsync(string messageName, string messageId, CancellationToken cancellationToken)
         {
             Calls.Enqueue(("claim", messageName, messageId));
             lock (_handled)
             {
-                return new ValueTask<InboxClaim>(_handled.Contains((messageName, messageId)) ? InboxClaim.Handled : InboxClaim.Claimed);
+                return new ValueTask<InboxClaimResult>(new InboxClaimResult(_handled.Contains((messageName, messageId)) ? InboxClaim.Handled : InboxClaim.Claimed, 0));
             }
         }
 
-        public ValueTask CompleteAsync(string messageName, string messageId, CancellationToken cancellationToken)
+        public ValueTask CompleteAsync(string messageName, string messageId, long claimToken, CancellationToken cancellationToken)
         {
             Calls.Enqueue(("complete", messageName, messageId));
             lock (_handled)
@@ -385,7 +385,7 @@ public sealed class TraceAndHardeningFixesTests
             return default;
         }
 
-        public ValueTask ReleaseAsync(string messageName, string messageId, CancellationToken cancellationToken)
+        public ValueTask ReleaseAsync(string messageName, string messageId, long claimToken, CancellationToken cancellationToken)
         {
             Calls.Enqueue(("release", messageName, messageId));
             return default;

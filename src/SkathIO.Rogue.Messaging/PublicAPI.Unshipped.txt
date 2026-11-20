@@ -113,14 +113,28 @@ static SkathIO.Rogue.Messaging.MessagingServiceCollectionExtensions.AddRogueMess
 const SkathIO.Rogue.Messaging.MessageLimits.MaxIdLength = 200 -> int
 SkathIO.Rogue.Messaging.IMessageBus.CreateEnvelope<TMessage>(TMessage message) -> SkathIO.Rogue.Messaging.MessageEnvelope!
 SkathIO.Rogue.Messaging.IMessageInbox
-SkathIO.Rogue.Messaging.IMessageInbox.CompleteAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Messaging.IMessageInbox.ReleaseAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Messaging.IMessageInbox.TryClaimAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Messaging.InboxClaim>
-SkathIO.Rogue.Messaging.IMessageInbox.CompleteAsync(string! messageName, string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Messaging.IMessageInbox.ReleaseAsync(string! messageName, string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-SkathIO.Rogue.Messaging.IMessageInbox.TryClaimAsync(string! messageName, string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Messaging.InboxClaim>
+SkathIO.Rogue.Messaging.IMessageInbox.CompleteAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.ReleaseAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.TryClaimAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Messaging.InboxClaimResult>
+SkathIO.Rogue.Messaging.IMessageInbox.CompleteAsync(string! messageName, string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.ReleaseAsync(string! messageName, string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.TryClaimAsync(string! messageName, string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Messaging.InboxClaimResult>
 SkathIO.Rogue.Messaging.InboxClaim
 SkathIO.Rogue.Messaging.InboxClaim.Busy = 2 -> SkathIO.Rogue.Messaging.InboxClaim
 SkathIO.Rogue.Messaging.InboxClaim.Claimed = 0 -> SkathIO.Rogue.Messaging.InboxClaim
 SkathIO.Rogue.Messaging.InboxClaim.Handled = 1 -> SkathIO.Rogue.Messaging.InboxClaim
 static SkathIO.Rogue.Messaging.MessageLimits.IsValidId(string? id) -> bool
+~override SkathIO.Rogue.Messaging.InboxClaimResult.Equals(object obj) -> bool
+override SkathIO.Rogue.Messaging.InboxClaimResult.GetHashCode() -> int
+~override SkathIO.Rogue.Messaging.InboxClaimResult.ToString() -> string
+SkathIO.Rogue.Messaging.InboxClaimResult
+SkathIO.Rogue.Messaging.InboxClaimResult.Deconstruct(out SkathIO.Rogue.Messaging.InboxClaim Outcome, out long Token) -> void
+SkathIO.Rogue.Messaging.InboxClaimResult.Equals(SkathIO.Rogue.Messaging.InboxClaimResult other) -> bool
+SkathIO.Rogue.Messaging.InboxClaimResult.InboxClaimResult() -> void
+SkathIO.Rogue.Messaging.InboxClaimResult.InboxClaimResult(SkathIO.Rogue.Messaging.InboxClaim Outcome, long Token) -> void
+SkathIO.Rogue.Messaging.InboxClaimResult.Outcome.get -> SkathIO.Rogue.Messaging.InboxClaim
+SkathIO.Rogue.Messaging.InboxClaimResult.Outcome.init -> void
+SkathIO.Rogue.Messaging.InboxClaimResult.Token.get -> long
+SkathIO.Rogue.Messaging.InboxClaimResult.Token.init -> void
+static SkathIO.Rogue.Messaging.InboxClaimResult.operator !=(SkathIO.Rogue.Messaging.InboxClaimResult left, SkathIO.Rogue.Messaging.InboxClaimResult right) -> bool
+static SkathIO.Rogue.Messaging.InboxClaimResult.operator ==(SkathIO.Rogue.Messaging.InboxClaimResult left, SkathIO.Rogue.Messaging.InboxClaimResult right) -> bool

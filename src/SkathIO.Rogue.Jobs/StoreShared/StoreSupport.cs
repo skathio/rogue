@@ -179,4 +179,11 @@ internal static class StoreSupport
     /// <summary>A logger for <paramref name="category"/>, or a null logger when the host registered no logging.</summary>
     public static ILogger Logger(IServiceProvider services, string category)
         => (ILogger?)services.GetService<ILoggerFactory>()?.CreateLogger(category) ?? NullLogger.Instance;
+
+    /// <summary>
+    /// The lease end an inbox claim token names: a database store's token is the UTC ticks of the
+    /// lease_until it wrote. A token no claim could have returned gives null, which matches no row.
+    /// </summary>
+    public static DateTime? InboxLeaseEnd(long claimToken)
+        => claimToken > 0 && claimToken <= DateTime.MaxValue.Ticks ? new DateTime(claimToken, DateTimeKind.Utc) : null;
 }

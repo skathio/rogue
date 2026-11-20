@@ -330,7 +330,7 @@ public sealed class MessageConsumer
             return Outcome.DeadLetter("The message id is not 1 to " + MessageLimits.MaxIdLength + " characters without white space, so the inbox cannot tell its deliveries apart.");
         }
 
-        InboxClaim claim;
+        InboxClaimResult claim;
         try
         {
             claim = await inbox.TryClaimAsync(name, id, stoppingToken).ConfigureAwait(false);
@@ -343,7 +343,7 @@ public sealed class MessageConsumer
         {
             return Failed(delivery, ex);
         }
-        switch (claim)
+        switch (claim.Outcome)
         {
             case InboxClaim.Handled:
                 return Outcome.Duplicate;
@@ -356,11 +356,11 @@ public sealed class MessageConsumer
         {
             if (outcome.Name == RogueMessagingTelemetry.Succeeded)
             {
-                await inbox.CompleteAsync(name, id, CancellationToken.None).ConfigureAwait(false);
+                await inbox.CompleteAsync(name, id, claim.Token, CancellationToken.None).ConfigureAwait(false);
             }
             else
             {
-                await inbox.ReleaseAsync(name, id, CancellationToken.None).ConfigureAwait(false);
+                await inbox.ReleaseAsync(name, id, claim.Token, CancellationToken.None).ConfigureAwait(false);
             }
         }
         catch (Exception ex)

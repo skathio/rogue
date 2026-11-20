@@ -182,8 +182,10 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   rolls back nothing is sent. The inbox, kept in the same store, records each message id the consumer
   handles, so a message delivered twice runs its handlers once (`MessageOutboxOptions.InboxLease`
   bounds how long one delivery holds the id, at most 30 days: `MessageOutboxOptions.MaxInboxLease`). A delivery put back because another one holds its id
-  does not use up one of its `MaxAttempts`. `IMessageInbox` is the consumer's inbox contract in
-  `SkathIO.Rogue.Messaging`. Targets `net8.0` and `net10.0`; adds no package of its own.
+  does not use up one of its `MaxAttempts`. A claim returns a token that the consumer hands back
+  when it completes or releases the claim. A delivery whose lease ran out while its handlers ran
+  therefore cannot complete or drop the claim of the delivery that took the id over.
+  `IMessageInbox` is the consumer's inbox contract in `SkathIO.Rogue.Messaging`. Targets `net8.0` and `net10.0`; adds no package of its own.
 - A native AOT sample for the jobs and messaging packages
   (`samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample`): a job publishes a message that a handler
   consumes. CI publishes it with native AOT and runs it on every pull request.

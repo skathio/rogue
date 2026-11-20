@@ -174,11 +174,11 @@ public sealed class MessageOutboxTests
         await using OutboxHost host = OutboxHost.Create(store, static o => o.InboxLease = TimeSpan.FromSeconds(30));
         IMessageInbox inbox = host.Services.GetRequiredService<IMessageInbox>();
 
-        InboxClaim first = await inbox.TryClaimAsync("m-1", CancellationToken.None);
+        InboxClaim first = (await inbox.TryClaimAsync("m-1", CancellationToken.None)).Outcome;
         clock.Advance(TimeSpan.FromSeconds(30) - TimeSpan.FromMilliseconds(1));
-        InboxClaim held = await inbox.TryClaimAsync("m-1", CancellationToken.None);
+        InboxClaim held = (await inbox.TryClaimAsync("m-1", CancellationToken.None)).Outcome;
         clock.Advance(TimeSpan.FromMilliseconds(1));
-        InboxClaim ranOut = await inbox.TryClaimAsync("m-1", CancellationToken.None);
+        InboxClaim ranOut = (await inbox.TryClaimAsync("m-1", CancellationToken.None)).Outcome;
 
         Assert.Equal(InboxClaim.Claimed, first);
         Assert.Equal(InboxClaim.Busy, held);
