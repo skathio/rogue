@@ -30,6 +30,9 @@ public sealed class MessageConsumer
     private const string InvalidText = "(invalid)";
     private const int MaxReasonLength = 1000;
 
+    // The longest delay Task.Delay accepts.
+    private static readonly TimeSpan _longestWait = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
     private static readonly Action<ILogger, string, string, int, int, TimeSpan, Exception?> _logRetry =
         LoggerMessage.Define<string, string, int, int, TimeSpan>(LogLevel.Warning, new EventId(1, "MessageRetry"),
             "Message {MessageId} ({MessageName}) failed on delivery {Attempt} of {MaxAttempts}; it is delivered again in {Delay}.");
@@ -384,7 +387,11 @@ public sealed class MessageConsumer
         }
         try
         {
-            await Task.Delay(delay, _time, stoppingToken).ConfigureAwait(false);
+            // One Task.Delay waits at most _longestWait, so a longer delay is waited in parts.
+            for (TimeSpan left = delay; left > TimeSpan.Zero; left -= _longestWait)
+            {
+                await Task.Delay(left < _longestWait ? left : _longestWait, _time, stoppingToken).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

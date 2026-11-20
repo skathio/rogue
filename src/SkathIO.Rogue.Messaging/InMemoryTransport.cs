@@ -103,8 +103,11 @@ public sealed class InMemoryTransport : IMessageTransport
         ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
         lock (_gate)
         {
+            // A delay that runs past the end of time holds the message until then.
+            DateTimeOffset now = _time.GetUtcNow();
+            DateTimeOffset due = delay > DateTimeOffset.MaxValue - now ? DateTimeOffset.MaxValue : now + delay;
             Entry entry = Settle(message);
-            Enqueue(new Entry(entry.Envelope, entry.DeliveryCount + 1), _time.GetUtcNow() + delay);
+            Enqueue(new Entry(entry.Envelope, entry.DeliveryCount + 1), due);
         }
         return default;
     }
