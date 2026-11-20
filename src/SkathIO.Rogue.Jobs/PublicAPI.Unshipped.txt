@@ -225,3 +225,4 @@ SkathIO.Rogue.Jobs.MessageClaim
 SkathIO.Rogue.Jobs.MessageClaim.Busy = 2 -> SkathIO.Rogue.Jobs.MessageClaim
 SkathIO.Rogue.Jobs.MessageClaim.Claimed = 0 -> SkathIO.Rogue.Jobs.MessageClaim
 SkathIO.Rogue.Jobs.MessageClaim.Handled = 1 -> SkathIO.Rogue.Jobs.MessageClaim
+static readonly SkathIO.Rogue.Jobs.JobsOptions.MaxLeaseDuration -> System.TimeSpan

@@ -11,6 +11,12 @@ public sealed class JobsOptions
     public const int MaxBatchSize = 10_000;
 
     /// <summary>
+    /// The longest <see cref="LeaseDuration"/>: 30 days. A store adds the lease to the current time, and
+    /// a bounded lease keeps that sum a valid time.
+    /// </summary>
+    public static readonly TimeSpan MaxLeaseDuration = TimeSpan.FromDays(30);
+
+    /// <summary>
     /// The source-generated context that serializes job payloads. Required once any <c>[Job]</c>
     /// command exists, and each must be covered by a <c>[JsonSerializable]</c> attribute on it. A
     /// command without <c>[Job]</c> is never a job, whether the context covers it or not.
@@ -62,7 +68,7 @@ public sealed class JobsOptions
     /// <summary>
     /// How long a claimed job stays reserved for its worker. The worker renews the lease from the claim
     /// until the job's outcome is stored, waiting jobs included; a job whose worker stopped renewing is
-    /// claimed again once the lease runs out.
+    /// claimed again once the lease runs out. At most <see cref="MaxLeaseDuration"/>.
     /// </summary>
     public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
 
@@ -95,6 +101,7 @@ public sealed class JobsOptions
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxConcurrency, 1, nameof(MaxConcurrency));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(PollInterval, TimeSpan.Zero, nameof(PollInterval));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(LeaseDuration, TimeSpan.Zero, nameof(LeaseDuration));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(LeaseDuration, MaxLeaseDuration, nameof(LeaseDuration));
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxPayloadBytes, 1, nameof(MaxPayloadBytes));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(LeaderLeaseDuration, TimeSpan.Zero, nameof(LeaderLeaseDuration));
     }

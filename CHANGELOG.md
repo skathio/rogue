@@ -26,7 +26,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   for `[Job]` commands, the same commands the build checks (ROGUE019), so adding the package never
   fails startup without a build warning. Every claimed job keeps its lease,
   renewed while it waits for a slot or runs, until its outcome is stored, and a lease the store no
-  longer holds is logged as a warning. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
+  longer holds is logged as a warning. `JobsOptions.LeaseDuration` is at most 30 days
+  (`JobsOptions.MaxLeaseDuration`), so a store adding it to the current time never overflows. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
   follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. Register it
   with `AddRogueJobs()` next to `AddRogue()`, which is enough to enqueue; add `AddRogueJobWorker()`
   in each host that should run jobs, which registers a hosted service that runs the worker while the
@@ -172,7 +173,7 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   `DbTransaction`: once the transaction commits, a job worker relays it to the transport, and if it
   rolls back nothing is sent. The inbox, kept in the same store, records each message id the consumer
   handles, so a message delivered twice runs its handlers once (`MessageOutboxOptions.InboxLease`
-  bounds how long one delivery holds the id). A delivery put back because another one holds its id
+  bounds how long one delivery holds the id, at most 30 days: `MessageOutboxOptions.MaxInboxLease`). A delivery put back because another one holds its id
   does not use up one of its `MaxAttempts`. `IMessageInbox` is the consumer's inbox contract in
   `SkathIO.Rogue.Messaging`. Targets `net8.0` and `net10.0`; adds no package of its own.
 - A native AOT sample for the jobs and messaging packages
