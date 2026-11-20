@@ -23,6 +23,15 @@ public interface IMessageTransport
     /// </summary>
     string? ServiceName => null;
 
+    /// <summary>
+    /// How many deliveries the transport hands out unsettled at most before it sends no more, or null,
+    /// the default, when it sets no such limit. Without <see cref="TransportCapabilities.NativeDelay"/>
+    /// the consumer waits out a retry delay holding the delivery unsettled; it lets at most half this
+    /// many wait, and nacks any other failed delivery at once, its delivery count still one higher, so
+    /// failing messages never take the whole window from the rest.
+    /// </summary>
+    int? UnsettledLimit => null;
+
     /// <summary>Sends <paramref name="messages"/>, in order. An empty batch sends nothing.</summary>
     ValueTask SendAsync(IReadOnlyList<MessageEnvelope> messages, CancellationToken cancellationToken);
 

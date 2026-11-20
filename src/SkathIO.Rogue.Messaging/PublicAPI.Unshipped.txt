@@ -25,6 +25,7 @@ SkathIO.Rogue.Messaging.IMessageTransport
 SkathIO.Rogue.Messaging.IMessageTransport.AckAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.Capabilities.get -> SkathIO.Rogue.Messaging.TransportCapabilities
 SkathIO.Rogue.Messaging.IMessageTransport.ServiceName.get -> string?
+SkathIO.Rogue.Messaging.IMessageTransport.UnsettledLimit.get -> int?
 SkathIO.Rogue.Messaging.IMessageTransport.DeadLetterAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.DeferAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.NackAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask

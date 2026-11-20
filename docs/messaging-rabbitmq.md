@@ -26,8 +26,10 @@ signature, so a sender cannot shorten a message's retries by setting a header.
 
 - **Required.** There is no default. `AddRogueRabbitMqTransport` (and the `RabbitMqTransport`
   constructor) throws an `ArgumentException` at startup when the key is missing or shorter than
-  32 bytes in UTF-8 (`RabbitMqTransportOptions.MinDeliveryStampKeyBytes`), or is not well-formed
-  text (it holds half of a surrogate pair).
+  32 bytes in UTF-8 (`RabbitMqTransportOptions.MinDeliveryStampKeyBytes`), is not well-formed
+  text (it holds half of a surrogate pair), or starts or ends with white space. A trailing newline
+  or space is easily added or dropped by one instance's configuration file or secret store and not
+  another's, and the instances would then hold different keys; check the value you store has none.
 - **The same on every instance of a service.** Any instance can take the copy another one put back.
   With the same key it reads the count, so a message that always fails is dead-lettered after
   `MaxAttempts` deliveries. With a different key the count starts again from 1, and the message can
@@ -55,3 +57,32 @@ environment variable `RabbitMq__DeliveryStampKey`, which `builder.Configuration`
 
 To rotate the key, deploy the new key to every instance at once. Copies already in retry under the
 old key count again from 1.
+
+## Retries and the prefetch window
+
+RabbitMQ has no native delay, so the consumer waits out a failed message's retry delay itself, with
+the delivery still unsettled. The broker sends at most `PrefetchCount` unsettled deliveries, and the
+transport reports that number as its unsettled window (`IMessageTransport.UnsettledLimit`). At most
+half of the window waits out a retry delay at once. A message that fails while that half is full is
+nacked at once instead: it goes back on the queue with no delay and its delivery count one higher,
+so it is still dead-lettered after `MaxAttempts` deliveries. Messages that keep failing therefore
+never take the whole window from messages that would succeed, but past that half they may be retried
+sooner than `RetryDelay`. With `PrefetchCount` 1 no failed message waits.
+
+## Who may publish to the default exchange
+
+The transport puts its retry copies back on the service's queue through the default exchange, and
+names each by its AMQP type property. Anyone allowed to write to the default exchange can therefore
+put a message on the queue. The type property names it only when it is a name the service receives
+(one of its subscriptions, or a name a `MapRoutingKey` or `MapHeader` gives); any other is
+dead-lettered unread. Within those names, though, such a sender can still make the service handle a
+message of its choosing. Limit write permission on the default exchange (the empty exchange name,
+`amq.default`) in the virtual host to the service itself, with RabbitMQ user permissions.
+
+## Delivery count on a redelivery
+
+When a consumer's channel or process stops before it settles a delivery, the broker delivers it
+again with the redelivered flag set. The quorum queue counts how many times it took the delivery back
+in its `x-delivery-count` header. The transport adds that count to the signed count, held to
+1 to 1,000,000, so a message that crashes the process each time still reaches `MaxAttempts`. A
+redelivery without the header, or with a value that is not an integer, counts one more.

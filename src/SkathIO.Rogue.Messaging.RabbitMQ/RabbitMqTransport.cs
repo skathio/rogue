@@ -33,7 +33,7 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// or dead-lettered without a reason).
 /// </para>
 /// </remarks>
-public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDisposable
+public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDisposable
 {
     private const string QueueTypeArgument = "x-queue-type";
     private const string DeadLetterExchangeArgument = "x-dead-letter-exchange";
@@ -44,6 +44,7 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
 
     private readonly RabbitMqTransportOptions _options;
     private readonly string[] _subscriptions;
+    private readonly HashSet<string> _knownNames;
     private readonly SemaphoreSlim _connectGate = new SemaphoreSlim(1, 1);
     private readonly SemaphoreSlim _publishGate = new SemaphoreSlim(1, 1);
     private readonly SemaphoreSlim _settleGate = new SemaphoreSlim(1, 1);
@@ -74,6 +75,7 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
                 throw new ArgumentException("'" + name + "' is not a valid message name.", nameof(subscriptions));
             }
         }
+        _knownNames = RabbitMqWire.KnownNames(_options, _subscriptions);
     }
 
     /// <inheritdoc />
@@ -82,7 +84,13 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
     /// <summary>The <see cref="RabbitMqTransportOptions.ServiceName"/>, which also names the service's queue.</summary>
     public string? ServiceName => _options.ServiceName;
 
+    /// <summary>The <see cref="RabbitMqTransportOptions.PrefetchCount"/>: the most unsettled deliveries the broker sends.</summary>
+    public int? UnsettledLimit => _options.PrefetchCount;
+
     internal IReadOnlyList<string> Subscriptions => _subscriptions;
+
+    /// <summary>The names a delivery's type property may give it on the default exchange: the subscriptions and every mapped name.</summary>
+    internal IReadOnlySet<string> KnownNames => _knownNames;
 
     /// <summary>
     /// The largest body a delivery may have, in bytes; a larger one is nacked to the queue's dead-letter
@@ -419,7 +427,7 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
             await channel.BasicNackAsync(args.DeliveryTag, false, false, CancellationToken.None).ConfigureAwait(false);
             return;
         }
-        MessageEnvelope envelope = RabbitMqWire.ToEnvelope(_options, args);
+        MessageEnvelope envelope = RabbitMqWire.ToEnvelope(_options, args, _knownNames);
         var handle = new DeliveryHandle(channel, args.DeliveryTag, Volatile.Read(ref _generation));
         _deliveries.Writer.TryWrite(new Delivery(envelope, _stamp.CountOf(args, envelope), this, handle));
     }
@@ -491,30 +499,5 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
                 await channel.QueueBindAsync(queue, binding.Exchange, binding.BindingKey, null, false, cancellationToken).ConfigureAwait(false);
             }
         }
-    }
-
-    /// <summary>Where a delivery came from (channel, tag, channel generation), kept apart from the envelope.</summary>
-    private readonly record struct DeliveryHandle(IChannel Channel, ulong Tag, int Generation);
-
-    private sealed class Delivery : ReceivedMessage
-    {
-        public int Settled;
-
-        public Delivery(MessageEnvelope envelope, int deliveryCount, RabbitMqTransport owner, DeliveryHandle handle)
-            : base(envelope, deliveryCount)
-        {
-            Owner = owner;
-            Handle = handle;
-        }
-
-        public RabbitMqTransport Owner { get; }
-
-        public DeliveryHandle Handle { get; }
-
-        public IChannel Channel => Handle.Channel;
-
-        public ulong Tag => Handle.Tag;
-
-        public int Generation => Handle.Generation;
     }
 }

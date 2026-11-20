@@ -13,6 +13,7 @@ SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.DisposeAsync() -> System.Thre
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.NackAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.RabbitMqTransport(SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions! options, System.Collections.Generic.IEnumerable<string!>! subscriptions) -> void
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.ReceiveAsync(int maxCount, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.ReceivedMessage!>!>
+SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.UnsettledLimit.get -> int?
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.SendAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.MessageEnvelope!>! messages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions.Bind(string! exchange, string! bindingKey) -> SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions!

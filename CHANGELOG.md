@@ -140,7 +140,9 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   redelivers a failed message after a doubling, capped delay until `MaxAttempts` deliveries have
   failed, then dead-letters it. On a transport without native delay the consumer waits out the
   retry delay itself, but a message waiting does not hold one of the `MaxConcurrency` slots, so
-  failing messages cannot stall the others. A message whose handlers are stopped by shutdown is
+  failing messages cannot stall the others. A transport that reports an unsettled window
+  (`IMessageTransport.UnsettledLimit`) lets at most half of it wait out a retry delay this way;
+  a failed message past that is nacked at once, its delivery count still raised. A message whose handlers are stopped by shutdown is
   deferred with no delay, not nacked, so it keeps its delivery count and is never dead-lettered for
   being stopped. A message with an unknown name, a body over `MaxMessageBytes`, or a
   body that is not JSON of its type within `MaxJsonDepth` is dead-lettered at once without running
@@ -163,13 +165,18 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   a message from another exchange that no map names is dead-lettered unread. A message on the
   service's own exchange is always named by its routing key, which its queue was bound by: a header
   map never renames it, and a routing-key map for the own exchange fails registration. The transport's service
-  name is its `ServiceName`, and an event's origin travels in the `rogue-origin` header.
+  name is its `ServiceName`, and an event's origin travels in the `rogue-origin` header. On the
+  default exchange, where the transport sends back its retry copies, the AMQP type property names a
+  message only when the service subscribes to that name or a map gives it; any other is
+  dead-lettered unread. The transport reports its `PrefetchCount` as its unsettled window.
   A message's delivery count is signed by the transport on each copy it sends back for a retry
   (`rogue-delivery-stamp`, an HMAC-SHA256 under `DeliveryStampKey`), and read only from that
   signature, never from the `rogue-delivery-count` header, so a sender cannot cut short the retries
   of its messages by setting a header or reusing an id. The count travels on the copy, so any number
-  of messages can be in retry at once. `DeliveryStampKey` is a required secret of at least 32 bytes
-  (UTF-8) with no default: registration fails at startup without it. Give every instance of a service
+  of messages can be in retry at once. A delivery the quorum queue redelivers after it was left
+  unsettled also counts the queue's own `x-delivery-count`, held to its range. `DeliveryStampKey` is
+  a required secret of at least 32 bytes (UTF-8) with no default, and must not start or end with
+  white space: registration fails at startup otherwise. Give every instance of a service
   the same key, from configuration or user-secrets, so a retry taken by another instance keeps its
   count and a message that always fails is dead-lettered after exactly `MaxAttempts` deliveries. The
   key is never logged or put in an exception. See [docs/messaging-rabbitmq.md](docs/messaging-rabbitmq.md).

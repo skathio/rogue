@@ -57,7 +57,8 @@ public sealed class RabbitMqTransportOptions
     /// <summary>
     /// The secret that signs the delivery count on each copy the transport puts back on the service's
     /// queue for a retry, at least <see cref="MinDeliveryStampKeyBytes"/> bytes in UTF-8. Required, with
-    /// no default; it must be well-formed text, with no half of a surrogate pair. Give every instance of a service the same key, from configuration or a secret store,
+    /// no default; it must be well-formed text, with no half of a surrogate pair, that does not start or
+    /// end with white space. Give every instance of a service the same key, from configuration or a secret store,
     /// so each one reads the count of a copy another put back, and a message that always fails is
     /// dead-lettered after the attempt limit however its deliveries are spread. A copy signed under
     /// another key counts again from 1. Never logged or put in an exception by this package.
@@ -216,6 +217,13 @@ public sealed class RabbitMqTransportOptions
         if (bytes < MinDeliveryStampKeyBytes)
         {
             throw new ArgumentException("The delivery stamp key must be at least " + MinDeliveryStampKeyBytes + " bytes in UTF-8.", nameof(DeliveryStampKey));
+        }
+        // A trailing newline or a leading space is easily added or dropped by one instance's
+        // configuration file or secret store and not another's; the keys would then differ, and
+        // retried copies would quietly count again from 1.
+        if (char.IsWhiteSpace(key[0]) || char.IsWhiteSpace(key[^1]))
+        {
+            throw new ArgumentException("The delivery stamp key must not start or end with white space.", nameof(DeliveryStampKey));
         }
     }
 

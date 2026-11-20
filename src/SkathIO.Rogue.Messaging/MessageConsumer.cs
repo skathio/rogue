@@ -67,6 +67,9 @@ public sealed class MessageConsumer
     private readonly ILogger _logger;
     private readonly IMessageInbox? _inbox;
 
+    // Failed deliveries now waiting out a retry delay here, each holding a place in the transport's window.
+    private int _heldForRetry;
+
     // Built only by AddRogueMessaging, which registers every service read here, the transport aside.
     internal MessageConsumer(MessageRegistry registry, IServiceProvider services)
     {
@@ -406,9 +409,7 @@ public sealed class MessageConsumer
                     await _transport.AckAsync(delivery, CancellationToken.None).ConfigureAwait(false);
                     break;
                 case RogueMessagingTelemetry.Retried:
-                    _logRetry(_logger, id, Loggable(envelope.Name), delivery.DeliveryCount, _registry.Options.MaxAttempts, outcome.Delay, outcome.Exception);
-                    TimeSpan delay = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken, slot).ConfigureAwait(false);
-                    await _transport.NackAsync(delivery, delay, CancellationToken.None).ConfigureAwait(false);
+                    await RetryAsync(delivery, outcome, stoppingToken, slot).ConfigureAwait(false);
                     break;
                 case RogueMessagingTelemetry.DeadLettered:
                     _logDeadLetter(_logger, id, Loggable(envelope.Name), delivery.DeliveryCount, outcome.Reason!, outcome.Exception);
@@ -432,12 +433,54 @@ public sealed class MessageConsumer
         }
     }
 
+    // A delivery that would wait out its delay here holds a place in the transport's unsettled window
+    // all the while. Past half the window it is nacked at once instead, its count still raised, so
+    // failing messages cannot stall the rest, and one that always fails still reaches MaxAttempts.
+    private async Task RetryAsync(ReceivedMessage delivery, Outcome outcome, CancellationToken stoppingToken, TaskCompletionSource? slot)
+    {
+        TimeSpan delay = outcome.Delay;
+        bool held = false;
+        if (WaitsHere(delay))
+        {
+            held = TryHoldForRetry();
+            delay = held ? delay : TimeSpan.Zero;
+        }
+        try
+        {
+            MessageEnvelope envelope = delivery.Envelope;
+            _logRetry(_logger, Loggable(envelope.Id), Loggable(envelope.Name), delivery.DeliveryCount, _registry.Options.MaxAttempts, delay, outcome.Exception);
+            TimeSpan left = await WaitUnlessNativeAsync(delay, stoppingToken, slot).ConfigureAwait(false);
+            await _transport.NackAsync(delivery, left, CancellationToken.None).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (held)
+            {
+                Interlocked.Decrement(ref _heldForRetry);
+            }
+        }
+    }
+
+    // Takes one of the places half the transport's window allows for waiting retries, when one is free.
+    private bool TryHoldForRetry()
+    {
+        int held = Interlocked.Increment(ref _heldForRetry);
+        if (_transport.UnsettledLimit is int window && held > window / 2)
+        {
+            Interlocked.Decrement(ref _heldForRetry);
+            return false;
+        }
+        return true;
+    }
+
+    private bool WaitsHere(TimeSpan delay) => (_transport.Capabilities & TransportCapabilities.NativeDelay) == 0 && delay > TimeSpan.Zero;
+
     // A transport that cannot hold a nacked message for a delay gets it back at once, so the delay is
     // waited out here. The slot is given up first: otherwise MaxConcurrency failing messages would stop
     // every other message for their whole delay. Shutting down cuts the wait short.
     private async Task<TimeSpan> WaitUnlessNativeAsync(TimeSpan delay, CancellationToken stoppingToken, TaskCompletionSource? slot)
     {
-        if ((_transport.Capabilities & TransportCapabilities.NativeDelay) != 0 || delay <= TimeSpan.Zero)
+        if (!WaitsHere(delay))
         {
             return delay;
         }

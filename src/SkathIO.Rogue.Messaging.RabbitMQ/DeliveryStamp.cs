@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 namespace SkathIO.Rogue.Messaging.RabbitMQ;
@@ -37,8 +38,9 @@ internal sealed class DeliveryStamp
     /// <summary>
     /// How many times <paramref name="delivery"/>, read as <paramref name="envelope"/>, has been delivered:
     /// the signed count of a copy this transport put back on its queue through the default exchange,
-    /// held to 1 to <see cref="RabbitMqWire.MaxDeliveryCount"/>, otherwise 1; one more when the broker
-    /// marks it redelivered after a delivery that was never settled.
+    /// held to 1 to <see cref="RabbitMqWire.MaxDeliveryCount"/>, otherwise 1; plus, when the broker
+    /// marks it redelivered after deliveries that were never settled, how many those were: the broker's
+    /// <see cref="RabbitMqWire.BrokerDeliveryCountHeader"/>, held to the same range, or 1 without it.
     /// </summary>
     public int CountOf(BasicDeliverEventArgs delivery, MessageEnvelope envelope)
     {
@@ -48,7 +50,30 @@ internal sealed class DeliveryStamp
         {
             count = Math.Clamp(signed, 1, RabbitMqWire.MaxDeliveryCount);
         }
-        return count + (delivery.Redelivered ? 1 : 0);
+        return count + (delivery.Redelivered ? BrokerReturns(delivery.BasicProperties) : 0);
+    }
+
+    // How many deliveries of a redelivered message the broker took back unsettled: a quorum queue
+    // counts them in an integer header, which a process that crashes mid-handler each time raises.
+    // Without it, or when it is not an integer, the one return the redelivered flag shows.
+    private static int BrokerReturns(IReadOnlyBasicProperties properties)
+    {
+        if (properties.Headers is not { } headers || !headers.TryGetValue(RabbitMqWire.BrokerDeliveryCountHeader, out object? value))
+        {
+            return 1;
+        }
+        long? returns = value switch
+        {
+            long n => n,
+            int n => n,
+            short n => n,
+            sbyte n => n,
+            uint n => n,
+            ushort n => n,
+            byte n => n,
+            _ => null,
+        };
+        return returns is long known ? (int)Math.Clamp(known, 1, RabbitMqWire.MaxDeliveryCount) : 1;
     }
 
     // The count of a stamp that this transport signed for the envelope's name and id, or null.
