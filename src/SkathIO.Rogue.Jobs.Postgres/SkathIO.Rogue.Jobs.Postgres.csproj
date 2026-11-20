@@ -14,4 +14,9 @@
   <ItemGroup>
     <PackageReference Include="Npgsql" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Internals every database store shares (pruner, migration gate, claim order), compiled into
+         each store package from one source so the stores cannot drift apart. -->
+    <Compile Include="..\SkathIO.Rogue.Jobs\StoreShared\*.cs" LinkBase="StoreShared" />
+  </ItemGroup>
 </Project>

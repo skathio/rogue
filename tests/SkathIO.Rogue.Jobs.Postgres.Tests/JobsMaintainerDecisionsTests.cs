@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using SkathIO.Rogue.Jobs.Stores;
 using SkathIO.Rogue.Jobs.StoreContract;
 using Xunit;
 
@@ -48,7 +49,7 @@ public sealed class JobsMaintainerDecisionsTests
         using ServiceProvider provider = services.BuildServiceProvider();
 
         Assert.All(provider.GetServices<IHostedService>(), static s => Assert.True(
-            s is PostgresJobListener || s is PostgresJobPruner,
+            s is PostgresJobListener || s is JobPruner,
             s.GetType() + " is hosted by an enqueue-only Postgres host."));
     }
 

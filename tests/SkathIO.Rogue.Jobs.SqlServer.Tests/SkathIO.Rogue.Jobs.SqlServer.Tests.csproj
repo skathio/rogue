@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs.SqlServer\SkathIO.Rogue.Jobs.SqlServer.csproj" />
+    <ProjectReference Include="..\SkathIO.Rogue.Jobs.StoreContract\SkathIO.Rogue.Jobs.StoreContract.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Testcontainers.MsSql" />
+  </ItemGroup>
+</Project>

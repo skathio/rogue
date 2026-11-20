@@ -2,6 +2,7 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using SkathIO.Rogue.Jobs.Stores;
 using Xunit;
 
 namespace SkathIO.Rogue.Jobs.Postgres.Tests;
@@ -109,7 +110,7 @@ public sealed class PostgresJobsOptionsTests
         Assert.Same(provider.GetRequiredService<PostgresJobStore>(), provider.GetRequiredService<IJobStore>());
         Assert.NotNull(provider.GetRequiredService<IPostgresJobScheduler>());
         Assert.Single(provider.GetServices<IHostedService>(), static s => s is PostgresJobListener);
-        Assert.Single(provider.GetServices<IHostedService>(), static s => s is PostgresJobPruner);
+        Assert.Single(provider.GetServices<IHostedService>(), static s => s is JobPruner);
     }
 
     [Fact]

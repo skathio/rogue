@@ -1,26 +1,13 @@
 #nullable enable
-const SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.MaxSchemaLength = 50 -> int
 SkathIO.Rogue.Jobs.Postgres.IPostgresJobScheduler
 SkathIO.Rogue.Jobs.Postgres.IPostgresJobScheduler.EnqueueMany<TCommand>(System.Collections.Generic.IReadOnlyList<TCommand>! commands, Npgsql.NpgsqlConnection! connection, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<System.Guid>!>
 SkathIO.Rogue.Jobs.Postgres.IPostgresJobScheduler.EnqueueMany<TCommand>(System.Collections.Generic.IReadOnlyList<TCommand>! commands, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<System.Guid>!>
 SkathIO.Rogue.Jobs.Postgres.IPostgresJobScheduler.Enqueue<TCommand>(TCommand command, Npgsql.NpgsqlConnection! connection, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Guid>
 SkathIO.Rogue.Jobs.Postgres.IPostgresJobScheduler.Enqueue<TCommand>(TCommand command, Npgsql.NpgsqlTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Guid>
 SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.AutoMigrate.get -> bool
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.AutoMigrate.set -> void
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.DeadLetteredRetention.get -> System.TimeSpan
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.DeadLetteredRetention.set -> void
 SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.ListenReconnectDelay.get -> System.TimeSpan
 SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.ListenReconnectDelay.set -> void
 SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.PostgresJobsOptions() -> void
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.PruneBatchSize.get -> int
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.PruneBatchSize.set -> void
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.PruneInterval.get -> System.TimeSpan
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.PruneInterval.set -> void
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.Schema.get -> string!
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.Schema.set -> void
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.SucceededRetention.get -> System.TimeSpan
-SkathIO.Rogue.Jobs.Postgres.PostgresJobsOptions.SucceededRetention.set -> void
 SkathIO.Rogue.Jobs.Postgres.PostgresJobsServiceCollectionExtensions
 SkathIO.Rogue.Jobs.Postgres.PostgresJobStore
 SkathIO.Rogue.Jobs.Postgres.PostgresJobStore.ClaimAsync(string! queue, int maxCount, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.ClaimedJob!>!>

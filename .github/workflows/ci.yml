@@ -152,6 +152,7 @@ jobs:
             "src/SkathIO.Rogue.Validation/SkathIO.Rogue.Validation.csproj"
             "src/SkathIO.Rogue.Jobs/SkathIO.Rogue.Jobs.csproj"
             "src/SkathIO.Rogue.Jobs.Postgres/SkathIO.Rogue.Jobs.Postgres.csproj"
+            "src/SkathIO.Rogue.Jobs.SqlServer/SkathIO.Rogue.Jobs.SqlServer.csproj"
           )
 
           : > closure-ids.txt

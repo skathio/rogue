@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Npgsql;
 using NpgsqlTypes;
+using SkathIO.Rogue.Jobs.Stores;
 
 namespace SkathIO.Rogue.Jobs.Postgres;
 
@@ -19,7 +20,7 @@ namespace SkathIO.Rogue.Jobs.Postgres;
 /// every process sharing the database must keep its clock in sync. The store creates or upgrades its
 /// schema before its first command unless <see cref="PostgresJobsOptions.AutoMigrate"/> is off.
 /// </remarks>
-public sealed class PostgresJobStore : IJobStore
+public sealed class PostgresJobStore : IJobStore, IDatabaseJobStore
 {
     // Above this many jobs an enqueue streams them through binary COPY; below, one INSERT is cheaper.
     private const int CopyThreshold = 2;
@@ -31,25 +32,26 @@ public sealed class PostgresJobStore : IJobStore
     private readonly TimeProvider _time;
     private readonly PostgresSql _sql;
     private readonly CompletionBatcher _completions;
-    private readonly object _gate = new object();
-    private Task? _migration;
+    private readonly MigrationGate _migrations;
 
     /// <summary>Creates a store on <paramref name="dataSource"/> with the given options, on the system clock by default.</summary>
     /// <exception cref="ArgumentException">An option is out of range.</exception>
     public PostgresJobStore(NpgsqlDataSource dataSource, PostgresJobsOptions? options = null, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(dataSource);
-        _options = (options ?? new PostgresJobsOptions()).Copy();
-        _options.Validate();
+        _options = StoreSupport.OwnCopy(options, static o => o.Copy());
         _dataSource = dataSource;
         _time = timeProvider ?? TimeProvider.System;
         _sql = new PostgresSql(_options.Schema);
         _completions = new CompletionBatcher(CompleteBatchAsync);
+        _migrations = new MigrationGate(_options.AutoMigrate, MigrateAsync);
     }
 
     internal PostgresSql Sql => _sql;
 
     internal PostgresJobsOptions Options => _options;
+
+    DatabaseJobsOptions IDatabaseJobStore.StoreOptions => _options;
 
     internal NpgsqlDataSource DataSource => _dataSource;
 
@@ -60,37 +62,7 @@ public sealed class PostgresJobStore : IJobStore
     public async Task MigrateAsync(CancellationToken cancellationToken = default)
     {
         NpgsqlConnection connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using (connection.ConfigureAwait(false))
-        {
-            NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            await using (transaction.ConfigureAwait(false))
-            {
-                await using (var prologue = new NpgsqlCommand(_sql.MigrationPrologue, connection, transaction))
-                {
-                    prologue.Parameters.AddWithValue("schema", _sql.Schema);
-                    await prologue.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                }
-                int current;
-                await using (var read = new NpgsqlCommand(_sql.CurrentVersion, connection, transaction))
-                {
-                    current = (int)(await read.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
-                }
-
-                for (int version = current + 1; version <= _sql.Migrations.Length; version++)
-                {
-                    await using (var migrate = new NpgsqlCommand(_sql.Migrations[version - 1], connection, transaction))
-                    {
-                        await migrate.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                    }
-                    await using (var record = new NpgsqlCommand(_sql.RecordMigration, connection, transaction))
-                    {
-                        record.Parameters.AddWithValue("version", version);
-                        await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                    }
-                }
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            }
-        }
+        await StoreSupport.InTransactionAsync<NpgsqlTransaction>(connection, ApplyMigrationsAsync, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -145,9 +117,7 @@ public sealed class PostgresJobStore : IJobStore
     /// <inheritdoc />
     public async ValueTask<IReadOnlyList<ClaimedJob>> ClaimAsync(string queue, int maxCount, TimeSpan lease, CancellationToken cancellationToken)
     {
-        JobLimits.CheckQueue(queue, nameof(queue));
-        ArgumentOutOfRangeException.ThrowIfLessThan(maxCount, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(lease, TimeSpan.Zero);
+        StoreSupport.CheckClaim(queue, maxCount, lease);
         await ReadyAsync(cancellationToken).ConfigureAwait(false);
 
         DateTime now = Now();
@@ -166,32 +136,8 @@ public sealed class PostgresJobStore : IJobStore
         claim.Parameters.AddWithValue("max_count", maxCount);
         batch.BatchCommands.Add(claim);
 
-        var claimed = new List<(DateTime RunAt, long Seq, ClaimedJob Job)>();
-        await using (NpgsqlDataReader reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
-        {
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                var job = new ClaimedJob
-                {
-                    Id = reader.GetGuid(0),
-                    Kind = reader.GetString(1),
-                    Queue = reader.GetString(2),
-                    Payload = reader.GetFieldValue<byte[]>(3),
-                    Attempt = reader.GetInt32(4),
-                    MaxAttempts = reader.GetInt32(5),
-                };
-                claimed.Add((reader.GetDateTime(6), reader.GetInt64(7), job));
-            }
-        }
-
-        // RETURNING has no order; the contract hands jobs out by run time, then enqueue order.
-        claimed.Sort(static (a, b) => a.RunAt != b.RunAt ? a.RunAt.CompareTo(b.RunAt) : a.Seq.CompareTo(b.Seq));
-        var result = new ClaimedJob[claimed.Count];
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = claimed[i].Job;
-        }
-        return result;
+        await using NpgsqlDataReader reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await StoreSupport.ReadClaimedAsync(reader, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -275,21 +221,7 @@ public sealed class PostgresJobStore : IJobStore
         await using NpgsqlCommand command = _dataSource.CreateCommand(_sql.Get);
         command.Parameters.AddWithValue("id", id);
         await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return null;
-        }
-        return new JobSnapshot
-        {
-            Id = id,
-            Kind = reader.GetString(0),
-            Queue = reader.GetString(1),
-            State = (JobState)reader.GetInt16(2),
-            Attempt = reader.GetInt32(3),
-            MaxAttempts = reader.GetInt32(4),
-            RunAt = new DateTimeOffset(reader.GetDateTime(5), TimeSpan.Zero),
-            LastError = reader.IsDBNull(6) ? null : reader.GetString(6),
-        };
+        return await StoreSupport.ReadSnapshotAsync(reader, id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -300,20 +232,14 @@ public sealed class PostgresJobStore : IJobStore
     {
         await ReadyAsync(cancellationToken).ConfigureAwait(false);
         DateTimeOffset now = _time.GetUtcNow();
-        int total = 0;
-        while (true)
+        return await StoreSupport.DeleteInBatchesAsync(async ct =>
         {
             await using NpgsqlCommand command = _dataSource.CreateCommand(_sql.Prune);
             command.Parameters.AddWithValue("succeeded_before", (now - _options.SucceededRetention).UtcDateTime);
             command.Parameters.AddWithValue("dead_lettered_before", (now - _options.DeadLetteredRetention).UtcDateTime);
             command.Parameters.AddWithValue("batch", _options.PruneBatchSize);
-            int deleted = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            total += deleted;
-            if (deleted < _options.PruneBatchSize)
-            {
-                return total;
-            }
-        }
+            return await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }, _options.PruneBatchSize, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The transaction's connection; throws when the transaction has already completed.</summary>
@@ -334,36 +260,40 @@ public sealed class PostgresJobStore : IJobStore
         return transaction.Connection ?? throw new InvalidOperationException("The transaction has already been committed or rolled back.");
     }
 
+    // Takes the advisory lock, then applies each migration the schema lacks, in the caller's transaction.
+    private async Task ApplyMigrationsAsync(NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        NpgsqlConnection connection = transaction.Connection!;
+        await using (var prologue = new NpgsqlCommand(_sql.MigrationPrologue, connection, transaction))
+        {
+            prologue.Parameters.AddWithValue("schema", _sql.Schema);
+            await prologue.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        int current;
+        await using (var read = new NpgsqlCommand(_sql.CurrentVersion, connection, transaction))
+        {
+            current = (int)(await read.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        }
+
+        for (int version = current + 1; version <= _sql.Migrations.Length; version++)
+        {
+            await using (var migrate = new NpgsqlCommand(_sql.Migrations[version - 1], connection, transaction))
+            {
+                await migrate.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+            await using (var record = new NpgsqlCommand(_sql.RecordMigration, connection, transaction))
+            {
+                record.Parameters.AddWithValue("version", version);
+                await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
     private DateTime Now() => _time.GetUtcNow().UtcDateTime;
 
-    private static void CheckJobs(IReadOnlyList<NewJob> jobs)
-    {
-        ArgumentNullException.ThrowIfNull(jobs);
-        foreach (NewJob job in jobs)
-        {
-            ArgumentNullException.ThrowIfNull(job, nameof(jobs));
-        }
-    }
+    private static void CheckJobs(IReadOnlyList<NewJob> jobs) => StoreSupport.CheckBatch(jobs);
 
-    // Runs the migrations once per store before its first command, when AutoMigrate is on. A failed
-    // migration is retried by the next command instead of failing every later one.
-    private Task ReadyAsync(CancellationToken cancellationToken)
-    {
-        if (!_options.AutoMigrate)
-        {
-            return Task.CompletedTask;
-        }
-        Task migration;
-        lock (_gate)
-        {
-            if (_migration is null || _migration.IsFaulted || _migration.IsCanceled)
-            {
-                _migration = MigrateAsync(CancellationToken.None);
-            }
-            migration = _migration;
-        }
-        return migration.IsCompletedSuccessfully ? Task.CompletedTask : migration.WaitAsync(cancellationToken);
-    }
+    private Task ReadyAsync(CancellationToken cancellationToken) => _migrations.ReadyAsync(cancellationToken);
 
     // Writes the jobs and one NOTIFY per queue on the connection, in its current transaction if any.
     // A single job is one INSERT; a batch is one binary COPY, which a duplicate id fails as a whole.

@@ -16,6 +16,7 @@
 #   src/SkathIO.Rogue.Validation/SkathIO.Rogue.Validation.csproj
 #   src/SkathIO.Rogue.Jobs/SkathIO.Rogue.Jobs.csproj
 #   src/SkathIO.Rogue.Jobs.Postgres/SkathIO.Rogue.Jobs.Postgres.csproj
+#   src/SkathIO.Rogue.Jobs.SqlServer/SkathIO.Rogue.Jobs.SqlServer.csproj
 #
 # Adding a new id to this file requires FIRST verifying that the package's
 # license is permissive (MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, MS-PL,
@@ -32,10 +33,27 @@
 FluentValidation
 # Microsoft.Bcl.AsyncInterfaces — MIT — verified 2026-06-12
 Microsoft.Bcl.AsyncInterfaces
+# Microsoft.Bcl.Cryptography — MIT — verified 2026-11-20
+Microsoft.Bcl.Cryptography
 # Microsoft.Build.Tasks.Git — MIT — verified 2026-06-12
 Microsoft.Build.Tasks.Git
 # Microsoft.CodeAnalysis.PublicApiAnalyzers — MIT — verified 2026-06-12
 Microsoft.CodeAnalysis.PublicApiAnalyzers
+# Microsoft.Data.SqlClient — MIT — verified 2026-11-20
+Microsoft.Data.SqlClient
+# Microsoft.Data.SqlClient.Extensions.Abstractions — MIT — verified 2026-11-20
+Microsoft.Data.SqlClient.Extensions.Abstractions
+# Microsoft.Data.SqlClient.Internal.Logging — MIT — verified 2026-11-20
+Microsoft.Data.SqlClient.Internal.Logging
+# Microsoft.Data.SqlClient.SNI.runtime — Microsoft Software License Terms (proprietary redistributable, LICENSE.txt) — verified 2026-11-20
+# Documented license exception, accepted by the maintainer: the native network layer of
+# Microsoft.Data.SqlClient, pulled in only by SkathIO.Rogue.Jobs.SqlServer. See
+# docs/governance.md "Dependency policy".
+Microsoft.Data.SqlClient.SNI.runtime
+# Microsoft.Extensions.Caching.Abstractions — MIT — verified 2026-11-20
+Microsoft.Extensions.Caching.Abstractions
+# Microsoft.Extensions.Caching.Memory — MIT — verified 2026-11-20
+Microsoft.Extensions.Caching.Memory
 # Microsoft.Extensions.Configuration.Abstractions — MIT — verified 2026-11-20
 Microsoft.Extensions.Configuration.Abstractions
 # Microsoft.Extensions.DependencyInjection.Abstractions — MIT — verified 2026-06-12
@@ -52,6 +70,18 @@ Microsoft.Extensions.Logging.Abstractions
 Microsoft.Extensions.Options
 # Microsoft.Extensions.Primitives — MIT — verified 2026-11-20
 Microsoft.Extensions.Primitives
+# Microsoft.IdentityModel.Abstractions — MIT — verified 2026-11-20
+Microsoft.IdentityModel.Abstractions
+# Microsoft.IdentityModel.JsonWebTokens — MIT — verified 2026-11-20
+Microsoft.IdentityModel.JsonWebTokens
+# Microsoft.IdentityModel.Logging — MIT — verified 2026-11-20
+Microsoft.IdentityModel.Logging
+# Microsoft.IdentityModel.Protocols — MIT — verified 2026-11-20
+Microsoft.IdentityModel.Protocols
+# Microsoft.IdentityModel.Protocols.OpenIdConnect — MIT — verified 2026-11-20
+Microsoft.IdentityModel.Protocols.OpenIdConnect
+# Microsoft.IdentityModel.Tokens — MIT — verified 2026-11-20
+Microsoft.IdentityModel.Tokens
 # Microsoft.NET.ILLink.Tasks — MIT — verified 2026-06-12
 Microsoft.NET.ILLink.Tasks
 # Microsoft.NETCore.Platforms — Microsoft .NET Library License (proprietary EULA,
@@ -63,6 +93,8 @@ Microsoft.NETCore.Platforms
 Microsoft.SourceLink.Common
 # Microsoft.SourceLink.GitHub — MIT — verified 2026-06-12
 Microsoft.SourceLink.GitHub
+# Microsoft.SqlServer.Server — MIT — verified 2026-11-20
+Microsoft.SqlServer.Server
 # MinVer — Apache-2.0 — verified 2026-06-12
 MinVer
 # Npgsql — PostgreSQL — verified 2026-11-20
@@ -71,8 +103,14 @@ Npgsql
 NETStandard.Library
 # System.Buffers — MIT — verified 2026-06-12
 System.Buffers
+# System.Configuration.ConfigurationManager — MIT — verified 2026-11-20
+System.Configuration.ConfigurationManager
 # System.Diagnostics.DiagnosticSource — MIT — verified 2026-06-12
 System.Diagnostics.DiagnosticSource
+# System.Diagnostics.EventLog — MIT — verified 2026-11-20
+System.Diagnostics.EventLog
+# System.IdentityModel.Tokens.Jwt — MIT — verified 2026-11-20
+System.IdentityModel.Tokens.Jwt
 # System.IO.Hashing — MIT — verified 2026-07-12
 System.IO.Hashing
 # System.Memory — MIT — verified 2026-06-12
@@ -81,5 +119,11 @@ System.Memory
 System.Numerics.Vectors
 # System.Runtime.CompilerServices.Unsafe — MIT — verified 2026-06-12
 System.Runtime.CompilerServices.Unsafe
+# System.Security.Cryptography.Pkcs — MIT — verified 2026-11-20
+System.Security.Cryptography.Pkcs
+# System.Security.Cryptography.ProtectedData — MIT — verified 2026-11-20
+System.Security.Cryptography.ProtectedData
+# System.Threading.RateLimiting — MIT — verified 2026-11-20
+System.Threading.RateLimiting
 # System.Threading.Tasks.Extensions — MIT — verified 2026-06-12
 System.Threading.Tasks.Extensions

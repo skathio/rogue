@@ -25,6 +25,21 @@ SkathIO.Rogue.Jobs.ClaimedJob.Payload.get -> System.ReadOnlyMemory<byte>
 SkathIO.Rogue.Jobs.ClaimedJob.Payload.init -> void
 SkathIO.Rogue.Jobs.ClaimedJob.Queue.get -> string!
 SkathIO.Rogue.Jobs.ClaimedJob.Queue.init -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.AutoMigrate.get -> bool
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.AutoMigrate.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.DatabaseJobsOptions() -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.DeadLetteredRetention.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.DeadLetteredRetention.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.PruneBatchSize.get -> int
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.PruneBatchSize.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.PruneInterval.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.PruneInterval.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.Schema.get -> string!
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.Schema.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.SucceededRetention.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.SucceededRetention.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.Validate() -> void
 SkathIO.Rogue.Jobs.IJobScheduler
 SkathIO.Rogue.Jobs.IJobScheduler.EnqueueMany<TCommand>(System.Collections.Generic.IReadOnlyList<TCommand>! commands, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<System.Guid>!>
 SkathIO.Rogue.Jobs.IJobScheduler.Enqueue<TCommand>(TCommand command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Guid>
@@ -158,5 +173,7 @@ SkathIO.Rogue.Jobs.InMemoryJobStore.ReleaseAsync(SkathIO.Rogue.Jobs.JobLease lea
 SkathIO.Rogue.Jobs.InMemoryJobStore.RequeueAsync(System.Collections.Generic.IReadOnlyList<System.Guid>! ids, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
 SkathIO.Rogue.Jobs.JobSignal
 SkathIO.Rogue.Jobs.JobSignal.Pulse() -> void
+const SkathIO.Rogue.Jobs.DatabaseJobsOptions.MaxSchemaLength = 50 -> int
 static SkathIO.Rogue.Jobs.JobLimits.CheckQueue(string! queue, string! parameter) -> void
 static SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions.AddRogueJobWorker(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+virtual SkathIO.Rogue.Jobs.DatabaseJobsOptions.ValidateStoreOptions() -> void

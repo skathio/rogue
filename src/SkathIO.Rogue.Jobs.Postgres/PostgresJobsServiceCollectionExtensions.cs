@@ -2,9 +2,8 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using SkathIO.Rogue.Jobs.Stores;
 
 namespace SkathIO.Rogue.Jobs.Postgres;
 
@@ -20,15 +19,8 @@ public static class PostgresJobsServiceCollectionExtensions
     /// <exception cref="ArgumentException">An option is out of range.</exception>
     public static IServiceCollection AddRoguePostgresJobs(this IServiceCollection services, NpgsqlDataSource dataSource, Action<PostgresJobsOptions>? configure = null)
     {
-        ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(dataSource);
-        var options = new PostgresJobsOptions();
-        configure?.Invoke(options);
-        options.Validate();
-
-        services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton(sp => new PostgresJobStore(dataSource, options, sp.GetRequiredService<TimeProvider>()));
-        services.Replace(ServiceDescriptor.Singleton<IJobStore>(static sp => sp.GetRequiredService<PostgresJobStore>()));
+        StoreSupport.AddDatabaseStore<PostgresJobStore, PostgresJobsOptions>(services, configure, (options, sp) => new PostgresJobStore(dataSource, options, sp.GetRequiredService<TimeProvider>()), "SkathIO.Rogue.Jobs.Postgres.PostgresJobPruner");
         services.TryAddSingleton<IPostgresJobScheduler>(static sp => new PostgresJobScheduler(
             sp.GetRequiredService<IJobScheduler>(),
             sp.GetRequiredService<PostgresJobStore>()));
@@ -36,14 +28,7 @@ public static class PostgresJobsServiceCollectionExtensions
             sp.GetRequiredService<PostgresJobStore>(),
             sp.GetRequiredService<JobSignal>().Pulse,
             sp.GetRequiredService<TimeProvider>(),
-            Logger(sp, "SkathIO.Rogue.Jobs.Postgres.PostgresJobListener"))));
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, PostgresJobPruner>(static sp => new PostgresJobPruner(
-            sp.GetRequiredService<PostgresJobStore>(),
-            sp.GetRequiredService<TimeProvider>(),
-            Logger(sp, "SkathIO.Rogue.Jobs.Postgres.PostgresJobPruner"))));
+            StoreSupport.Logger(sp, "SkathIO.Rogue.Jobs.Postgres.PostgresJobListener"))));
         return services;
     }
-
-    private static ILogger Logger(IServiceProvider services, string category)
-        => (ILogger?)services.GetService<ILoggerFactory>()?.CreateLogger(category) ?? NullLogger.Instance;
 }

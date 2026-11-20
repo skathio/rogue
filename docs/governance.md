@@ -19,11 +19,12 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
   `FluentValidation`); `SkathIO.Rogue.Validation` adds none. `SkathIO.Rogue.Jobs` adds
   `Microsoft.Extensions.Logging.Abstractions` and `Microsoft.Extensions.Hosting.Abstractions`, the
   latter so the worker runs as a hosted service. `SkathIO.Rogue.Jobs.Postgres` adds `Npgsql`.
+  `SkathIO.Rogue.Jobs.SqlServer` adds `Microsoft.Data.SqlClient` and its transitive tree.
 - **Transitive dependency allow-list.** The `license-check` CI job runs
   `dotnet list <project> package --include-transitive --format json` for each packable project
   (`SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`, `SkathIO.Rogue.MediatR`, `SkathIO.Rogue.Logging`,
   `SkathIO.Rogue.Validation.FluentValidation`, `SkathIO.Rogue.Validation`, `SkathIO.Rogue.Jobs`,
-  `SkathIO.Rogue.Jobs.Postgres`;
+  `SkathIO.Rogue.Jobs.Postgres`, `SkathIO.Rogue.Jobs.SqlServer`;
   a new package is added to the job's list when it is created), unions the resulting
   top-level + transitive package ids across all target frameworks, and **fails the build** if any id
   is not listed in [`.github/allowed-packages.txt`](../.github/allowed-packages.txt). **Adding a new
@@ -37,6 +38,14 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
   "CI fails if a non-permissive transitive dependency enters the core" literally true. A package whose
   license is **not** permissive must not be added to the allow-list, and therefore cannot ship in any
   packable project.
+- **Documented license exceptions.** A package whose license is not permissive enters the
+  allow-list only when the maintainer accepts it by name, and the exception is recorded here and in
+  its allow-list note. Current exceptions:
+  - `Microsoft.Data.SqlClient.SNI.runtime` (Microsoft Software License Terms, a proprietary
+    redistributable license): the native network layer of `Microsoft.Data.SqlClient`, which no SQL
+    Server client for .NET can do without. It reaches consumers only through
+    `SkathIO.Rogue.Jobs.SqlServer`; every other package stays free of it. Accepted by the
+    maintainer on 2026-11-20.
 - **Allow-list scope is the full build-time restore graph, not just shipped `.nuspec`
   dependencies.** `dotnet list package --include-transitive` enumerates everything needed to
   restore and build each packable project, including `PrivateAssets="All"`/build-time-only

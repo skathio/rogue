@@ -43,6 +43,23 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   under an advisory lock, or you call `PostgresJobStore.MigrateAsync()` yourself with
   `AutoMigrate = false`. The store passes the same contract tests as the in-memory store. Targets
   `net8.0` and `net10.0`; depends on Npgsql; no reflection, AOT-safe.
+- **New package: `SkathIO.Rogue.Jobs.SqlServer`**, a durable SQL Server job store. Register it with
+  `AddRogueSqlServerJobs(connectionString)` next to `AddRogueJobs()`. A batch is stored with one
+  INSERT over a table-valued parameter, and workers claim batches in one statement under `READPAST`
+  and `UPDLOCK`, so they never wait on each other's rows. SQL Server has no LISTEN/NOTIFY, so an
+  adaptive poller probes for newly due jobs and wakes idle workers: it probes again at
+  `MinPollInterval` after a find and backs off to `MaxPollInterval` while idle. Jobs whose worker
+  stopped are claimed again once their lease runs out, dead-lettered jobs can be requeued, and a
+  pruner deletes finished jobs past their retention (`SqlServerJobsOptions`). The store creates and
+  upgrades its own schema (`rogue_jobs` by default) under `sp_getapplock`, or you call
+  `SqlServerJobStore.MigrateAsync()` yourself with `AutoMigrate = false`. The store passes the same
+  contract tests as the other stores. Targets `net8.0` and `net10.0`; depends on
+  `Microsoft.Data.SqlClient`, whose native `Microsoft.Data.SqlClient.SNI.runtime` is under the
+  Microsoft Software License Terms, a documented exception to the permissive-license policy; no
+  reflection, AOT-safe.
+- `DatabaseJobsOptions`, the options both database stores share (`Schema`, `AutoMigrate`,
+  retention, prune interval and batch size), with a public `Validate()`. `PostgresJobsOptions` and
+  `SqlServerJobsOptions` derive from it.
 - `IJobScheduler.CreateJob(command)` serializes a command into a `NewJob` without storing it, for a
   store's own enqueue; `JobSignal.Pulse()` lets a store wake the worker; `JobLimits.CheckQueue`
   checks a queue name against the store contract.

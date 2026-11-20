@@ -32,6 +32,7 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.14" />
     <!-- Job stores -->
     <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.2" />
     <!-- Test -->
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
@@ -42,6 +43,7 @@
     <!-- Integration tests only: a database in a container per test collection. Never referenced by
          a packable project (the license check covers only those). -->
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.17.0" />
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.17.0" />
     <!-- Companion package to Microsoft.CodeAnalysis.CSharp above (migration analyzer/test
          projects); kept in lockstep to avoid a restore/assembly-version conflict (D4/D8, F-6). -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
