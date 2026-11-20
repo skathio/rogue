@@ -130,8 +130,11 @@ public sealed class JobSchedulerTests
         public ValueTask<bool> DeadLetterAsync(JobLease lease, string error, CancellationToken cancellationToken)
             => _inner.DeadLetterAsync(lease, error, cancellationToken);
 
-        public ValueTask<bool> ReleaseAsync(JobLease lease, CancellationToken cancellationToken)
-            => _inner.ReleaseAsync(lease, cancellationToken);
+        public ValueTask<bool> ReleaseAsync(JobLease lease, TimeSpan delay, CancellationToken cancellationToken)
+            => _inner.ReleaseAsync(lease, delay, cancellationToken);
+
+        public ValueTask<int> RequeueAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+            => _inner.RequeueAsync(ids, cancellationToken);
 
         public ValueTask<int> ExtendLeasesAsync(IReadOnlyList<JobLease> leases, TimeSpan lease, CancellationToken cancellationToken)
             => _inner.ExtendLeasesAsync(leases, lease, cancellationToken);

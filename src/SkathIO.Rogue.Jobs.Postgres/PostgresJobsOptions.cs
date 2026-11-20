@@ -55,7 +55,7 @@ public sealed partial class PostgresJobsOptions
     internal PostgresJobsOptions Copy() => (PostgresJobsOptions)MemberwiseClone();
 
     // The schema becomes a quoted identifier in SQL text, which cannot be a parameter, so only names
-    // that need no escaping are accepted.
-    [GeneratedRegex("^[a-z_][a-z0-9_]{0,49}$", RegexOptions.CultureInvariant)]
+    // that need no escaping are accepted. \z, not $: $ also matches before a trailing newline.
+    [GeneratedRegex(@"^[a-z_][a-z0-9_]{0,49}\z", RegexOptions.CultureInvariant)]
     private static partial Regex SchemaName();
 }

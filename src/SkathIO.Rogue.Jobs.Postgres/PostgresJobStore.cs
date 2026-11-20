@@ -229,8 +229,26 @@ public sealed class PostgresJobStore : IJobStore
     }
 
     /// <inheritdoc />
-    public ValueTask<bool> ReleaseAsync(JobLease lease, CancellationToken cancellationToken)
-        => UpdateHeldAsync(_sql.Release, lease, null, cancellationToken);
+    public ValueTask<bool> ReleaseAsync(JobLease lease, TimeSpan delay, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
+        return UpdateHeldAsync(_sql.Release, lease, (values, now) => values.AddWithValue("run_at", now + delay), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<int> RequeueAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count == 0)
+        {
+            return 0;
+        }
+        await ReadyAsync(cancellationToken).ConfigureAwait(false);
+        await using NpgsqlCommand command = _dataSource.CreateCommand(_sql.Requeue);
+        command.Parameters.AddWithValue("ids", new List<Guid>(ids).ToArray());
+        command.Parameters.AddWithValue("now", Now());
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
     public async ValueTask<int> ExtendLeasesAsync(IReadOnlyList<JobLease> leases, TimeSpan lease, CancellationToken cancellationToken)

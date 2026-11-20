@@ -83,15 +83,14 @@ public sealed class JobWorkerTests
     }
 
     [Fact]
-    public async Task CommandWithoutJobAttribute_IsAJobToo()
+    public async Task CommandWithoutJobAttribute_IsNotAJob_EvenThoughTheContextCoversIt()
     {
         await using JobsHost host = JobsHost.Create();
 
-        Guid id = await host.Scheduler.Enqueue(new UnmarkedJob(3));
-        await host.Worker.RunOnceAsync();
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await host.Scheduler.Enqueue(new UnmarkedJob(3)));
 
-        Assert.Equal(new[] { "unmarked:3" }, host.Probe.Ran);
-        Assert.Equal(JobState.Succeeded, (await host.SnapshotAsync(id)).State);
+        Assert.Contains("[Job]", error.Message, StringComparison.Ordinal);
+        Assert.Empty(host.Probe.Ran);
     }
 
     [Fact]
@@ -208,17 +207,33 @@ public sealed class JobWorkerTests
     }
 
     [Fact]
-    public async Task UnknownKind_IsDeadLettered()
+    public async Task UnknownKind_IsPutBackAfterTheDefaultBackoff_WithoutCountingTheAttempt()
     {
-        await using JobsHost host = JobsHost.Create();
+        await using JobsHost host = JobsHost.Create(static o => o.DefaultBackoff = TimeSpan.FromSeconds(30));
         var job = new NewJob { Id = Guid.NewGuid(), Kind = "nobody.knows", Queue = "default", Payload = Encoding.UTF8.GetBytes("{}"), MaxAttempts = 5 };
         await host.Store.EnqueueAsync(new[] { job }, CancellationToken.None);
 
         await host.Worker.RunOnceAsync();
 
         JobSnapshot snapshot = await host.SnapshotAsync(job.Id);
-        Assert.Equal(JobState.DeadLettered, snapshot.State);
-        Assert.Contains("nobody.knows", snapshot.LastError, StringComparison.Ordinal);
+        Assert.Equal((JobState.Enqueued, 0), (snapshot.State, snapshot.Attempt));
+        Assert.Equal(host.Clock.GetUtcNow() + TimeSpan.FromSeconds(30), snapshot.RunAt);
+    }
+
+    [Fact]
+    public async Task UnknownKind_WithNoBackoff_IsPutBackForAPollInterval_NotAtOnce()
+    {
+        await using JobsHost host = JobsHost.Create(static o =>
+        {
+            o.DefaultBackoff = TimeSpan.Zero;
+            o.PollInterval = TimeSpan.FromSeconds(5);
+        });
+        var job = new NewJob { Id = Guid.NewGuid(), Kind = "nobody.knows", Queue = "default", Payload = Encoding.UTF8.GetBytes("{}"), MaxAttempts = 5 };
+        await host.Store.EnqueueAsync(new[] { job }, CancellationToken.None);
+
+        await host.Worker.RunOnceAsync();
+
+        Assert.Equal(host.Clock.GetUtcNow() + TimeSpan.FromSeconds(5), (await host.SnapshotAsync(job.Id)).RunAt);
     }
 
     [Theory]

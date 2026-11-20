@@ -8,23 +8,29 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ### Added
 
-- **New package: `SkathIO.Rogue.Jobs`**, background jobs on Rogue commands. Any `ICommand` or
-  `ICommand<T>` with a handler is a job: enqueue it with `IJobScheduler.Enqueue(command)`, or many at
-  once with `IJobScheduler.EnqueueMany(commands)` (one store call), and a `JobWorker` runs its
-  handler through the full pipeline, in a service scope of its own. An optional `[Job]` sets the
-  kind, queue, attempts, first retry delay and timeout. A failed run is retried after a doubling,
-  capped, jittered backoff, then dead-lettered; an unreadable payload or unknown kind is
-  dead-lettered at once, and on shutdown running jobs are put back without counting the attempt.
+- **New package: `SkathIO.Rogue.Jobs`**, background jobs on Rogue commands. An `ICommand` or
+  `ICommand<T>` with a handler and a `[Job]` attribute is a job: enqueue it with
+  `IJobScheduler.Enqueue(command)`, or many at once with `IJobScheduler.EnqueueMany(commands)` (one
+  store call), and a `JobWorker` runs its handler through the full pipeline, in a service scope of
+  its own. A command without `[Job]` is never run as a job, so a row written straight into the jobs
+  table cannot send an arbitrary command. `[Job]` can set the kind, queue, attempts, first retry
+  delay and timeout. A failed run is retried after a doubling, capped, jittered backoff, then
+  dead-lettered; an unreadable payload is dead-lettered at once. A job whose kind this process does
+  not know is put back after the default backoff without counting the attempt, so during a rolling
+  deploy an older worker leaves a newer kind for a worker that knows it. `IJobStore.RequeueAsync(ids)`
+  moves dead-lettered jobs back to ready with all their attempts. Stored errors have NUL characters
+  removed. On shutdown running jobs are put back without counting the attempt.
   The core source generator emits the kind-to-invoker map, so jobs are found by a stable kind, never
   by a type name, and requests are dispatched exactly as before. Payloads go through your
   System.Text.Json `JsonSerializerContext` (`JobsOptions.SerializerContext`), checked at startup
-  for `[Job]` commands; a command without `[Job]` is a job only when the context covers it, so
-  adding the package never fails startup without a build warning. Every claimed job keeps its lease,
+  for `[Job]` commands, the same commands the build checks (ROGUE019), so adding the package never
+  fails startup without a build warning. Every claimed job keeps its lease,
   renewed while it waits for a slot or runs, until its outcome is stored, and a lease the store no
   longer holds is logged as a warning. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
   follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. Register it
-  with `AddRogueJobs()` next to `AddRogue()`; it registers a hosted service that runs the worker
-  while the host runs (the package depends on `Microsoft.Extensions.Hosting.Abstractions`). Targets `net8.0` and `net10.0`; no reflection, AOT-safe.
+  with `AddRogueJobs()` next to `AddRogue()`, which is enough to enqueue; add `AddRogueJobWorker()`
+  in each host that should run jobs, which registers a hosted service that runs the worker while the
+  host runs (the package depends on `Microsoft.Extensions.Hosting.Abstractions`). Targets `net8.0` and `net10.0`; no reflection, AOT-safe.
 - **New package: `SkathIO.Rogue.Jobs.Postgres`**, a durable PostgreSQL job store. Register it with
   `AddRoguePostgresJobs(dataSource)` next to `AddRogueJobs()`. `IPostgresJobScheduler.Enqueue` and
   `EnqueueMany` take your own `NpgsqlTransaction` or `NpgsqlConnection`, so jobs commit or roll back

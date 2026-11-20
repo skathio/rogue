@@ -5,8 +5,8 @@ using Microsoft.Extensions.Hosting;
 namespace SkathIO.Rogue.Jobs;
 
 /// <summary>
-/// Runs the <see cref="JobWorker"/> for the life of the host: <c>AddRogueJobs</c> registers it, so a
-/// generic or web host starts the worker with no further code and stops it on shutdown.
+/// Runs the <see cref="JobWorker"/> for the life of the host: <c>AddRogueJobWorker</c> registers it, so
+/// a generic or web host that asks for the worker starts it and stops it on shutdown.
 /// </summary>
 internal sealed class JobWorkerService : BackgroundService
 {

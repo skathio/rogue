@@ -223,11 +223,75 @@ public abstract class JobStoreContract
         await store.EnqueueAsync(new[] { job }, None);
         ClaimedJob claimed = Assert.Single(await store.ClaimAsync(Queue, 1, _lease, None));
 
-        Assert.True(await store.ReleaseAsync(claimed.Lease, None));
+        Assert.True(await store.ReleaseAsync(claimed.Lease, TimeSpan.Zero, None));
         ClaimedJob again = Assert.Single(await store.ClaimAsync(Queue, 1, _lease, None));
 
         Assert.Equal(1, again.Attempt);
-        Assert.False(await store.ReleaseAsync(claimed.Lease with { Attempt = 5 }, None));
+        Assert.False(await store.ReleaseAsync(claimed.Lease with { Attempt = 5 }, TimeSpan.Zero, None));
+    }
+
+    [StoreFact]
+    public async Task Release_WithADelay_WaitsItOut_AndANegativeDelayIsRejected()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        NewJob job = Job(Queue, maxAttempts: 1);
+        await store.EnqueueAsync(new[] { job }, None);
+        ClaimedJob claimed = Assert.Single(await store.ClaimAsync(Queue, 1, _lease, None));
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await store.ReleaseAsync(claimed.Lease, TimeSpan.FromTicks(-1), None));
+        Assert.True(await store.ReleaseAsync(claimed.Lease, TimeSpan.FromSeconds(30), None));
+        JobSnapshot waiting = (await store.GetAsync(job.Id, None))!;
+        Clock.Advance(TimeSpan.FromSeconds(29));
+        IReadOnlyList<ClaimedJob> early = await store.ClaimAsync(Queue, 1, _lease, None);
+        Clock.Advance(TimeSpan.FromSeconds(1));
+        ClaimedJob again = Assert.Single(await store.ClaimAsync(Queue, 1, _lease, None));
+
+        Assert.Equal((JobState.Enqueued, 0), (waiting.State, waiting.Attempt));
+        Assert.Empty(early);
+        Assert.Equal(1, again.Attempt);
+    }
+
+    [StoreFact]
+    public async Task Requeue_MovesOnlyDeadLetteredJobs_WithAllTheirAttempts()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        NewJob dead = Job(Queue, maxAttempts: 2);
+        NewJob waiting = Job(Queue);
+        await store.EnqueueAsync(new[] { dead }, None);
+        ClaimedJob claimed = Assert.Single(await store.ClaimAsync(Queue, 1, _lease, None));
+        Assert.True(await store.DeadLetterAsync(claimed.Lease, "poison", None));
+        await store.EnqueueAsync(new[] { waiting }, None);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await store.RequeueAsync(null!, None));
+        Assert.Equal(0, await store.RequeueAsync(Array.Empty<Guid>(), None));
+        int moved = await store.RequeueAsync(new[] { dead.Id, waiting.Id, Guid.NewGuid() }, None);
+        int movedAgain = await store.RequeueAsync(new[] { dead.Id }, None);
+        JobSnapshot requeued = (await store.GetAsync(dead.Id, None))!;
+        IReadOnlyList<ClaimedJob> claimable = await store.ClaimAsync(Queue, 10, _lease, None);
+
+        Assert.Equal(1, moved);
+        Assert.Equal(0, movedAgain);
+        Assert.Equal((JobState.Enqueued, 0), (requeued.State, requeued.Attempt));
+        Assert.Equal(new[] { 1, 1 }, claimable.Select(static c => c.Attempt));
+        Assert.Equal(new[] { dead.Id, waiting.Id }.OrderBy(static g => g), claimable.Select(static c => c.Id).OrderBy(static g => g));
+    }
+
+    [StoreFact]
+    public async Task RecordedError_HasNoNul_OnRetryAndDeadLetter()
+    {
+        IJobStore store = await CreateStoreAsync(Clock);
+        NewJob job = Job(Queue);
+        await store.EnqueueAsync(new[] { job }, None);
+        ClaimedJob first = Assert.Single(await store.ClaimAsync(Queue, 1, _lease, None));
+
+        Assert.True(await store.RetryAsync(first.Lease, TimeSpan.Zero, "re\0try", None));
+        string? retried = (await store.GetAsync(job.Id, None))!.LastError;
+        ClaimedJob second = Assert.Single(await store.ClaimAsync(Queue, 1, _lease, None));
+        Assert.True(await store.DeadLetterAsync(second.Lease, "\0dead\0", None));
+        string? deadLettered = (await store.GetAsync(job.Id, None))!.LastError;
+
+        Assert.Equal("retry", retried);
+        Assert.Equal("dead", deadLettered);
     }
 
     [StoreFact]

@@ -17,10 +17,18 @@ public static class JobLimits
     /// <summary>The longest recorded error, in characters; a store keeps only this much of a longer one.</summary>
     public const int MaxErrorLength = 4000;
 
-    /// <summary>Cuts <paramref name="error"/> to <see cref="MaxErrorLength"/>.</summary>
+    /// <summary>
+    /// Removes every NUL character (U+0000) from <paramref name="error"/>, then cuts it to
+    /// <see cref="MaxErrorLength"/>. Postgres text cannot hold NUL, so storing an exception message
+    /// that has one would fail the very write that records the failure.
+    /// </summary>
     public static string TrimError(string error)
     {
         ArgumentNullException.ThrowIfNull(error);
+        if (error.Contains('\0', StringComparison.Ordinal))
+        {
+            error = error.Replace("\0", string.Empty, StringComparison.Ordinal);
+        }
         return error.Length <= MaxErrorLength ? error : error.Substring(0, MaxErrorLength);
     }
 

@@ -8,7 +8,10 @@ namespace SkathIO.Rogue.Jobs;
 /// </summary>
 public sealed class JobDefaults
 {
-    /// <summary>The defaults of a command without <see cref="JobAttribute"/>.</summary>
+    /// <summary>
+    /// The defaults of a command without <see cref="JobAttribute"/>. A definition carrying exactly this
+    /// instance is not a job: the worker never runs it and the scheduler refuses it.
+    /// </summary>
     public static JobDefaults None { get; } = new JobDefaults(null, 0, 0, 0);
 
     /// <summary>Creates the defaults; generated code calls this with the attribute's values.</summary>

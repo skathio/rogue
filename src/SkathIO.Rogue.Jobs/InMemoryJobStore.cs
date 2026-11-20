@@ -20,8 +20,8 @@ public sealed class InMemoryJobStore : IJobStore
     private readonly int _finishedRetention;
     private readonly Dictionary<Guid, Entry> _jobs = new Dictionary<Guid, Entry>();
     private readonly Dictionary<string, QueueIndex> _queues = new Dictionary<string, QueueIndex>(StringComparer.Ordinal);
-    private readonly Queue<Guid> _succeeded = new Queue<Guid>();
-    private readonly Queue<Guid> _deadLettered = new Queue<Guid>();
+    private readonly Queue<(Guid Id, long Sequence)> _succeeded = new Queue<(Guid Id, long Sequence)>();
+    private readonly Queue<(Guid Id, long Sequence)> _deadLettered = new Queue<(Guid Id, long Sequence)>();
     private long _sequence;
 
     /// <summary>Creates a store on the system clock.</summary>
@@ -110,21 +110,16 @@ public sealed class InMemoryJobStore : IJobStore
     public ValueTask<int> CompleteAsync(IReadOnlyList<JobLease> leases, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(leases);
-        int completed = 0;
-        lock (_gate)
+        return new ValueTask<int>(CountApplied(leases, (lease, now) =>
         {
-            DateTimeOffset now = _time.GetUtcNow();
-            foreach (JobLease lease in leases)
+            if (!TryTakeHeld(lease, now, out Entry? entry))
             {
-                if (TryTakeHeld(lease, now, out Entry? entry))
-                {
-                    entry.State = JobState.Succeeded;
-                    Retain(_succeeded, entry.Id);
-                    completed++;
-                }
+                return false;
             }
-        }
-        return new ValueTask<int>(completed);
+            entry.State = JobState.Succeeded;
+            Retain(_succeeded, entry);
+            return true;
+        }));
     }
 
     /// <inheritdoc />
@@ -161,8 +156,9 @@ public sealed class InMemoryJobStore : IJobStore
     }
 
     /// <inheritdoc />
-    public ValueTask<bool> ReleaseAsync(JobLease lease, CancellationToken cancellationToken)
+    public ValueTask<bool> ReleaseAsync(JobLease lease, TimeSpan delay, CancellationToken cancellationToken)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
         lock (_gate)
         {
             DateTimeOffset now = _time.GetUtcNow();
@@ -171,9 +167,26 @@ public sealed class InMemoryJobStore : IJobStore
                 return new ValueTask<bool>(false);
             }
             entry.Attempt--;
-            MakeReady(entry, now);
+            MakeReady(entry, now + delay);
             return new ValueTask<bool>(true);
         }
+    }
+
+    /// <inheritdoc />
+    public ValueTask<int> RequeueAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        cancellationToken.ThrowIfCancellationRequested();
+        return new ValueTask<int>(CountApplied(ids, (id, now) =>
+        {
+            if (!_jobs.TryGetValue(id, out Entry? entry) || entry.State != JobState.DeadLettered)
+            {
+                return false;
+            }
+            entry.Attempt = 0;
+            MakeReady(entry, now);
+            return true;
+        }));
     }
 
     /// <inheritdoc />
@@ -204,6 +217,24 @@ public sealed class InMemoryJobStore : IJobStore
         {
             return new ValueTask<JobSnapshot?>(_jobs.TryGetValue(id, out Entry? entry) ? entry.ToSnapshot() : null);
         }
+    }
+
+    // Applies apply to each item under the lock, at one reading of the clock, and counts the true results.
+    private int CountApplied<T>(IReadOnlyList<T> items, Func<T, DateTimeOffset, bool> apply)
+    {
+        int applied = 0;
+        lock (_gate)
+        {
+            DateTimeOffset now = _time.GetUtcNow();
+            foreach (T item in items)
+            {
+                if (apply(item, now))
+                {
+                    applied++;
+                }
+            }
+        }
+        return applied;
     }
 
     private QueueIndex Index(string queue)
@@ -284,15 +315,21 @@ public sealed class InMemoryJobStore : IJobStore
     {
         entry.State = JobState.DeadLettered;
         entry.LastError = JobLimits.TrimError(error);
-        Retain(_deadLettered, entry.Id);
+        Retain(_deadLettered, entry);
     }
 
-    private void Retain(Queue<Guid> finished, Guid id)
+    // Drops the oldest finished jobs past the limit. A job requeued since it finished has a newer
+    // sequence than the one recorded here, so it stays.
+    private void Retain(Queue<(Guid Id, long Sequence)> finished, Entry entry)
     {
-        finished.Enqueue(id);
+        finished.Enqueue((entry.Id, entry.Sequence));
         while (finished.Count > _finishedRetention)
         {
-            _jobs.Remove(finished.Dequeue());
+            (Guid id, long sequence) = finished.Dequeue();
+            if (_jobs.TryGetValue(id, out Entry? dropped) && dropped.Sequence == sequence)
+            {
+                _jobs.Remove(id);
+            }
         }
     }
 

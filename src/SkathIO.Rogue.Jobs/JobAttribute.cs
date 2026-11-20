@@ -3,10 +3,10 @@ using System;
 namespace SkathIO.Rogue.Jobs;
 
 /// <summary>
-/// Sets job defaults for a command. Any <see cref="ICommand"/> or <see cref="ICommand{TResponse}"/> with
-/// a handler can be enqueued without it; the attribute only overrides the defaults in
-/// <see cref="JobsOptions"/>, and makes the serializer-coverage analyzer check the type. A value left at
-/// zero or <see langword="null"/> keeps the default.
+/// Marks an <see cref="ICommand"/> or <see cref="ICommand{TResponse}"/> with a handler as a job, and sets
+/// its job defaults. Only a marked command can be enqueued or run by the worker, and the
+/// serializer-coverage analyzer checks each marked type. A value left at zero or
+/// <see langword="null"/> keeps the default in <see cref="JobsOptions"/>.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
 public sealed class JobAttribute : Attribute

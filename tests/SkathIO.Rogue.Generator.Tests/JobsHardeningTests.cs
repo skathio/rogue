@@ -153,7 +153,7 @@ public sealed class JobWorkerHardeningTests
     }
 
     [Fact]
-    public async Task AddRogueJobs_RegistersAHostedServiceFromThePackage_ThatRunsTheWorker()
+    public async Task AddRogueJobWorker_RegistersAHostedServiceFromThePackage_ThatRunsTheWorker()
     {
         Type? hostedType = Type.GetType("Microsoft.Extensions.Hosting.IHostedService, Microsoft.Extensions.Hosting.Abstractions");
         Assert.NotNull(hostedType);
@@ -532,8 +532,9 @@ internal sealed class HardeningRig : IAsyncDisposable
         services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
         services.AddSingleton(probe);
         services.AddScoped<RogueDispatcher>();
-        services.AddJobDefinition(new JobDefinition<HoldJob>("hardening.hold", JobDefaults.None, (_, job, token) => probe.RunAsync(job, token)));
-        services.AddJobDefinition(new JobDefinition<FailJob>("hardening.fail", JobDefaults.None, static (_, _, _) => throw new InvalidOperationException("The job failed.")));
+        // Defaults other than JobDefaults.None mark both as [Job] commands, the only kind that runs.
+        services.AddJobDefinition(new JobDefinition<HoldJob>("hardening.hold", new JobDefaults(null, 0, 0, 0), (_, job, token) => probe.RunAsync(job, token)));
+        services.AddJobDefinition(new JobDefinition<FailJob>("hardening.fail", new JobDefaults(null, 0, 0, 0), static (_, _, _) => throw new InvalidOperationException("The job failed.")));
         services.AddRogueJobs(options =>
         {
             options.SerializerContext = HardeningJson.Default;
@@ -543,6 +544,7 @@ internal sealed class HardeningRig : IAsyncDisposable
             options.PollInterval = TimeSpan.FromDays(1);
             configure?.Invoke(options);
         });
+        services.AddRogueJobWorker();
         return new HardeningRig(services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }));
     }
 
@@ -708,7 +710,9 @@ internal sealed class HardeningStore : IJobStore
 
     public ValueTask<bool> DeadLetterAsync(JobLease lease, string error, CancellationToken cancellationToken) => _inner.DeadLetterAsync(lease, error, cancellationToken);
 
-    public ValueTask<bool> ReleaseAsync(JobLease lease, CancellationToken cancellationToken) => _inner.ReleaseAsync(lease, cancellationToken);
+    public ValueTask<bool> ReleaseAsync(JobLease lease, TimeSpan delay, CancellationToken cancellationToken) => _inner.ReleaseAsync(lease, delay, cancellationToken);
+
+    public ValueTask<int> RequeueAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken) => _inner.RequeueAsync(ids, cancellationToken);
 
     public async ValueTask<int> ExtendLeasesAsync(IReadOnlyList<JobLease> leases, TimeSpan lease, CancellationToken cancellationToken)
     {

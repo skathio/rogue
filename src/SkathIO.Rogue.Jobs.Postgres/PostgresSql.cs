@@ -51,8 +51,9 @@ internal sealed class PostgresSql
             "UPDATE " + Jobs + " SET state = " + DeadLettered + ", lease_until = NULL, finished_at = @now, last_error = @error\n"
             + "WHERE " + held + ";";
         Release =
-            "UPDATE " + Jobs + " SET state = " + Enqueued + ", attempt = attempt - 1, run_at = @now, lease_until = NULL, seq = nextval('" + sequence + "')\n"
+            "UPDATE " + Jobs + " SET state = " + Enqueued + ", attempt = attempt - 1, run_at = @run_at, lease_until = NULL, seq = nextval('" + sequence + "')\n"
             + "WHERE " + held + ";";
+        Requeue = RequeueSql(Jobs, sequence);
         Extend =
             "UPDATE " + Jobs + " j SET lease_until = @lease_until\n"
             + "FROM unnest(@ids, @attempts) AS l(id, attempt)\n"
@@ -87,6 +88,11 @@ internal sealed class PostgresSql
             + "CREATE INDEX jobs_ready ON " + jobs + " (queue, run_at, seq) WHERE state = " + Enqueued + ";\n"
             + "CREATE INDEX jobs_leased ON " + jobs + " (queue, lease_until) WHERE state = " + Processing + ";\n"
             + "CREATE INDEX jobs_finished ON " + jobs + " (finished_at) WHERE state IN (" + Succeeded + ", " + DeadLettered + ");";
+
+    // Moves dead-lettered jobs back to ready.
+    private static string RequeueSql(string jobs, string sequence)
+        => "UPDATE " + jobs + " SET state = " + Enqueued + ", attempt = 0, run_at = @now, finished_at = NULL, seq = nextval('" + sequence + "')\n"
+            + "WHERE id = ANY(@ids) AND state = " + DeadLettered + ";";
 
     // A processing job whose lease ran out is due again now, or dead-lettered when that claim was its
     // last attempt. Runs before each claim, on the claim's queue.
@@ -141,6 +147,8 @@ internal sealed class PostgresSql
     public string DeadLetter { get; }
 
     public string Release { get; }
+
+    public string Requeue { get; }
 
     public string Extend { get; }
 

@@ -48,8 +48,18 @@ public interface IJobStore
     /// <summary>Moves a claimed job to the dead letters, recording <paramref name="error"/>; it is never claimed again.</summary>
     ValueTask<bool> DeadLetterAsync(JobLease lease, string error, CancellationToken cancellationToken);
 
-    /// <summary>Puts a claimed job back without counting the attempt, for a worker that is shutting down.</summary>
-    ValueTask<bool> ReleaseAsync(JobLease lease, CancellationToken cancellationToken);
+    /// <summary>
+    /// Puts a claimed job back to run again after <paramref name="delay"/> without counting the attempt:
+    /// for a worker that is shutting down, or one that does not know the job's kind.
+    /// </summary>
+    ValueTask<bool> ReleaseAsync(JobLease lease, TimeSpan delay, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Moves the dead-lettered jobs among <paramref name="ids"/> back to <see cref="JobState.Enqueued"/>,
+    /// ready to be claimed now with all their attempts, and returns how many moved. An id that is not
+    /// stored, or whose job is not dead-lettered, is skipped.
+    /// </summary>
+    ValueTask<int> RequeueAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
 
     /// <summary>Extends the leases of running jobs to <paramref name="lease"/> from now and returns how many claims still held their job.</summary>
     ValueTask<int> ExtendLeasesAsync(IReadOnlyList<JobLease> leases, TimeSpan lease, CancellationToken cancellationToken);

@@ -11,16 +11,17 @@ namespace SkathIO.Rogue.Jobs;
 /// <c>[Job]</c> command is not covered by the serializer context.
 /// </summary>
 /// <remarks>
-/// A command without <c>[Job]</c> is a job only when the serializer context covers it; otherwise it is
-/// left out and enqueueing it fails, naming the missing attribute. The build reports an uncovered
-/// <c>[Job]</c> command (ROGUE019) but cannot know which other commands are meant as jobs, so only
-/// marked commands may fail startup: adding the package never breaks a project the build did not warn.
+/// Only a command marked <c>[Job]</c> is a job. The generator also emits a definition for every other
+/// command, with <see cref="JobDefaults.None"/>; those are never bound, so a stored row naming one is
+/// never dispatched (anyone who can write to the jobs table could otherwise send any command), and
+/// enqueueing one fails, naming the missing attribute. The build-time serializer check (ROGUE019)
+/// follows the same rule and checks only <c>[Job]</c> commands.
 /// </remarks>
 internal sealed class JobRegistry
 {
     private readonly Dictionary<string, JobBinding> _byKind = new Dictionary<string, JobBinding>(StringComparer.Ordinal);
     private readonly Dictionary<Type, JobBinding> _byType = new Dictionary<Type, JobBinding>();
-    private readonly HashSet<Type> _unbound = new HashSet<Type>();
+    private readonly HashSet<Type> _unmarked = new HashSet<Type>();
 
     public JobRegistry(IEnumerable<JobDefinition> definitions, JobsOptions options)
     {
@@ -32,22 +33,17 @@ internal sealed class JobRegistry
         var uncovered = new List<string>();
         foreach (JobDefinition definition in definitions)
         {
-            if (TryBind(definition, options))
-            {
-                continue;
-            }
-
             // The generator passes JobDefaults.None exactly for a command without [Job].
             if (ReferenceEquals(definition.Defaults, JobDefaults.None))
             {
-                _unbound.Add(definition.CommandType);
+                _unmarked.Add(definition.CommandType);
             }
-            else if (options.SerializerContext is null)
+            else if (!TryBind(definition, options))
             {
-                throw new InvalidOperationException("Jobs are registered but JobsOptions.SerializerContext is not set. Set it in AddRogueJobs to a JsonSerializerContext with [JsonSerializable(typeof(T))] for each job command.");
-            }
-            else
-            {
+                if (options.SerializerContext is null)
+                {
+                    throw new InvalidOperationException("Jobs are registered but JobsOptions.SerializerContext is not set. Set it in AddRogueJobs to a JsonSerializerContext with [JsonSerializable(typeof(T))] for each job command.");
+                }
                 uncovered.Add(definition.CommandType.ToString());
             }
         }
@@ -75,11 +71,11 @@ internal sealed class JobRegistry
         {
             return typed;
         }
-        if (_unbound.Contains(typeof(TCommand)))
+        if (_unmarked.Contains(typeof(TCommand)))
         {
-            throw new InvalidOperationException(typeof(TCommand) + " cannot be enqueued: JobsOptions.SerializerContext does not cover it. Add [JsonSerializable(typeof(" + typeof(TCommand).Name + "))] to the context.");
+            throw new InvalidOperationException(typeof(TCommand) + " is not a job: only commands marked [Job] run as jobs. Add [Job] to " + typeof(TCommand).Name + " and [JsonSerializable(typeof(" + typeof(TCommand).Name + "))] to JobsOptions.SerializerContext.");
         }
-        throw new InvalidOperationException(typeof(TCommand) + " is not a job. A job is a command with a handler in a project that references SkathIO.Rogue.Jobs; enqueue it by its own type.");
+        throw new InvalidOperationException(typeof(TCommand) + " is not a job. A job is a command marked [Job] with a handler, in a project that references SkathIO.Rogue.Jobs; enqueue it by its own type.");
     }
 
     // Binds the definition to the serializer context; false when there is no context or it does not

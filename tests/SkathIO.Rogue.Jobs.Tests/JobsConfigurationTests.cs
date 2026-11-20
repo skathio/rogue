@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace SkathIO.Rogue.Jobs.Tests;
@@ -84,20 +85,20 @@ public sealed class JobsConfigurationTests
     }
 
     [Fact]
-    public async Task UnmarkedCommand_TheContextMisses_IsLeftOut_AndEnqueueingItNamesTheAttribute()
+    public async Task UnmarkedCommand_IsLeftOut_EvenWhenTheContextCoversIt_AndEnqueueingItNamesTheAttribute()
     {
         var definitions = new JobDefinition[]
         {
-            new JobDefinition<RecordValue>("covered", JobDefaults.None, static (_, _, _) => default),
-            new JobDefinition<UnmarkedJob>("uncovered", JobDefaults.None, static (_, _, _) => default),
+            new JobDefinition<RecordValue>("marked", new JobDefaults(null, 0, 0, 0), static (_, _, _) => default),
+            new JobDefinition<UnmarkedJob>("unmarked", JobDefaults.None, static (_, _, _) => default),
         };
-        var registry = new JobRegistry(definitions, new JobsOptions { SerializerContext = PartialJobsJson.Default });
+        var registry = new JobRegistry(definitions, new JobsOptions { SerializerContext = TestJobsJson.Default });
         var scheduler = new JobScheduler(registry, new InMemoryJobStore(), new JobSignal());
 
-        Assert.True(registry.TryGet("covered", out _));
-        Assert.False(registry.TryGet("uncovered", out _));
+        Assert.True(registry.TryGet("marked", out _));
+        Assert.False(registry.TryGet("unmarked", out _));
         InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(async () => await scheduler.Enqueue(new UnmarkedJob(1)));
-        Assert.Contains("[JsonSerializable(typeof(UnmarkedJob))]", error.Message, StringComparison.Ordinal);
+        Assert.Contains("[Job]", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -123,8 +124,8 @@ public sealed class JobsConfigurationTests
     {
         var definitions = new JobDefinition[]
         {
-            new JobDefinition<RecordValue>("same.kind", JobDefaults.None, static (_, _, _) => default),
-            new JobDefinition<UnmarkedJob>("same.kind", JobDefaults.None, static (_, _, _) => default),
+            new JobDefinition<RecordValue>("same.kind", new JobDefaults(null, 0, 0, 0), static (_, _, _) => default),
+            new JobDefinition<UnmarkedJob>("same.kind", new JobDefaults(null, 0, 0, 0), static (_, _, _) => default),
         };
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => new JobRegistry(definitions, new JobsOptions { SerializerContext = TestJobsJson.Default }));
@@ -141,6 +142,21 @@ public sealed class JobsConfigurationTests
         services.AddJobDefinition(new JobDefinition<RecordValue>("once", JobDefaults.None, static (_, _, _) => default));
 
         Assert.Single(services, static d => d.ServiceType == typeof(JobDefinition));
+    }
+
+    [Fact]
+    public void AddRogueJobWorker_HostsTheWorkerOnce_HoweverOftenItIsCalled()
+    {
+        var services = new ServiceCollection();
+        services.AddRogueJobs();
+
+        services.AddRogueJobWorker();
+        services.AddRogueJobWorker();
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        IHostedService hosted = Assert.Single(provider.GetServices<IHostedService>());
+        Assert.IsType<JobWorkerService>(hosted);
+        Assert.Throws<ArgumentNullException>(() => ((IServiceCollection)null!).AddRogueJobWorker());
     }
 
     [Fact]

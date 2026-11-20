@@ -12,8 +12,8 @@ public sealed class JobsOptions
 
     /// <summary>
     /// The source-generated context that serializes job payloads. Required once any <c>[Job]</c>
-    /// command exists, and each must be covered by a <c>[JsonSerializable]</c> attribute on it; a
-    /// command without <c>[Job]</c> is a job only when the context covers it.
+    /// command exists, and each must be covered by a <c>[JsonSerializable]</c> attribute on it. A
+    /// command without <c>[Job]</c> is never a job, whether the context covers it or not.
     /// </summary>
     public JsonSerializerContext? SerializerContext { get; set; }
 

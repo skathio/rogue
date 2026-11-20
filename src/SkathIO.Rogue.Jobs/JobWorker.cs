@@ -13,12 +13,14 @@ namespace SkathIO.Rogue.Jobs;
 /// <summary>
 /// Claims jobs from the store and runs them, each in a service scope of its own, through the Rogue
 /// dispatcher. A failed run is retried after an exponential backoff until its attempts are used up,
-/// then dead-lettered; a payload that cannot be read, or a kind this process does not know, is
-/// dead-lettered at once.
+/// then dead-lettered; a payload that cannot be read is dead-lettered at once. A job of a kind this
+/// process does not know is put back for later without counting the attempt, so during a rolling
+/// deploy an older worker leaves a newer kind to a worker that knows it.
 /// </summary>
 /// <remarks>
-/// <c>AddRogueJobs</c> registers a hosted service that calls <see cref="RunAsync"/> with the host's
-/// stopping token, so a host runs the worker without further code. On shutdown, running jobs are
+/// <c>AddRogueJobWorker</c> registers a hosted service that calls <see cref="RunAsync"/> with the host's
+/// stopping token; without it no worker runs, and a host can still drain jobs itself through
+/// <see cref="RunOnceAsync"/>. On shutdown, running jobs are
 /// cancelled and put back without counting the attempt. Every claimed job keeps its lease, renewed
 /// every third of <see cref="JobsOptions.LeaseDuration"/>, until its outcome is stored.
 /// </remarks>
@@ -51,6 +53,10 @@ public sealed class JobWorker
     private static readonly Action<ILogger, Guid, string, string, Exception?> _logSettleLost =
         LoggerMessage.Define<Guid, string, string>(LogLevel.Warning, new EventId(7, "JobOutcomeLeaseLost"),
             "The store no longer held the lease of job {JobId} ({JobKind}), so its outcome '{Outcome}' was not recorded; the job may run again.");
+
+    private static readonly Action<ILogger, Guid, string, TimeSpan, Exception?> _logUnknownKind =
+        LoggerMessage.Define<Guid, string, TimeSpan>(LogLevel.Warning, new EventId(8, "JobKindUnknown"),
+            "Job {JobId} has the kind '{JobKind}', which this process does not know; it is put back to run in {Delay}.");
 
     private readonly JobRegistry _registry;
     private readonly IJobStore _store;
@@ -297,9 +303,15 @@ public sealed class JobWorker
 
     private async Task<Outcome> RunJobAsync(ClaimedJob job, CancellationToken stoppingToken)
     {
+        JobsOptions options = _registry.Options;
         if (!_registry.TryGet(job.Kind, out JobBinding? binding))
         {
-            return Outcome.DeadLetter(new InvalidOperationException("No job kind '" + job.Kind + "' is registered in this process."));
+            // Never shorter than the poll interval, so a zero backoff cannot make the worker claim
+            // and put back the same job in a tight loop.
+            TimeSpan later = JobBackoff.Jitter(options.DefaultBackoff, options.BackoffJitter, Random.Shared.NextDouble());
+            later = later > options.PollInterval ? later : options.PollInterval;
+            _logUnknownKind(_logger, job.Id, job.Kind, later, null);
+            return Outcome.PutBack(later);
         }
 
         try
@@ -321,7 +333,6 @@ public sealed class JobWorker
             {
                 return Outcome.DeadLetter(ex);
             }
-            JobsOptions options = _registry.Options;
             TimeSpan delay = JobBackoff.Jitter(JobBackoff.Delay(binding.Backoff, job.Attempt, options.MaxBackoff), options.BackoffJitter, Random.Shared.NextDouble());
             return Outcome.Retry(delay, ex);
         }
@@ -358,7 +369,7 @@ public sealed class JobWorker
                     stored = await _store.CompleteAsync(new[] { lease }, CancellationToken.None).ConfigureAwait(false) > 0;
                     break;
                 case RogueJobsTelemetry.Released:
-                    stored = await _store.ReleaseAsync(lease, CancellationToken.None).ConfigureAwait(false);
+                    stored = await _store.ReleaseAsync(lease, outcome.Delay, CancellationToken.None).ConfigureAwait(false);
                     break;
                 case RogueJobsTelemetry.Retried:
                     _logRetry(_logger, job.Id, job.Kind, job.Attempt, job.MaxAttempts, outcome.Delay, outcome.Exception);
@@ -392,6 +403,9 @@ public sealed class JobWorker
         public static Outcome Complete => new Outcome(RogueJobsTelemetry.Succeeded, TimeSpan.Zero, null);
 
         public static Outcome Release => new Outcome(RogueJobsTelemetry.Released, TimeSpan.Zero, null);
+
+        /// <summary>Put back without counting the attempt, to run again after <paramref name="delay"/>.</summary>
+        public static Outcome PutBack(TimeSpan delay) => new Outcome(RogueJobsTelemetry.Released, delay, null);
 
         public string Name { get; }
 
