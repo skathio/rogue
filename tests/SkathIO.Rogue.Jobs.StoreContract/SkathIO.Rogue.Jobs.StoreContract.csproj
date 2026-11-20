@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- A library of abstract contract tests, not a test project: each store's test project derives
+         from JobStoreContract, so the in-memory, Postgres and SQL Server stores pass the same suite. -->
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
+    <PackageReference Include="xunit" />
+  </ItemGroup>
+</Project>

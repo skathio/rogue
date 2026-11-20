@@ -299,21 +299,12 @@ internal sealed class ValidationEmitter
 
         // Scoped, like the FluentValidation package's validators: async rules usually need scoped
         // services such as a DbContext. TryAddEnumerable keeps a hand registration of the same class.
-        _w.Open("namespace SkathIO.Rogue.Generated");
-        _w.Open("internal static class RogueValidationRegistration");
-        _w.Line("[global::System.Runtime.CompilerServices.ModuleInitializer]");
-        _w.Open("internal static void Init()");
-        _w.Line("global::SkathIO.Rogue.RogueRegistrationBridge.Register(static (services, options) => Register(services));");
-        _w.Close();
-        _w.Line();
-        _w.Open("private static void Register(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
+        FeatureModules.OpenRegistrar(_w, "RogueValidationRegistration");
         foreach (AsyncRulesModel rules in registered)
         {
             _w.Line("global::Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.TryAddEnumerable(services,");
             _w.Line("    global::Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Scoped<global::SkathIO.Rogue.Validation.IAsyncRules<" + rules.RequestFqn + ">, " + rules.TypeFqn + ">());");
         }
-        _w.Close();
-        _w.Close();
-        _w.Close();
+        FeatureModules.CloseRegistrar(_w);
     }
 }

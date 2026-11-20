@@ -70,6 +70,9 @@ public sealed class RogueGenerator : IIncrementalGenerator
 
         // Feature module: validation code for [Validate] requests (only when its package is referenced).
         ValidationModule.Register(context, discovered);
+
+        // Feature module: the job kind-to-invoker map for every command (only when its package is referenced).
+        JobsModule.Register(context, discovered);
     }
 
     private static IncrementalValueProvider<ImmutableArray<BehaviorModel?>> MetadataBehaviors(IncrementalGeneratorInitializationContext context)
@@ -143,48 +146,16 @@ public sealed class RogueGenerator : IIncrementalGenerator
             // ICommand<T>/IQuery<T> typed reference.
             if (ifaceName == WellKnownTypeNames.ICommandHandler2 && iface.TypeArguments.Length == 2)
             {
-                return new DiscoveredItem.Handler(new HandlerModel(
-                    TypeFqn: GetFqn(typeSymbol),
-                    RequestFqn: GetFqn(iface.TypeArguments[0]),
-                    ResponseFqn: GetFqn(iface.TypeArguments[1]),
-                    Kind: HandlerKind.Command,
-                    Accessibility: GetAccessibility(typeSymbol),
-                    CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
-                    IsAbstract: typeSymbol.IsAbstract,
-                    HasPublicCtor: HasPublicConstructor(typeSymbol),
-                    RequestAccessibility: GetTypeAccessibility(iface.TypeArguments[0]),
-                    ResponseAccessibility: GetTypeAccessibility(iface.TypeArguments[1]),
-                    MarkedModules: GetMarkedModules(iface.TypeArguments[0])));
+                return CqsHandler(typeSymbol, iface, HandlerKind.Command);
             }
             else if (ifaceName == WellKnownTypeNames.IQueryHandler2 && iface.TypeArguments.Length == 2)
             {
-                return new DiscoveredItem.Handler(new HandlerModel(
-                    TypeFqn: GetFqn(typeSymbol),
-                    RequestFqn: GetFqn(iface.TypeArguments[0]),
-                    ResponseFqn: GetFqn(iface.TypeArguments[1]),
-                    Kind: HandlerKind.Query,
-                    Accessibility: GetAccessibility(typeSymbol),
-                    CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
-                    IsAbstract: typeSymbol.IsAbstract,
-                    HasPublicCtor: HasPublicConstructor(typeSymbol),
-                    RequestAccessibility: GetTypeAccessibility(iface.TypeArguments[0]),
-                    ResponseAccessibility: GetTypeAccessibility(iface.TypeArguments[1]),
-                    MarkedModules: GetMarkedModules(iface.TypeArguments[0])));
+                return CqsHandler(typeSymbol, iface, HandlerKind.Query);
             }
             else if (ifaceName == WellKnownTypeNames.ICommandHandler1 && iface.TypeArguments.Length == 1)
             {
                 // Void command (ICommandHandler<TCommand>): no response type.
-                return new DiscoveredItem.Handler(new HandlerModel(
-                    TypeFqn: GetFqn(typeSymbol),
-                    RequestFqn: GetFqn(iface.TypeArguments[0]),
-                    ResponseFqn: null,
-                    Kind: HandlerKind.Command,
-                    Accessibility: GetAccessibility(typeSymbol),
-                    CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
-                    IsAbstract: typeSymbol.IsAbstract,
-                    HasPublicCtor: HasPublicConstructor(typeSymbol),
-                    RequestAccessibility: GetTypeAccessibility(iface.TypeArguments[0]),
-                    MarkedModules: GetMarkedModules(iface.TypeArguments[0])));
+                return CqsHandler(typeSymbol, iface, HandlerKind.Command);
             }
             // ── MediatR-adapter request handlers (PD-43 amendment / PD-48 adapter-mapping rule) ──
             // A class implementing the adapter's Compatibility.IRequestHandler<TReq,TResp> /
@@ -762,6 +733,31 @@ public sealed class RogueGenerator : IIncrementalGenerator
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// The model of a core CQS handler: <c>ICommandHandler&lt;TCommand, TResponse&gt;</c>,
+    /// <c>IQueryHandler&lt;TQuery, TResponse&gt;</c> or the void <c>ICommandHandler&lt;TCommand&gt;</c>,
+    /// whose response is null and counts as public (it is <c>Unit</c>). A command also carries its
+    /// <c>[Job]</c> defaults.
+    /// </summary>
+    private static DiscoveredItem.Handler CqsHandler(INamedTypeSymbol typeSymbol, INamedTypeSymbol iface, HandlerKind kind)
+    {
+        ITypeSymbol request = iface.TypeArguments[0];
+        ITypeSymbol? response = iface.TypeArguments.Length == 2 ? iface.TypeArguments[1] : null;
+        return new DiscoveredItem.Handler(new HandlerModel(
+            TypeFqn: GetFqn(typeSymbol),
+            RequestFqn: GetFqn(request),
+            ResponseFqn: response is null ? null : GetFqn(response),
+            Kind: kind,
+            Accessibility: GetAccessibility(typeSymbol),
+            CtorArgTypeFqns: GetCtorArgTypes(typeSymbol),
+            IsAbstract: typeSymbol.IsAbstract,
+            HasPublicCtor: HasPublicConstructor(typeSymbol),
+            RequestAccessibility: GetTypeAccessibility(request),
+            ResponseAccessibility: response is null ? TypeAccessibility.Public : GetTypeAccessibility(response),
+            MarkedModules: GetMarkedModules(request),
+            JobOptions: kind == HandlerKind.Command ? JobsModule.ReadOptions(request) : null));
     }
 
     // ─── Feature modules ────────────────────────────────────────────────────────────

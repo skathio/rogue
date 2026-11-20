@@ -86,6 +86,9 @@ internal static class WellKnownTypeNames
     public const string RuleAttribute    = "SkathIO.Rogue.Validation.RuleAttribute";
     public const string IAsyncRules1     = "SkathIO.Rogue.Validation.IAsyncRules`1";
 
+    // Jobs feature module: the runtime type whose presence means the jobs package is referenced.
+    public const string JobDefinition1 = "SkathIO.Rogue.Jobs.JobDefinition`1";
+
     // Assemblies whose version is the core package's version (ROGUE013): the runtime first, then the
     // contracts, which a library that only declares requests references on its own.
     public const string CoreAssemblyName         = "SkathIO.Rogue";

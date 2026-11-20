@@ -18,6 +18,9 @@
     <!-- The validation package: ValidationPackageTests compile consumer code against its built DLL, so
          building this project must build it too. -->
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation\SkathIO.Rogue.Validation.csproj" />
+    <!-- The jobs package: JobsCoreTests compile consumer code against its built DLL and load its
+         analyzer and code fix from their build output, so building this project must build all three. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

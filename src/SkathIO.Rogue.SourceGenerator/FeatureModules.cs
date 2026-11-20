@@ -89,6 +89,32 @@ internal static class FeatureModules
         }
     }
 
+    /// <summary>
+    /// Opens a feature module's registrar: a class in <c>SkathIO.Rogue.Generated</c> whose module
+    /// initializer appends its <c>Register(services)</c> method to the registration bridge, which
+    /// <c>AddRogue</c> runs. Leaves <c>Register</c> open for the caller's registrations; close it with
+    /// <see cref="CloseRegistrar"/>.
+    /// </summary>
+    internal static void OpenRegistrar(CodeWriter w, string className)
+    {
+        w.Open("namespace SkathIO.Rogue.Generated");
+        w.Open("internal static class " + className);
+        w.Line("[global::System.Runtime.CompilerServices.ModuleInitializer]");
+        w.Open("internal static void Init()");
+        w.Line("global::SkathIO.Rogue.RogueRegistrationBridge.Register(static (services, options) => Register(services));");
+        w.Close();
+        w.Line();
+        w.Open("private static void Register(global::Microsoft.Extensions.DependencyInjection.IServiceCollection services)");
+    }
+
+    /// <summary>Closes what <see cref="OpenRegistrar"/> opened: the method, the class and the namespace.</summary>
+    internal static void CloseRegistrar(CodeWriter w)
+    {
+        w.Close();
+        w.Close();
+        w.Close();
+    }
+
     private static void EmitAsyncRulesStep(CodeWriter w, HandlerModel handler, string methodName)
     {
         string requestFqn = DispatcherEmitter.ToGlobalFqn(handler.RequestFqn);

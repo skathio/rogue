@@ -8,6 +8,22 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ### Added
 
+- **New package: `SkathIO.Rogue.Jobs`**, background jobs on Rogue commands. Any `ICommand` or
+  `ICommand<T>` with a handler is a job: enqueue it with `IJobScheduler.Enqueue(command)`, or many at
+  once with `IJobScheduler.EnqueueMany(commands)` (one store call), and a `JobWorker` runs its
+  handler through the full pipeline, in a service scope of its own. An optional `[Job]` sets the
+  kind, queue, attempts, first retry delay and timeout. A failed run is retried after a doubling,
+  capped, jittered backoff, then dead-lettered; an unreadable payload or unknown kind is
+  dead-lettered at once, and on shutdown running jobs are put back without counting the attempt.
+  The core source generator emits the kind-to-invoker map, so jobs are found by a stable kind, never
+  by a type name, and requests are dispatched exactly as before. Payloads go through your
+  System.Text.Json `JsonSerializerContext` (`JobsOptions.SerializerContext`), checked at startup.
+  `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
+  follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. Register it
+  with `AddRogueJobs()` next to `AddRogue()`, and call `JobWorker.RunAsync` from a hosted service.
+  Targets `net8.0` and `net10.0`; no reflection, AOT-safe.
+- `ROGUE019` warning, with a code fix: a `[Job]` type is not covered by a `[JsonSerializable]`
+  attribute on the project's `JsonSerializerContext`. The fix adds the attribute.
 - **New package: `SkathIO.Rogue.Validation`**, source-generated request validation next to the
   FluentValidation package (which stays supported). Mark a request `[Validate]` and `partial`, then
   declare rules as attributes (`[NotEmpty]`, `[MinimumLength]`, `[MaximumLength]`, `[GreaterThan]`,

@@ -60,7 +60,21 @@ internal sealed record HandlerModel(
     /// request type carries, in <see cref="FeatureModules.All"/> order. Empty for an unmarked request,
     /// which is emitted exactly as it was before feature modules existed.
     /// </summary>
-    EquatableArray<string> MarkedModules = default
+    EquatableArray<string> MarkedModules = default,
+    /// <summary>
+    /// The <c>[Job]</c> defaults the command type carries, or null when it has none. Read for command
+    /// handlers only; the jobs module emits a job definition for every command either way.
+    /// </summary>
+    JobOptionsModel? JobOptions = null
+);
+
+/// <summary>The named arguments of a command's <c>[Job]</c> attribute; zero or null keeps the default.</summary>
+internal sealed record JobOptionsModel(
+    string? Kind,
+    string? Queue,
+    int MaxAttempts,
+    int BackoffSeconds,
+    int TimeoutSeconds
 );
 
 /// <summary>Pipeline behavior (IPipelineBehavior&lt;,&gt; or IStreamPipelineBehavior&lt;,&gt;).</summary>
