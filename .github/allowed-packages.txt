@@ -18,6 +18,7 @@
 #   src/SkathIO.Rogue.Jobs.Postgres/SkathIO.Rogue.Jobs.Postgres.csproj
 #   src/SkathIO.Rogue.Jobs.SqlServer/SkathIO.Rogue.Jobs.SqlServer.csproj
 #   src/SkathIO.Rogue.Messaging/SkathIO.Rogue.Messaging.csproj
+#   src/SkathIO.Rogue.Messaging.RabbitMQ/SkathIO.Rogue.Messaging.RabbitMQ.csproj
 #
 # Adding a new id to this file requires FIRST verifying that the package's
 # license is permissive (MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, MS-PL,
@@ -102,6 +103,8 @@ MinVer
 Npgsql
 # NETStandard.Library — MIT (.NET Foundation and Contributors, dotnet/standard LICENSE.TXT) — verified 2026-06-12
 NETStandard.Library
+# RabbitMQ.Client — Apache-2.0 OR MPL-2.0 — verified 2026-11-20
+RabbitMQ.Client
 # System.Buffers — MIT — verified 2026-06-12
 System.Buffers
 # System.Configuration.ConfigurationManager — MIT — verified 2026-11-20
@@ -114,6 +117,9 @@ System.Diagnostics.EventLog
 System.IdentityModel.Tokens.Jwt
 # System.IO.Hashing — MIT — verified 2026-07-12
 System.IO.Hashing
+# System.IO.Pipelines — MIT — verified 2026-11-20
+# A dependency of RabbitMQ.Client, pulled in only by SkathIO.Rogue.Messaging.RabbitMQ.
+System.IO.Pipelines
 # System.Memory — MIT — verified 2026-06-12
 System.Memory
 # System.Numerics.Vectors — MIT — verified 2026-06-12

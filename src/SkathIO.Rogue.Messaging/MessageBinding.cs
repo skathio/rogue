@@ -29,6 +29,13 @@ public abstract class MessageBinding
     public abstract Type MessageType { get; }
 
     /// <summary>
+    /// Whether a message that arrives is handed to this process's handlers (it is an event or a
+    /// command), or the type is only sent from here. A transport subscribes its consumer to the names
+    /// of the bindings that can dispatch.
+    /// </summary>
+    public abstract bool CanDispatch { get; }
+
+    /// <summary>
     /// Completes when <paramref name="pending"/> does, dropping its result. Generated dispatchers use it
     /// for commands that return a value, so a synchronously completed send stays allocation-free.
     /// </summary>
@@ -71,6 +78,9 @@ public sealed class MessageBinding<TMessage> : MessageBinding
 
     /// <inheritdoc />
     public override Type MessageType => typeof(TMessage);
+
+    /// <inheritdoc />
+    public override bool CanDispatch => _dispatch is not null;
 
     internal override BoundMessage? Bind(JsonSerializerContext context)
         => context.GetTypeInfo(typeof(TMessage)) is JsonTypeInfo<TMessage> typeInfo

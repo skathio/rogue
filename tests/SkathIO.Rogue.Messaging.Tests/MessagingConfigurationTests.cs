@@ -67,6 +67,27 @@ public sealed class MessagingConfigurationTests
     }
 
     [Fact]
+    public void ABinding_CanDispatch_OnlyWithADispatcher()
+    {
+        Assert.False(new MessageBinding<StockReport>("test.report", null).CanDispatch);
+        Assert.True(new MessageBinding<StockReport>("test.report", static (_, _, _) => default).CanDispatch);
+    }
+
+    [Fact]
+    public void GeneratedBindings_CanDispatch_EventsAndCommands_ButNotOtherTypes()
+    {
+        var services = new ServiceCollection();
+        services.AddRogue();
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        MessageBinding[] bindings = provider.GetServices<MessageBinding>().ToArray();
+
+        Assert.True(bindings.Single(static b => b.Name == "test.order-placed").CanDispatch);
+        Assert.True(bindings.Single(static b => b.Name == "test.reserve").CanDispatch);
+        Assert.False(bindings.Single(static b => b.Name == "test.report").CanDispatch);
+    }
+
+    [Fact]
     public void NameTakenByTwoTypes_FailsTheRegistry_NamingBoth()
     {
         var bindings = new MessageBinding[] { new MessageBinding<StockReport>("test.same", null), new MessageBinding<OrderAudited>("test.same", null) };

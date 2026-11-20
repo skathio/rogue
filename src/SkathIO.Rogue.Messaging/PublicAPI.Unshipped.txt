@@ -1,4 +1,5 @@
 #nullable enable
+abstract SkathIO.Rogue.Messaging.MessageBinding.CanDispatch.get -> bool
 abstract SkathIO.Rogue.Messaging.MessageBinding.MessageType.get -> System.Type!
 const SkathIO.Rogue.Messaging.MessageEnvelope.JsonContentType = "application/json" -> string!
 const SkathIO.Rogue.Messaging.MessageLimits.MaxNameLength = 200 -> int
@@ -7,6 +8,7 @@ const SkathIO.Rogue.Messaging.RogueMessagingTelemetry.Name = "SkathIO.Rogue.Mess
 override SkathIO.Rogue.Messaging.DeadLetteredMessage.Equals(object? obj) -> bool
 override SkathIO.Rogue.Messaging.DeadLetteredMessage.GetHashCode() -> int
 override SkathIO.Rogue.Messaging.DeadLetteredMessage.ToString() -> string!
+override SkathIO.Rogue.Messaging.MessageBinding<TMessage>.CanDispatch.get -> bool
 override SkathIO.Rogue.Messaging.MessageBinding<TMessage>.MessageType.get -> System.Type!
 SkathIO.Rogue.Messaging.DeadLetteredMessage
 SkathIO.Rogue.Messaging.DeadLetteredMessage.<Clone>$() -> SkathIO.Rogue.Messaging.DeadLetteredMessage!

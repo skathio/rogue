@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.Messaging.RabbitMQ</PackageId>
+    <Description>RabbitMQ transport for SkathIO.Rogue.Messaging: a topic exchange, a durable queue per consuming service with a dead-letter queue, publisher confirms, prefetch, acks only after the handlers succeed, automatic reconnect and recovery, and JSON from other systems mapped to Rogue messages by routing key or header.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>cqrs;mediator;messaging;message-bus;rabbitmq;amqp;aot</PackageTags>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SkathIO.Rogue.Messaging\SkathIO.Rogue.Messaging.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="RabbitMQ.Client" />
+  </ItemGroup>
+</Project>
