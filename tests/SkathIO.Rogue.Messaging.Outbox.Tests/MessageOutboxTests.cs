@@ -248,6 +248,8 @@ public sealed class MessageOutboxTests
 
         public ValueTask NackAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken) => default;
 
+        public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken) => default;
+
         public ValueTask DeadLetterAsync(ReceivedMessage message, string reason, CancellationToken cancellationToken) => default;
     }
 

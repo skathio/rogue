@@ -99,18 +99,12 @@ public sealed class InMemoryTransport : IMessageTransport
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
     public ValueTask NackAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
-        lock (_gate)
-        {
-            // A delay that runs past the end of time holds the message until then.
-            DateTimeOffset now = _time.GetUtcNow();
-            DateTimeOffset due = delay > DateTimeOffset.MaxValue - now ? DateTimeOffset.MaxValue : now + delay;
-            Entry entry = Settle(message);
-            Enqueue(new Entry(entry.Envelope, entry.DeliveryCount + 1), due);
-        }
-        return default;
-    }
+        => PutBack(message, delay, 1);
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
+    public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
+        => PutBack(message, delay, 0);
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
@@ -126,6 +120,22 @@ public sealed class InMemoryTransport : IMessageTransport
     }
 
     private void Enqueue(Entry entry, DateTimeOffset due) => _ready.Enqueue(entry, (due, _sequence++));
+
+    // Holds the message for its delay, its delivery count raised by countsAs: 1 for a failed attempt,
+    // 0 for a delivery put back unhandled.
+    private ValueTask PutBack(ReceivedMessage message, TimeSpan delay, int countsAs)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
+        lock (_gate)
+        {
+            // A delay that runs past the end of time holds the message until then.
+            DateTimeOffset now = _time.GetUtcNow();
+            DateTimeOffset due = delay > DateTimeOffset.MaxValue - now ? DateTimeOffset.MaxValue : now + delay;
+            Entry entry = Settle(message);
+            Enqueue(new Entry(entry.Envelope, entry.DeliveryCount + countsAs), due);
+        }
+        return default;
+    }
 
     private Entry Settle(ReceivedMessage message)
     {

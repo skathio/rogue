@@ -178,7 +178,21 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
     /// published back to the service's queue at once, with its delivery count one higher.
     /// </remarks>
     /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
-    public async ValueTask NackAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
+    public ValueTask NackAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
+        => PutBackAsync(message, delay, 1);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The transport has no native delay, so <paramref name="delay"/> is not waited: the message is
+    /// published back to the service's queue at once, with the same delivery count.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
+    public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
+        => PutBackAsync(message, delay, 0);
+
+    // Publishes the message back to the service's queue, its delivery count raised by countsAs: 1 for a
+    // failed attempt, 0 for a delivery put back unhandled.
+    private async ValueTask PutBackAsync(ReceivedMessage message, TimeSpan delay, int countsAs)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
         Delivery delivery = Settle(message);
@@ -188,7 +202,7 @@ public sealed class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDi
         }
         try
         {
-            await PublishCopyAsync(string.Empty, _options.ServiceName!, RabbitMqWire.ToProperties(delivery.Envelope, delivery.DeliveryCount + 1), delivery.Envelope.Body).ConfigureAwait(false);
+            await PublishCopyAsync(string.Empty, _options.ServiceName!, RabbitMqWire.ToProperties(delivery.Envelope, delivery.DeliveryCount + countsAs), delivery.Envelope.Body).ConfigureAwait(false);
         }
         catch (Exception) when (IsCurrent(delivery))
         {

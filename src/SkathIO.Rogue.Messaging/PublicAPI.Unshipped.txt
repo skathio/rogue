@@ -25,6 +25,7 @@ SkathIO.Rogue.Messaging.IMessageTransport
 SkathIO.Rogue.Messaging.IMessageTransport.AckAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.Capabilities.get -> SkathIO.Rogue.Messaging.TransportCapabilities
 SkathIO.Rogue.Messaging.IMessageTransport.DeadLetterAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageTransport.DeferAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.NackAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.IMessageTransport.ReceiveAsync(int maxCount, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.ReceivedMessage!>!>
 SkathIO.Rogue.Messaging.IMessageTransport.SendAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.MessageEnvelope!>! messages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
@@ -32,6 +33,7 @@ SkathIO.Rogue.Messaging.InMemoryTransport
 SkathIO.Rogue.Messaging.InMemoryTransport.AckAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.InMemoryTransport.Capabilities.get -> SkathIO.Rogue.Messaging.TransportCapabilities
 SkathIO.Rogue.Messaging.InMemoryTransport.DeadLetterAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.InMemoryTransport.DeferAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.InMemoryTransport.DeadLettered.get -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.DeadLetteredMessage!>!
 SkathIO.Rogue.Messaging.InMemoryTransport.InMemoryTransport(System.TimeProvider? timeProvider = null) -> void
 SkathIO.Rogue.Messaging.InMemoryTransport.NackAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask

@@ -36,6 +36,14 @@ public interface IMessageTransport
     ValueTask NackAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Settles <paramref name="message"/> as not attempted: its handlers did not run, since another
+    /// delivery holds its id. It is delivered again, with the same delivery count, once
+    /// <paramref name="delay"/> has passed (at once, without <see cref="TransportCapabilities.NativeDelay"/>),
+    /// so being put back never uses up one of its attempts.
+    /// </summary>
+    ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Settles <paramref name="message"/> as one that cannot be handled; it is not delivered again, and
     /// is kept with <paramref name="reason"/> under <see cref="TransportCapabilities.NativeDeadLetter"/>.
     /// </summary>

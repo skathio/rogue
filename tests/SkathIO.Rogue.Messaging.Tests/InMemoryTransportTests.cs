@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,6 +37,26 @@ public sealed class InMemoryTransportTests
     }
 
     [Fact]
+    public async Task DeferredMessage_ComesBackAfterItsDelay_WithTheSameDeliveryCount()
+    {
+        var clock = new StepClock();
+        var transport = new InMemoryTransport(clock);
+        await transport.SendAsync(new[] { Named("a") }, _none);
+        ReceivedMessage first = Assert.Single(await transport.ReceiveAsync(1, _none));
+        await transport.NackAsync(first, TimeSpan.Zero, _none);
+        ReceivedMessage second = Assert.Single(await transport.ReceiveAsync(1, _none));
+
+        await transport.DeferAsync(second, TimeSpan.FromSeconds(5), _none);
+        IReadOnlyList<ReceivedMessage> early = await transport.ReceiveAsync(1, _none);
+        clock.Advance(TimeSpan.FromSeconds(5));
+        ReceivedMessage third = Assert.Single(await transport.ReceiveAsync(1, _none));
+
+        Assert.Empty(early);
+        Assert.Equal(2, third.DeliveryCount);
+        Assert.Same(first.Envelope, third.Envelope);
+    }
+
+    [Fact]
     public async Task SettlingTwice_IsRefused()
     {
         var transport = new InMemoryTransport(new StepClock());
@@ -45,6 +66,7 @@ public sealed class InMemoryTransportTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await transport.AckAsync(delivery, _none));
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await transport.NackAsync(delivery, TimeSpan.Zero, _none));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await transport.DeferAsync(delivery, TimeSpan.Zero, _none));
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await transport.DeadLetterAsync(delivery, "x", _none));
     }
 
@@ -69,6 +91,7 @@ public sealed class InMemoryTransportTests
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await transport.ReceiveAsync(0, _none));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await transport.NackAsync(delivery, TimeSpan.FromTicks(-1), _none));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await transport.DeferAsync(delivery, TimeSpan.FromTicks(-1), _none));
         await Assert.ThrowsAsync<ArgumentNullException>(async () => await transport.DeadLetterAsync(delivery, null!, _none));
         await Assert.ThrowsAsync<ArgumentNullException>(async () => await transport.SendAsync(new MessageEnvelope[] { null! }, _none));
         await Assert.ThrowsAsync<ArgumentNullException>(async () => await transport.SendAsync(null!, _none));

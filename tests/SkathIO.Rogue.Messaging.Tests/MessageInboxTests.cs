@@ -56,7 +56,8 @@ public sealed class MessageInboxTests
         await host.Consumer.RunOnceAsync();
 
         Assert.Empty(host.Probe.Ran);
-        Assert.Equal(new[] { TimeSpan.FromSeconds(7) }, host.Transport.NackDelays);
+        Assert.Equal(new[] { TimeSpan.FromSeconds(7) }, host.Transport.DeferDelays);
+        Assert.Empty(host.Transport.NackDelays);
         Assert.Equal(new[] { "claim:m-1" }, inbox.Calls);
         Assert.Empty(host.DeadLettered);
     }
@@ -72,7 +73,8 @@ public sealed class MessageInboxTests
         await host.Consumer.RunOnceAsync();
 
         Assert.Contains(TimeSpan.FromSeconds(7), host.Clock.Waited);
-        Assert.Equal(new[] { TimeSpan.Zero }, host.Transport.NackDelays);
+        Assert.Equal(new[] { TimeSpan.Zero }, host.Transport.DeferDelays);
+        Assert.Empty(host.Transport.NackDelays);
         Assert.Empty(host.Probe.Ran);
     }
 

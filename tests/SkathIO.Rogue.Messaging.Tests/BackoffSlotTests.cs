@@ -178,7 +178,7 @@ public sealed class BackoffSlotTests
         public ValueTask DisposeAsync() => _services.DisposeAsync();
     }
 
-    /// <summary>An <see cref="InMemoryTransport"/> without native delay: it nacks every message with none.</summary>
+    /// <summary>An <see cref="InMemoryTransport"/> without native delay: it puts every message back with none.</summary>
     private sealed class NoDelayTransport : IMessageTransport
     {
         private readonly InMemoryTransport _inner;
@@ -194,6 +194,8 @@ public sealed class BackoffSlotTests
         public ValueTask AckAsync(ReceivedMessage message, CancellationToken cancellationToken) => _inner.AckAsync(message, cancellationToken);
 
         public ValueTask NackAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken) => _inner.NackAsync(message, TimeSpan.Zero, cancellationToken);
+
+        public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken) => _inner.DeferAsync(message, TimeSpan.Zero, cancellationToken);
 
         public ValueTask DeadLetterAsync(ReceivedMessage message, string reason, CancellationToken cancellationToken) => _inner.DeadLetterAsync(message, reason, cancellationToken);
     }

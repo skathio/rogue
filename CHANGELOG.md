@@ -128,7 +128,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   have succeeded (an event handled because it arrived from the bus is not sent back). Each message
   travels in a `MessageEnvelope` with an id, its name, a content type, correlation and causation ids
   (taken from the message being handled, if any) and the W3C `traceparent`. `IMessageTransport` is
-  the transport contract: batch send, receive, ack, nack with a delay, dead-letter, and capability
+  the transport contract: batch send, receive, ack, nack with a delay, defer (put back unhandled,
+  with the same delivery count), dead-letter, and capability
   flags (`NativeDelay`, `NativeDeadLetter`, `BatchSend`) whose gaps the consumer fills in.
   `InMemoryTransport` keeps messages in memory, for tests and single-process development. The
   `MessageConsumer` runs at most `MaxConcurrency` handlers at once, each in its own service scope,
@@ -162,7 +163,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   `DbTransaction`: once the transaction commits, a job worker relays it to the transport, and if it
   rolls back nothing is sent. The inbox, kept in the same store, records each message id the consumer
   handles, so a message delivered twice runs its handlers once (`MessageOutboxOptions.InboxLease`
-  bounds how long one delivery holds the id). `IMessageInbox` is the consumer's inbox contract in
+  bounds how long one delivery holds the id). A delivery put back because another one holds its id
+  does not use up one of its `MaxAttempts`. `IMessageInbox` is the consumer's inbox contract in
   `SkathIO.Rogue.Messaging`. Targets `net8.0` and `net10.0`; adds no package of its own.
 - A native AOT sample for the jobs and messaging packages
   (`samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample`): a job publishes a message that a handler

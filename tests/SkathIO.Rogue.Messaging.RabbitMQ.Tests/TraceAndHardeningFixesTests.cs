@@ -330,6 +330,8 @@ public sealed class TraceAndHardeningFixesTests
             return Inner.NackAsync(message, delay, cancellationToken);
         }
 
+        public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken) => Inner.DeferAsync(message, delay, cancellationToken);
+
         public ValueTask DeadLetterAsync(ReceivedMessage message, string reason, CancellationToken cancellationToken) => Inner.DeadLetterAsync(message, reason, cancellationToken);
     }
 

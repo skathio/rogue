@@ -5,6 +5,7 @@ SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.AckAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.Capabilities.get -> SkathIO.Rogue.Messaging.TransportCapabilities
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.DeadLetterAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.DeferAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.Dispose() -> void
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.DisposeAsync() -> System.Threading.Tasks.ValueTask
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransport.NackAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask

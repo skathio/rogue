@@ -52,7 +52,7 @@ internal sealed class StepClock : TimeProvider
     }
 }
 
-/// <summary>An <see cref="InMemoryTransport"/> that reports the capabilities a test gives it and records each nack's delay.</summary>
+/// <summary>An <see cref="InMemoryTransport"/> that reports the capabilities a test gives it and records each nack's and deferral's delay.</summary>
 internal sealed class RecordingTransport : IMessageTransport
 {
     private readonly InMemoryTransport _inner;
@@ -67,6 +67,8 @@ internal sealed class RecordingTransport : IMessageTransport
 
     public ConcurrentQueue<TimeSpan> NackDelays { get; } = new ConcurrentQueue<TimeSpan>();
 
+    public ConcurrentQueue<TimeSpan> DeferDelays { get; } = new ConcurrentQueue<TimeSpan>();
+
     public InMemoryTransport Inner => _inner;
 
     public ValueTask SendAsync(IReadOnlyList<MessageEnvelope> messages, CancellationToken cancellationToken) => _inner.SendAsync(messages, cancellationToken);
@@ -79,6 +81,12 @@ internal sealed class RecordingTransport : IMessageTransport
     {
         NackDelays.Enqueue(delay);
         return _inner.NackAsync(message, delay, cancellationToken);
+    }
+
+    public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
+    {
+        DeferDelays.Enqueue(delay);
+        return _inner.DeferAsync(message, delay, cancellationToken);
     }
 
     public ValueTask DeadLetterAsync(ReceivedMessage message, string reason, CancellationToken cancellationToken) => _inner.DeadLetterAsync(message, reason, cancellationToken);
