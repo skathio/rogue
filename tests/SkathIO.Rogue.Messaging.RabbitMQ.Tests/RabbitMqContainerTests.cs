@@ -35,7 +35,8 @@ public sealed class RabbitMqContainerTests
             Assert.Equal(3, Assert.IsType<int>(deadLettered.BasicProperties.Headers!["rogue-delivery-count"]));
             string reason = Encoding.UTF8.GetString((byte[])deadLettered.BasicProperties.Headers["rogue-dead-letter-reason"]!);
             Assert.Contains("delivery 3 of 3", reason, StringComparison.Ordinal);
-            Assert.Contains("handler failed", reason, StringComparison.Ordinal);
+            Assert.EndsWith("System.InvalidOperationException", reason, StringComparison.Ordinal);
+            Assert.DoesNotContain("handler failed", reason, StringComparison.Ordinal);
             Assert.Equal("{\"Id\":1,\"Note\":\"fail\"}", Encoding.UTF8.GetString(deadLettered.Body.Span));
             Assert.Equal(0u, await raw.MessageCountAsync(host.Options.ServiceName!));
         }

@@ -367,7 +367,10 @@ public sealed class MessageConsumer
                     break;
                 case RogueMessagingTelemetry.DeadLettered:
                     _logDeadLetter(_logger, id, Loggable(envelope.Name), delivery.DeliveryCount, outcome.Reason!, outcome.Exception);
-                    string reason = outcome.Exception is null ? outcome.Reason! : outcome.Reason + " " + outcome.Exception.GetType().FullName + ": " + outcome.Exception.Message;
+                    // The reason travels with the message to wherever dead letters are read, so it names
+                    // the exception's type only: its message can quote the body or a secret. The log
+                    // above keeps the whole exception.
+                    string reason = outcome.Exception is null ? outcome.Reason! : outcome.Reason + " " + outcome.Exception.GetType().FullName;
                     await _transport.DeadLetterAsync(delivery, TrimReason(reason), CancellationToken.None).ConfigureAwait(false);
                     break;
                 default:

@@ -135,7 +135,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   redelivers a failed message after a doubling, capped delay until `MaxAttempts` deliveries have
   failed, then dead-letters it. A message with an unknown name, a body over `MaxMessageBytes`, or a
   body that is not JSON of its type within `MaxJsonDepth` is dead-lettered at once without running
-  any handler. Logs carry a message's id and name, never its body. Bodies go through your
+  any handler. The reason sent with a dead-lettered message names the exception's type but never its
+  message, which stays in the log. Logs carry a message's id and name, never its body. Bodies go through your
   System.Text.Json `JsonSerializerContext` (`MessagingOptions.SerializerContext`), checked at
   startup; a name taken by two types also fails startup. Telemetry comes from its own
   `SkathIO.Rogue.Messaging` activity source and meter, and the consume activity continues the

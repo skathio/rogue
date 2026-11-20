@@ -97,7 +97,7 @@ public sealed class MessageConsumerTests
 
         Assert.Equal(new[] { 5d, 10d, 12d }, host.Transport.NackDelays.Select(static d => d.TotalSeconds));
         Assert.Equal(4, host.Probe.Ran.Count);
-        Assert.StartsWith("The handler failed on delivery 4 of 4. System.InvalidOperationException: handler failed", Assert.Single(host.DeadLettered).Reason, StringComparison.Ordinal);
+        Assert.Equal("The handler failed on delivery 4 of 4. System.InvalidOperationException", Assert.Single(host.DeadLettered).Reason);
     }
 
     [Fact]
