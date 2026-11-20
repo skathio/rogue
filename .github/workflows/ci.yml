@@ -108,6 +108,42 @@ jobs:
           fi
           echo "OK: Rogue interface-path allocation ${measured} B is within ceiling ${ceiling} B"
 
+  jobs-bench-smoke:
+    name: Jobs benchmark smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Jobs benchmark smoke run (Rogue against Hangfire.InMemory)
+        run: dotnet run --project bench/SkathIO.Rogue.Benchmarks.Jobs/SkathIO.Rogue.Benchmarks.Jobs.csproj -c Release -- --filter '*InMemoryJobsBenchmarks*' --job short --exporters json
+      - name: Check Rogue's allocation per job
+        run: |
+          # Gates the allocation of every Rogue benchmark, divided by its job count, against the
+          # committed ceiling. Allocation is gated, not time: it is stable on shared CI runners.
+          ceiling=$(jq -e '.jobs_rogue_bytes_per_job_ceiling' .bench/thresholds.json) || {
+            echo "FAIL: jobs_rogue_bytes_per_job_ceiling is missing from .bench/thresholds.json" && exit 1
+          }
+          result_file=$(find BenchmarkDotNet.Artifacts/results -name '*InMemoryJobsBenchmarks-report-full-compressed.json' | head -1)
+          if [ -z "$result_file" ]; then
+            echo "FAIL: no BDN JSON artifact for InMemoryJobsBenchmarks; a missing artifact is a broken run, not a pass" && exit 1
+          fi
+          rows=$(jq '[.Benchmarks[] | {name: (.Method + " " + .Parameters), rogue: (.Method | startswith("Rogue_")), bytes: .Memory.BytesAllocatedPerOperation, jobs: (.Parameters | capture("Jobs=(?<n>[0-9]+)").n | tonumber)}]' "$result_file")
+          echo "$rows" | jq -r '.[] | "\(.name): \(if .bytes == null then "no result" else "\(.bytes / .jobs | floor) B per job" end)"'
+          missing=$(echo "$rows" | jq '[.[] | select(.bytes == null)] | length')
+          rogue=$(echo "$rows" | jq '[.[] | select(.rogue)] | length')
+          if [ "$missing" != "0" ] || [ "$rogue" = "0" ]; then
+            echo "FAIL: a benchmark has no result, or no Rogue benchmark ran; treat as a broken run" && exit 1
+          fi
+          over=$(echo "$rows" | jq --argjson c "$ceiling" '[.[] | select(.rogue and (.bytes / .jobs) > $c) | .name]')
+          if [ "$over" != "[]" ]; then
+            echo "FAIL: over the ceiling of ${ceiling} B per job: ${over}" && exit 1
+          fi
+          echo "OK: every Rogue benchmark is within ${ceiling} B per job"
+
   license-check:
     name: License check
     runs-on: ubuntu-latest

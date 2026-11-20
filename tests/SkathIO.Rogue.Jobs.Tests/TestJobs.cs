@@ -19,6 +19,8 @@ public sealed class JobProbe
 
     public ConcurrentQueue<int> ScopeIds { get; } = new ConcurrentQueue<int>();
 
+    public ConcurrentQueue<int> DisposedScopeIds { get; } = new ConcurrentQueue<int>();
+
     /// <summary>Holds every <see cref="GateJob"/> until a test opens it.</summary>
     public TaskCompletionSource Gate { get; } = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -32,12 +34,17 @@ public sealed class JobProbe
     public int MaxRunning;
 }
 
-/// <summary>A scoped service, to show each job runs in a scope of its own.</summary>
-public sealed class ScopedCounter
+/// <summary>A scoped service, to show which scope each job runs in and when that scope is disposed.</summary>
+public sealed class ScopedCounter : IDisposable
 {
     private static int _next;
+    private readonly JobProbe _probe;
+
+    public ScopedCounter(JobProbe probe) => _probe = probe;
 
     public int Id { get; } = Interlocked.Increment(ref _next);
+
+    public void Dispose() => _probe.DisposedScopeIds.Enqueue(Id);
 }
 
 [Job]

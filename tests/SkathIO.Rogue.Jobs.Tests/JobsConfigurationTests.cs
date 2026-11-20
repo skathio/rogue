@@ -65,6 +65,12 @@ public sealed class JobsConfigurationTests
     }
 
     [Fact]
+    public void ScopePerBatch_IsOffUnlessAsked()
+    {
+        Assert.False(new JobsOptions().ScopePerBatch);
+    }
+
+    [Fact]
     public async Task MissingSerializerContext_FailsAtStartup()
     {
         await using JobsHost host = JobsHost.Create(static o => o.SerializerContext = null);

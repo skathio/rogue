@@ -47,6 +47,15 @@ public sealed class JobsOptions
     /// <summary>The most jobs one worker runs at the same time.</summary>
     public int MaxConcurrency { get; set; } = Environment.ProcessorCount;
 
+    /// <summary>
+    /// Whether the jobs of one claimed batch share a single service scope, disposed once the last of
+    /// them has run, instead of each job getting a scope of its own (the default). It saves a scope and
+    /// the scoped services built in it for each job. Turn it on only when every scoped service the
+    /// handlers use can be shared by jobs running one after another and, unless
+    /// <see cref="MaxConcurrency"/> is 1, at the same time: a <c>DbContext</c>, for one, cannot.
+    /// </summary>
+    public bool ScopePerBatch { get; set; }
+
     /// <summary>How long an idle worker waits before it looks for jobs again, unless an enqueue wakes it.</summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
 

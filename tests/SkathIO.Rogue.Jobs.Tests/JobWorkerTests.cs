@@ -108,6 +108,70 @@ public sealed class JobWorkerTests
     }
 
     [Fact]
+    public async Task ScopePerBatch_JobsOfOneClaim_ShareOneScope_DisposedOnceAllHaveRun()
+    {
+        await using JobsHost host = JobsHost.Create(static o => o.ScopePerBatch = true);
+
+        await host.Scheduler.EnqueueMany(new[] { new RecordValue(1), new RecordValue(2), new RecordValue(3) });
+        Assert.Equal(3, await host.Worker.RunOnceAsync());
+
+        int scope = Assert.Single(host.Probe.ScopeIds.Distinct());
+        Assert.Equal(new[] { scope }, host.Probe.DisposedScopeIds);
+    }
+
+    [Fact]
+    public async Task ScopePerBatch_EachClaimedBatch_GetsAScopeOfItsOwn()
+    {
+        await using JobsHost host = JobsHost.Create(static o =>
+        {
+            o.ScopePerBatch = true;
+            o.BatchSize = 2;
+        });
+
+        await host.Scheduler.EnqueueMany(new[] { new RecordValue(1), new RecordValue(2), new RecordValue(3) });
+        Assert.Equal(2, await host.Worker.RunOnceAsync());
+        Assert.Equal(1, await host.Worker.RunOnceAsync());
+
+        int[] scopes = host.Probe.ScopeIds.ToArray();
+        Assert.Equal(scopes[0], scopes[1]);
+        Assert.NotEqual(scopes[0], scopes[2]);
+        Assert.Equal(new[] { scopes[0], scopes[2] }, host.Probe.DisposedScopeIds);
+    }
+
+    [Fact]
+    public async Task ScopePerBatch_Off_DisposesEachJobsScope_AsItsJobEnds()
+    {
+        await using JobsHost host = JobsHost.Create();
+
+        await host.Scheduler.EnqueueMany(new[] { new RecordValue(1), new RecordValue(2) });
+        await host.Worker.RunOnceAsync();
+
+        Assert.Equal(host.Probe.ScopeIds.Order(), host.Probe.DisposedScopeIds.Order());
+        Assert.Equal(2, host.Probe.DisposedScopeIds.Count);
+    }
+
+    [Fact]
+    public async Task ScopePerBatch_InRunAsync_SharesOneScopeAcrossTheClaimedBatch()
+    {
+        await using JobsHost host = JobsHost.Create(static o =>
+        {
+            o.ScopePerBatch = true;
+            o.MaxConcurrency = 4;
+        });
+        await host.Scheduler.EnqueueMany(new[] { new RecordValue(1), new RecordValue(2) });
+        using var stopping = new CancellationTokenSource();
+
+        Task worker = host.Worker.RunAsync(stopping.Token);
+        await WaitUntilAsync(() => !host.Probe.DisposedScopeIds.IsEmpty).WaitAsync(_hangGuard);
+        await stopping.CancelAsync();
+        await worker.WaitAsync(_hangGuard);
+
+        int scope = Assert.Single(host.Probe.ScopeIds.Distinct());
+        Assert.Equal(2, host.Probe.ScopeIds.Count);
+        Assert.Equal(new[] { scope }, host.Probe.DisposedScopeIds);
+    }
+
+    [Fact]
     public async Task FailedRun_IsRetriedAfterADoublingBackoff_UntilItSucceeds()
     {
         await using JobsHost host = JobsHost.Create();
@@ -341,5 +405,13 @@ public sealed class JobWorkerTests
         JobSnapshot snapshot = await host.SnapshotAsync(id);
         Assert.Equal(JobState.Enqueued, snapshot.State);
         Assert.Equal(0, snapshot.Attempt);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        while (!condition())
+        {
+            await Task.Delay(10);
+        }
     }
 }

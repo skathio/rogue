@@ -59,6 +59,15 @@
          Dependabot may still propose them; only v13+ is excluded via .github/dependabot.yml's
          ignore rule, so that boundary is never silently crossed. -->
     <PackageVersion Include="MediatR" Version="12.5.0" />
+    <!-- Bench only: the Hangfire baselines the jobs bench (bench/SkathIO.Rogue.Benchmarks.Jobs) measures
+         Rogue's jobs against. Hangfire is LGPL-3.0, approved by the maintainer for bench use only: no
+         project under src/, tests/ or samples/ may reference it, and it ships in no package.
+         Hangfire.Core comes in transitively. -->
+    <PackageVersion Include="Hangfire.InMemory" Version="1.0.0" />
+    <PackageVersion Include="Hangfire.SqlServer" Version="1.8.25" />
+    <!-- Bench only (MIT): Hangfire.Core asks for Newtonsoft.Json 11.0.1, which has a known high
+         severity advisory (GHSA-5crp-9r3c-p9vr); the jobs bench references it directly to lift it. -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <!-- Public API surface enforcement -->
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />

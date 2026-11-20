@@ -46,6 +46,15 @@ comparison-only dependency; it is not a runtime dependency of any shipped packag
     Server client for .NET can do without. It reaches consumers only through
     `SkathIO.Rogue.Jobs.SqlServer`; every other package stays free of it. Accepted by the
     maintainer on 2026-11-20.
+- **Bench-only baselines.** The jobs bench (`bench/SkathIO.Rogue.Benchmarks.Jobs`) measures Rogue's
+  jobs against Hangfire, accepted by the maintainer on 2026-11-20 for bench use only. These packages
+  are not on the allow-list and must never enter a packable project's restore graph, or any project
+  under `src/`, `tests/` or `samples/`; `JobsBenchRulesTests` checks both. As nuget.org reports them,
+  verified 2026-11-20:
+  - `Hangfire.InMemory` 1.0.0, `Hangfire.SqlServer` 1.8.25 and their dependency `Hangfire.Core`
+    1.8.25: LGPL-3.0 (or a Hangfire commercial license), from the `LICENSE.md` in each package.
+  - `Newtonsoft.Json` 13.0.4: MIT. Referenced directly to lift `Hangfire.Core`'s 11.0.1, which has a
+    known high severity advisory.
 - **Allow-list scope is the full build-time restore graph, not just shipped `.nuspec`
   dependencies.** `dotnet list package --include-transitive` enumerates everything needed to
   restore and build each packable project, including `PrivateAssets="All"`/build-time-only

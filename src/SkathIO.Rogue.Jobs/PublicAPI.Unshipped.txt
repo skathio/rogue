@@ -135,6 +135,8 @@ SkathIO.Rogue.Jobs.JobsOptions.MaxPayloadBytes.set -> void
 SkathIO.Rogue.Jobs.JobsOptions.PollInterval.get -> System.TimeSpan
 SkathIO.Rogue.Jobs.JobsOptions.PollInterval.set -> void
 SkathIO.Rogue.Jobs.JobsOptions.Queues.get -> System.Collections.Generic.IList<string!>!
+SkathIO.Rogue.Jobs.JobsOptions.ScopePerBatch.get -> bool
+SkathIO.Rogue.Jobs.JobsOptions.ScopePerBatch.set -> void
 SkathIO.Rogue.Jobs.JobsOptions.SerializerContext.get -> System.Text.Json.Serialization.JsonSerializerContext?
 SkathIO.Rogue.Jobs.JobsOptions.SerializerContext.set -> void
 SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions

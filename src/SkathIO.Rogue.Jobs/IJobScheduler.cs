@@ -7,7 +7,8 @@ namespace SkathIO.Rogue.Jobs;
 
 /// <summary>
 /// Enqueues commands as background jobs. A job runs the command's handler, through the full Rogue
-/// pipeline, on a worker, in a service scope of its own.
+/// pipeline, on a worker, in a service scope of its own, or of its claimed batch when
+/// <see cref="JobsOptions.ScopePerBatch"/> is on.
 /// </summary>
 /// <remarks>
 /// A command whose <c>[Job]</c> sets a unique key is stored only while no job of its kind holding that

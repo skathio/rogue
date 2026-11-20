@@ -11,8 +11,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace SkathIO.Rogue.Jobs;
 
 /// <summary>
-/// Claims jobs from the store and runs them, each in a service scope of its own, through the Rogue
-/// dispatcher. A failed run is retried after an exponential backoff until its attempts are used up,
+/// Claims jobs from the store and runs them through the Rogue dispatcher, each in a service scope of
+/// its own, or of its claimed batch when <see cref="JobsOptions.ScopePerBatch"/> is on. A failed run is retried after an exponential backoff until its attempts are used up,
 /// then dead-lettered; a payload that cannot be read is dead-lettered at once. A job of a kind this
 /// process does not know is put back for later without counting the attempt, so during a rolling
 /// deploy an older worker leaves a newer kind to a worker that knows it.
@@ -57,6 +57,10 @@ public sealed class JobWorker
     private static readonly Action<ILogger, Guid, string, TimeSpan, Exception?> _logUnknownKind =
         LoggerMessage.Define<Guid, string, TimeSpan>(LogLevel.Warning, new EventId(8, "JobKindUnknown"),
             "Job {JobId} has the kind '{JobKind}', which this process does not know; it is put back to run in {Delay}.");
+
+    private static readonly Action<ILogger, Exception?> _logBatchScopeDisposeFailed =
+        LoggerMessage.Define(LogLevel.Error, new EventId(9, "JobBatchScopeDisposeFailed"),
+            "Disposing the service scope a batch of jobs shared failed after every job in it had run.");
 
     private readonly JobRegistry _registry;
     private readonly IJobStore _store;
@@ -111,13 +115,14 @@ public sealed class JobWorker
                 // counted before the claim are still free for the rest.
                 holdingSlot = false;
                 Hold(claimed);
+                BatchScope? batch = StartBatch(claimed.Count);
                 for (int i = 0; i < claimed.Count; i++)
                 {
                     if (i > 0)
                     {
                         await slots.WaitAsync(CancellationToken.None).ConfigureAwait(false);
                     }
-                    _ = RunInSlotAsync(claimed[i], slots, stoppingToken);
+                    _ = RunInSlotAsync(claimed[i], slots, batch, stoppingToken);
                 }
             }
         }
@@ -160,12 +165,13 @@ public sealed class JobWorker
             {
                 IReadOnlyList<ClaimedJob> claimed = await _store.ClaimAsync(queue, options.BatchSize, options.LeaseDuration, cancellationToken).ConfigureAwait(false);
                 Hold(claimed);
+                BatchScope? batch = StartBatch(claimed.Count);
                 var running = new Task[claimed.Count];
                 for (int i = 0; i < claimed.Count; i++)
                 {
                     // Not cancellable: every claimed job must run or be put back, never abandoned.
                     await slots.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-                    running[i] = RunInSlotAsync(claimed[i], slots, cancellationToken);
+                    running[i] = RunInSlotAsync(claimed[i], slots, batch, cancellationToken);
                 }
                 await Task.WhenAll(running).ConfigureAwait(false);
                 ran += claimed.Count;
@@ -198,8 +204,11 @@ public sealed class JobWorker
         return held;
     }
 
-    /// <summary>Runs one claimed job and stores its outcome; returns the outcome's telemetry name. Never throws.</summary>
-    internal async Task<string> ExecuteAsync(ClaimedJob job, CancellationToken stoppingToken)
+    /// <summary>
+    /// Runs one claimed job, in <paramref name="batch"/>'s scope when given and otherwise in a scope of
+    /// its own, and stores its outcome; returns the outcome's telemetry name. Never throws.
+    /// </summary>
+    internal async Task<string> ExecuteAsync(ClaimedJob job, CancellationToken stoppingToken, BatchScope? batch = null)
     {
         _running[job.Id] = job.Lease;
         long started = _time.GetTimestamp();
@@ -208,7 +217,7 @@ public sealed class JobWorker
         activity?.SetTag(RogueJobsTelemetry.QueueTag, job.Queue);
         activity?.SetTag(RogueJobsTelemetry.AttemptTag, job.Attempt);
 
-        Outcome outcome = await RunJobAsync(job, stoppingToken).ConfigureAwait(false);
+        Outcome outcome = await RunJobAsync(job, batch, stoppingToken).ConfigureAwait(false);
         await SettleAsync(job, outcome).ConfigureAwait(false);
         _running.TryRemove(job.Id, out _);
 
@@ -239,15 +248,38 @@ public sealed class JobWorker
         }
     }
 
-    private async Task RunInSlotAsync(ClaimedJob job, SemaphoreSlim slots, CancellationToken stoppingToken)
+    // One scope for a whole claimed batch when the options ask for it; null means a scope per job.
+    private BatchScope? StartBatch(int jobs) =>
+        _registry.Options.ScopePerBatch && jobs > 0 ? new BatchScope(_scopes.CreateAsyncScope(), jobs) : null;
+
+    private async Task RunInSlotAsync(ClaimedJob job, SemaphoreSlim slots, BatchScope? batch, CancellationToken stoppingToken)
     {
         try
         {
-            await ExecuteAsync(job, stoppingToken).ConfigureAwait(false);
+            await ExecuteAsync(job, stoppingToken, batch).ConfigureAwait(false);
         }
         finally
         {
+            await LeaveBatchAsync(batch).ConfigureAwait(false);
             slots.Release();
+        }
+    }
+
+    // The batch's last job disposes its scope. A scoped service that throws on dispose fails no job,
+    // since every job of the batch has already settled, so it is logged instead.
+    private async ValueTask LeaveBatchAsync(BatchScope? batch)
+    {
+        if (batch is null)
+        {
+            return;
+        }
+        try
+        {
+            await batch.LeaveAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logBatchScopeDisposeFailed(_logger, ex);
         }
     }
 
@@ -301,7 +333,7 @@ public sealed class JobWorker
         }
     }
 
-    private async Task<Outcome> RunJobAsync(ClaimedJob job, CancellationToken stoppingToken)
+    private async Task<Outcome> RunJobAsync(ClaimedJob job, BatchScope? batch, CancellationToken stoppingToken)
     {
         JobsOptions options = _registry.Options;
         if (!_registry.TryGet(job.Kind, out JobBinding? binding))
@@ -316,7 +348,7 @@ public sealed class JobWorker
 
         try
         {
-            await InvokeAsync(binding, job, stoppingToken).ConfigureAwait(false);
+            await InvokeAsync(binding, job, batch, stoppingToken).ConfigureAwait(false);
             return Outcome.Complete;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -338,17 +370,22 @@ public sealed class JobWorker
         }
     }
 
-    private async Task InvokeAsync(JobBinding binding, ClaimedJob job, CancellationToken stoppingToken)
+    private async Task InvokeAsync(JobBinding binding, ClaimedJob job, BatchScope? batch, CancellationToken stoppingToken)
     {
         using CancellationTokenSource? timeout = binding.Timeout is { } limit ? new CancellationTokenSource(limit, _time) : null;
         using CancellationTokenSource? linked = timeout is null ? null : CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, timeout.Token);
-        AsyncServiceScope scope = _scopes.CreateAsyncScope();
+        CancellationToken token = linked?.Token ?? stoppingToken;
         try
         {
+            if (batch is not null)
+            {
+                await DispatchAsync(binding, batch.Services, job, token).ConfigureAwait(false);
+                return;
+            }
+            AsyncServiceScope scope = _scopes.CreateAsyncScope();
             await using (scope.ConfigureAwait(false))
             {
-                RogueDispatcher dispatcher = scope.ServiceProvider.GetRequiredService<RogueDispatcher>();
-                await binding.InvokeAsync(dispatcher, job.Payload, linked?.Token ?? stoppingToken).ConfigureAwait(false);
+                await DispatchAsync(binding, scope.ServiceProvider, job, token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException ex) when (timeout is { IsCancellationRequested: true } && !stoppingToken.IsCancellationRequested)
@@ -356,6 +393,9 @@ public sealed class JobWorker
             throw new TimeoutException("The job did not finish within " + binding.Timeout + ".", ex);
         }
     }
+
+    private static ValueTask DispatchAsync(JobBinding binding, IServiceProvider services, ClaimedJob job, CancellationToken cancellationToken) =>
+        binding.InvokeAsync(services.GetRequiredService<RogueDispatcher>(), job.Payload, cancellationToken);
 
     private async Task SettleAsync(ClaimedJob job, Outcome outcome)
     {
@@ -422,5 +462,22 @@ public sealed class JobWorker
         public static Outcome Retry(TimeSpan delay, Exception exception) => new Outcome(RogueJobsTelemetry.Retried, delay, exception);
 
         public static Outcome DeadLetter(Exception exception) => new Outcome(RogueJobsTelemetry.DeadLettered, TimeSpan.Zero, exception);
+    }
+
+    /// <summary>The service scope the jobs of one claimed batch share; the last job to leave disposes it.</summary>
+    internal sealed class BatchScope
+    {
+        private readonly AsyncServiceScope _scope;
+        private int _remaining;
+
+        public BatchScope(AsyncServiceScope scope, int jobs)
+        {
+            _scope = scope;
+            _remaining = jobs;
+        }
+
+        public IServiceProvider Services => _scope.ServiceProvider;
+
+        public ValueTask LeaveAsync() => Interlocked.Decrement(ref _remaining) == 0 ? _scope.DisposeAsync() : default;
     }
 }

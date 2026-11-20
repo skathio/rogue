@@ -85,6 +85,13 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
     with `AutoMigrate` or by `MigrateAsync()`.
   - `IJobScheduler.CreateJobs(commands)` serializes a batch of commands into `NewJob`s without
     storing them, for a store's own batch enqueue.
+- `JobsOptions.ScopePerBatch`: the jobs of one claimed batch share one service scope, disposed once
+  the last of them has run, instead of a scope each. Off by default, since a scoped service such as
+  a `DbContext` cannot be shared by jobs that run at the same time.
+- New benchmark: Rogue's jobs against Hangfire (`bench/SkathIO.Rogue.Benchmarks.Jobs`), at 1k, 10k
+  and 100k small jobs, against Hangfire.InMemory and against Hangfire.SqlServer on the same database
+  as Rogue's SQL Server store. A CI smoke gates Rogue's allocation per job against
+  `.bench/thresholds.json`. Hangfire is bench only and ships in no package.
 - `ROGUE019` warning, with a code fix: a `[Job]` type is not covered by a `[JsonSerializable]`
   attribute on the project's `JsonSerializerContext`. The fix adds the attribute.
 - **New package: `SkathIO.Rogue.Validation`**, source-generated request validation next to the
