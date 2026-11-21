@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
@@ -13,7 +14,7 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// The message transport over RabbitMQ. It publishes each message, persistent, to a durable topic
 /// exchange with its name as the routing key, and waits for the broker's publisher confirm. A consuming
 /// service gets a durable quorum queue, bound to the names it handles, that dead-letters to a queue of
-/// its own; the broker sends at most <see cref="RabbitMqTransportOptions.PrefetchCount"/> deliveries
+/// its own, and a wait queue where deferred deliveries wait out their delay; the broker sends at most <see cref="RabbitMqTransportOptions.PrefetchCount"/> deliveries
 /// ahead, and each is acked only when the consumer settles it as handled.
 /// </summary>
 /// <remarks>
@@ -24,21 +25,24 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// are delivered again by the broker; the transport drops its copies of them.
 /// </para>
 /// <para>
-/// RabbitMQ has no native delay, so the consumer waits out a retry delay itself. A message nacked for a
-/// retry is published back to the service's queue, then acked, its delivery count one higher signed under
-/// the shared <see cref="RabbitMqTransportOptions.DeliveryStampKey"/>, so a sender cannot set it; a dead-lettered
-/// one is published to the dead-letter queue with the reason in its <c>rogue-dead-letter-reason</c> header, then acked.
+/// RabbitMQ has no native delay for a single message, so the consumer waits out a failed message's retry
+/// delay itself. A message nacked for a retry is published back to the service's queue, then acked, its
+/// delivery count one higher signed under the shared <see cref="RabbitMqTransportOptions.DeliveryStampKey"/>,
+/// so a sender cannot set it. A deferred message (<see cref="TransportCapabilities.NativeDeferDelay"/>) is
+/// published to <see cref="RabbitMqTransportOptions.WaitQueue"/> with its delay as its expiration and
+/// its count unchanged, then acked; the broker dead-letters it back to the service's queue once it
+/// expires, so it waits without holding a prefetch place. A dead-lettered one is published to the
+/// dead-letter queue with the reason in its <c>rogue-dead-letter-reason</c> header, then acked.
 /// Each copy is confirmed by the broker before the original is acked, so a message is delivered at
 /// least once; when a copy cannot be published, the original is handed back to the broker (requeued,
-/// or dead-lettered without a reason), except a deferred one, which this consumer receives again,
-/// still unsettled, so that being deferred never costs it an attempt.
+/// or dead-lettered without a reason), except a deferred one, which is dead-lettered with its count
+/// kept, so that neither the consumer nor the broker sends it round again at once.
 /// </para>
 /// </remarks>
 public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDisposable
 {
-    private const string QueueTypeArgument = "x-queue-type";
-    private const string DeadLetterExchangeArgument = "x-dead-letter-exchange";
-    private const string DeadLetterRoutingKeyArgument = "x-dead-letter-routing-key";
+    // The reason a deferred delivery is dead-lettered with when the wait queue refuses its copy.
+    private const string RefusedDeferralReason = "Deferred, but the wait queue refused its copy; replay it once its id is free.";
 
     // How long a receive waits for the first delivery before it returns none.
     private static readonly TimeSpan _receiveWait = TimeSpan.FromSeconds(1);
@@ -80,7 +84,7 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
     }
 
     /// <inheritdoc />
-    public TransportCapabilities Capabilities => TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend;
+    public TransportCapabilities Capabilities => TransportCapabilities.NativeDeferDelay | TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend;
 
     /// <summary>The <see cref="RabbitMqTransportOptions.ServiceName"/>, which also names the service's queue.</summary>
     public string? ServiceName => _options.ServiceName;
@@ -198,15 +202,20 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
 
     /// <inheritdoc />
     /// <remarks>
-    /// The transport has no native delay, so <paramref name="delay"/> is not waited: the message is
-    /// published back to the service's queue at once, with the same delivery count.
+    /// The message waits out <paramref name="delay"/> on the broker: its copy, with the same signed
+    /// delivery count, goes to <see cref="RabbitMqTransportOptions.WaitQueue"/> with the delay, in whole
+    /// milliseconds rounded up and held to at most <see cref="int.MaxValue"/>, as its expiration, and
+    /// comes back to the service's queue when it expires. A copy expires only once those ahead of it in
+    /// the wait queue have, so a shorter delay behind a longer one waits for the longer. When the broker
+    /// refuses the copy, the message is dead-lettered with its count, and the refusal is thrown.
     /// </remarks>
     /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
     public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
         => PutBackAsync(message, delay, 0);
 
-    // Publishes the message back to the service's queue, its delivery count raised by countsAs: 1 for a
-    // failed attempt, 0 for a delivery put back unhandled.
+    // Publishes a copy of the message, its delivery count raised by countsAs: for a failed attempt (1)
+    // back to the service's queue, and for a delivery put back unhandled (0) to the wait queue, which
+    // holds it for the delay.
     private async ValueTask PutBackAsync(ReceivedMessage message, TimeSpan delay, int countsAs)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
@@ -218,13 +227,24 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
         MessageEnvelope envelope = delivery.Envelope;
         int count = delivery.DeliveryCount + countsAs;
         BasicProperties properties = RabbitMqWire.ToProperties(envelope, count, deliveryStamp: _stamp.Sign(envelope.Name, envelope.Id, count));
+        bool deferred = countsAs == 0;
+        if (deferred)
+        {
+            properties.Expiration = Expiration(delay);
+        }
         try
         {
-            await PublishCopyAsync(string.Empty, _options.ServiceName!, properties, envelope.Body).ConfigureAwait(false);
+            await PublishCopyAsync(string.Empty, deferred ? _options.WaitQueue! : _options.ServiceName!, properties, envelope.Body).ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            if (IsCurrent(delivery) && (countsAs > 0 || !HandBack(delivery)))
+            if (IsCurrent(delivery) && deferred && ex is not ObjectDisposedException)
+            {
+                // Requeued it would come straight back, as it would if handed to the consumer again, and
+                // go round as fast as the broker refuses. Kept with its count, it can be replayed.
+                await DeadLetterCopyAsync(delivery, RefusedDeferralReason).ConfigureAwait(false);
+            }
+            else if (IsCurrent(delivery))
             {
                 // Handed back to the broker. It marks the redelivery, which counts as one more attempt:
                 // right for a failed attempt, and for a deferral only when the transport is closing.
@@ -235,16 +255,29 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
         await OnChannelAsync(delivery, channel => channel.BasicAckAsync(delivery.Tag, false, CancellationToken.None)).ConfigureAwait(false);
     }
 
+    // The per-message TTL of a deferred copy: whole milliseconds, rounded up so a delay is never cut
+    // short, and held to int.MaxValue, well within what the broker accepts.
+    private static string Expiration(TimeSpan delay)
+    {
+        double milliseconds = Math.Ceiling(delay.TotalMilliseconds);
+        return (milliseconds >= int.MaxValue ? int.MaxValue : (int)milliseconds).ToString(CultureInfo.InvariantCulture);
+    }
+
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
     public async ValueTask DeadLetterAsync(ReceivedMessage message, string reason, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(reason);
         Delivery delivery = Settle(message);
-        if (!IsCurrent(delivery))
+        if (IsCurrent(delivery))
         {
-            return;
+            await DeadLetterCopyAsync(delivery, reason).ConfigureAwait(false);
         }
+    }
+
+    // Publishes a copy with the reason to the dead-letter queue, then acks the original.
+    private async Task DeadLetterCopyAsync(Delivery delivery, string reason)
+    {
         try
         {
             BasicProperties properties = RabbitMqWire.ToProperties(delivery.Envelope, delivery.DeliveryCount, reason);
@@ -324,12 +357,6 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
     }
 
     private bool IsCurrent(Delivery delivery) => delivery.Generation == Volatile.Read(ref _generation);
-
-    // Gives a deferred delivery whose copy could not be published back to this consumer, still unsettled
-    // with the broker, so it comes back with the count it had: a requeue would be marked redelivered and
-    // cost it an attempt. False once the transport is closing.
-    private bool HandBack(Delivery delivery)
-        => _deliveries.Writer.TryWrite(new Delivery(delivery.Envelope, delivery.DeliveryCount, this, delivery.Handle));
 
     // Settled on the channel the delivery came on: its tag means nothing on any other channel.
     private async Task OnChannelAsync(Delivery delivery, Func<IChannel, ValueTask> settle)
@@ -469,43 +496,5 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
         }
         _connection = connection;
         return connection;
-    }
-
-    // Declared on a channel of the connection, so the client declares it all again after a recovery.
-    private async Task DeclareTopologyAsync(IConnection connection, CancellationToken cancellationToken)
-    {
-        IChannel channel = await connection.CreateChannelAsync(null, cancellationToken).ConfigureAwait(false);
-        await using (channel.ConfigureAwait(false))
-        {
-            await channel.ExchangeDeclareAsync(_options.Exchange, ExchangeType.Topic, true, false, null, false, cancellationToken).ConfigureAwait(false);
-            await channel.ExchangeDeclareAsync(_options.DeadLetterExchange, ExchangeType.Direct, true, false, null, false, cancellationToken).ConfigureAwait(false);
-            if (_options.ServiceName is not { } queue)
-            {
-                return;
-            }
-            var quorum = new Dictionary<string, object?> { [QueueTypeArgument] = "quorum" };
-            await channel.QueueDeclareAsync(_options.DeadLetterQueue!, true, false, false, quorum, false, cancellationToken).ConfigureAwait(false);
-            await channel.QueueBindAsync(_options.DeadLetterQueue!, _options.DeadLetterExchange, queue, null, false, cancellationToken).ConfigureAwait(false);
-
-            var arguments = new Dictionary<string, object?>
-            {
-                [QueueTypeArgument] = "quorum",
-                [DeadLetterExchangeArgument] = _options.DeadLetterExchange,
-                [DeadLetterRoutingKeyArgument] = queue,
-            };
-            await channel.QueueDeclareAsync(queue, true, false, false, arguments, false, cancellationToken).ConfigureAwait(false);
-            foreach (string name in _subscriptions)
-            {
-                await channel.QueueBindAsync(queue, _options.Exchange, name, null, false, cancellationToken).ConfigureAwait(false);
-            }
-            foreach (RabbitMqTransportOptions.RoutingKeyMap map in _options.RoutingKeyMaps)
-            {
-                await channel.QueueBindAsync(queue, map.Exchange, map.RoutingKey, null, false, cancellationToken).ConfigureAwait(false);
-            }
-            foreach (RabbitMqTransportOptions.Binding binding in _options.Bindings)
-            {
-                await channel.QueueBindAsync(queue, binding.Exchange, binding.BindingKey, null, false, cancellationToken).ConfigureAwait(false);
-            }
-        }
     }
 }

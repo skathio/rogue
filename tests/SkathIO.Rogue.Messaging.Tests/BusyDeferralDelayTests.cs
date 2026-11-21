@@ -10,13 +10,15 @@ namespace SkathIO.Rogue.Messaging.Tests;
 /// <summary>
 /// How long a delivery the inbox turns away as busy stays away: <see cref="MessagingOptions.RetryDelay"/>,
 /// not doubled, or <see cref="MessagingOptions.PollInterval"/> when no retry delay is set, so duplicates
-/// of one id never come round again at the transport's speed. A transport with native delay is given the
-/// delay; without it the consumer waits the delay out and puts the delivery back with none left.
+/// of one id never come round again at the transport's speed. A transport with native delay, or one that
+/// delays deferrals only, is given the delay; without either the consumer waits the delay out and puts
+/// the delivery back with none left.
 /// </summary>
 public sealed class BusyDeferralDelayTests
 {
     private const TransportCapabilities WithNativeDelay = TransportCapabilities.NativeDelay | TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend;
     private const TransportCapabilities WithoutNativeDelay = TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend;
+    private const TransportCapabilities WithDeferDelayOnly = TransportCapabilities.NativeDeferDelay | TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend;
 
     private static readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(3);
 
@@ -49,6 +51,40 @@ public sealed class BusyDeferralDelayTests
 
         Assert.Equal(new[] { TimeSpan.FromSeconds(expectedSeconds) }, host.Clock.Waited.ToArray());
         Assert.Equal(new[] { TimeSpan.Zero }, host.Transport.DeferDelays.ToArray());
+    }
+
+    [Theory]
+    [InlineData(0, 3)]
+    [InlineData(1, 1)]
+    [InlineData(7, 7)]
+    public async Task WithDeferDelayOnly_ABusyDelivery_IsDeferredForItsDelay_AndNothingWaitsHere(int retrySeconds, int expectedSeconds)
+    {
+        await using MessagingHost host = Host(retrySeconds, WithDeferDelayOnly);
+
+        await host.Transport.SendAsync(new[] { Message() }, CancellationToken.None);
+        await host.Consumer.RunOnceAsync();
+
+        Assert.Equal(new[] { TimeSpan.FromSeconds(expectedSeconds) }, host.Transport.DeferDelays.ToArray());
+        Assert.Empty(host.Clock.Waited);
+    }
+
+    [Fact]
+    public async Task WithDeferDelayOnly_AFailedDelivery_StillWaitsItsRetryDelayHere()
+    {
+        await using MessagingHost host = MessagingHost.Create(
+            options =>
+            {
+                options.RetryDelay = TimeSpan.FromSeconds(2);
+                options.MaxAttempts = 3;
+            },
+            WithDeferDelayOnly);
+
+        await host.Transport.SendAsync(new[] { MessagingHost.Envelope("test.order-placed", "{\"Id\":1,\"Note\":\"fail\"}") }, CancellationToken.None);
+        await host.Consumer.RunOnceAsync();
+
+        Assert.Equal(new[] { TimeSpan.FromSeconds(2) }, host.Clock.Waited.ToArray());
+        Assert.Equal(new[] { TimeSpan.Zero }, host.Transport.NackDelays.ToArray());
+        Assert.Empty(host.Transport.DeferDelays);
     }
 
     [Theory]

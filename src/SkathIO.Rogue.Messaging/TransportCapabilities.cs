@@ -25,4 +25,12 @@ public enum TransportCapabilities
 
     /// <summary>A batch passed to <see cref="IMessageTransport.SendAsync"/> goes in one round trip.</summary>
     BatchSend = 4,
+
+    /// <summary>
+    /// The transport holds a message deferred with a delay until the delay has passed, even when it
+    /// lacks <see cref="NativeDelay"/> for nacked ones. The consumer then hands it the delay of each
+    /// delivery an inbox turns away as busy instead of waiting it out, so such deliveries hold no place
+    /// in its unsettled window; it still waits out the retry delay of a failed message itself.
+    /// </summary>
+    NativeDeferDelay = 8,
 }

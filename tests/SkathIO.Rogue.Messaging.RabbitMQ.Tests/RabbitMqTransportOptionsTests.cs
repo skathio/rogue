@@ -134,6 +134,26 @@ public sealed class RabbitMqTransportOptionsTests
     }
 
     [Fact]
+    public void TheWaitQueue_FollowsTheService_AndIsNullWithoutOne()
+    {
+        Assert.Equal("billing.wait", new RabbitMqTransportOptions { ServiceName = "billing" }.WaitQueue);
+        Assert.Null(new RabbitMqTransportOptions().WaitQueue);
+    }
+
+    [Fact]
+    public void TheLongestServiceName_LeavesRoomForItsWaitQueue()
+    {
+        string longest = new string('s', RabbitMqTransportOptions.MaxNameLength - ".dead-letter".Length);
+        var options = new RabbitMqTransportOptions { ServiceName = longest, DeliveryStampKey = RabbitMqHost.DeliveryStampKey };
+
+        _ = new RabbitMqTransport(options, Array.Empty<string>());
+
+        Assert.True(options.WaitQueue!.Length <= RabbitMqTransportOptions.MaxNameLength);
+        options.ServiceName = longest + "s";
+        Assert.Throws<ArgumentException>(() => new RabbitMqTransport(options, Array.Empty<string>()));
+    }
+
+    [Fact]
     public void TheTransport_KeepsACopy_SoLaterChangesHaveNoEffect()
     {
         var options = new RabbitMqTransportOptions { ServiceName = "billing", DeliveryStampKey = RabbitMqHost.DeliveryStampKey };

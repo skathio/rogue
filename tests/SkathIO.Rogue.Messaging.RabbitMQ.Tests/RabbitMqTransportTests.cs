@@ -14,11 +14,11 @@ public sealed class RabbitMqTransportTests
     private static readonly Uri _nowhere = new Uri("amqp://127.0.0.1:1/");
 
     [Fact]
-    public void Capabilities_AreNativeDeadLetterAndBatchSend_WithoutNativeDelay()
+    public void Capabilities_AreNativeDeferDelayDeadLetterAndBatchSend_WithoutNativeDelay()
     {
         var transport = new RabbitMqTransport(new RabbitMqTransportOptions { DeliveryStampKey = RabbitMqHost.DeliveryStampKey }, Array.Empty<string>());
 
-        Assert.Equal(TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend, transport.Capabilities);
+        Assert.Equal(TransportCapabilities.NativeDeferDelay | TransportCapabilities.NativeDeadLetter | TransportCapabilities.BatchSend, transport.Capabilities);
     }
 
     [Theory]

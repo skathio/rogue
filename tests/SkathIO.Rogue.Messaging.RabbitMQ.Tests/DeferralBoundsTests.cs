@@ -13,7 +13,8 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ.Tests;
 /// Duplicates of one message id cannot stall the consumer: of the deliveries the inbox turns away as
 /// busy, at most half the transport's unsettled window waits out a delay, and with no retry delay a busy
 /// delivery still does not come straight back. A busy delivery is deferred, so it never costs an
-/// attempt. Built in memory over a transport with no native delay, as RabbitMQ is.
+/// attempt. Built in memory over a transport with no native delay of either kind; RabbitMQ delays its
+/// deferrals on the broker, so there no busy delivery waits in the consumer (see BrokerDelayQueueTests).
 /// </summary>
 public sealed class BusyInboxBoundTests
 {
@@ -203,8 +204,8 @@ public sealed class BusyInboxBoundTests
     }
 
     /// <summary>
-    /// An in-memory transport that, like RabbitMQ, has no native delay: a message nacked or deferred is
-    /// put back at once, whatever delay it is given. It reports an unsettled window and counts each settle.
+    /// An in-memory transport with no native delay: a message nacked or deferred is put back at once,
+    /// whatever delay it is given. It reports an unsettled window and counts each settle.
     /// </summary>
     private sealed class NoDelayTransport : IMessageTransport
     {
@@ -330,8 +331,9 @@ public sealed class BusyInboxBoundTests
 }
 
 /// <summary>
-/// A deferral never costs an attempt, even when the copy the transport puts back on its queue cannot be
-/// published and the original goes back to the broker instead. Against a real broker in a container.
+/// A deferral never costs an attempt, even when the service's queue is full: the deferred copy waits in
+/// the wait queue, which keeps it until the service's queue takes it back. Against a real broker in a
+/// container.
 /// </summary>
 [Collection(RabbitMqCollection.Name)]
 public sealed class FailedPutBackTests
@@ -344,7 +346,7 @@ public sealed class FailedPutBackTests
     public FailedPutBackTests(RabbitMqFixture broker) => _broker = broker;
 
     [RabbitMqFact]
-    public async Task ADeferredDelivery_WhoseCopyCannotBePublished_ComesBackWithItsAttemptsKept()
+    public async Task ADeferredDelivery_WhileTheServiceQueueIsFull_ComesBackWithItsAttemptsKept()
     {
         string run = Guid.NewGuid().ToString("N");
         var options = new RabbitMqTransportOptions
@@ -373,12 +375,71 @@ public sealed class FailedPutBackTests
         }
     }
 
+    [RabbitMqFact]
+    public async Task ADeferredDelivery_WhoseWaitQueueCopyIsRefused_IsDeadLetteredWithItsCountAndAReason()
+    {
+        string run = Guid.NewGuid().ToString("N");
+        var options = new RabbitMqTransportOptions
+        {
+            ConnectionUri = _broker.ConnectionUri,
+            Exchange = "test-" + run,
+            ServiceName = "service-" + run,
+            DeliveryStampKey = RabbitMqHost.DeliveryStampKey,
+            PrefetchCount = 1,
+        };
+        (IConnection connection, IChannel raw) = await RabbitMqHost.RawChannelAsync(_broker.ConnectionUri);
+        await using (connection)
+        {
+            await using var transport = new RabbitMqTransport(options, new[] { "rmq.order-placed" });
+            await transport.SendAsync(new[] { Envelope("connect", "rmq.report") }, CancellationToken.None);
+            await FillWaitQueueAsync(raw, options);
+            await transport.SendAsync(new[] { Envelope("refused") }, CancellationToken.None);
+            await transport.NackAsync(await ReceiveAsync(transport, "refused"), TimeSpan.Zero, CancellationToken.None);
+            ReceivedMessage second = await ReceiveAsync(transport, "refused");
+            Assert.Equal(2, second.DeliveryCount);
+
+            await DeferQuietlyAsync(transport, second);
+
+            BasicGetResult kept = await GetAsync(raw, options.DeadLetterQueue!);
+            Assert.Equal("refused", kept.BasicProperties.MessageId);
+            Assert.Equal(2, Convert.ToInt32(kept.BasicProperties.Headers![RabbitMqWire.DeliveryCountHeader], System.Globalization.CultureInfo.InvariantCulture));
+            Assert.Contains("wait queue refused", RabbitMqWire.HeaderString(kept.BasicProperties, RabbitMqWire.DeadLetterReasonHeader), StringComparison.Ordinal);
+        }
+    }
+
     private static MessageEnvelope Envelope(string id, string name = "rmq.order-placed") => new MessageEnvelope
     {
         Id = id,
         Name = name,
         Body = Encoding.UTF8.GetBytes("{\"Id\":1,\"Note\":\"ok\"}"),
     };
+
+    // The wait queue is made again to hold one message, refusing any publish past that, and filled.
+    private static async Task FillWaitQueueAsync(IChannel raw, RabbitMqTransportOptions options)
+    {
+        string wait = options.WaitQueue!;
+        await raw.QueueDeleteAsync(wait);
+        await raw.QueueDeclareAsync(wait, true, false, false, new Dictionary<string, object?>
+        {
+            ["x-max-length"] = 1,
+            ["x-overflow"] = "reject-publish",
+        });
+        await raw.BasicPublishAsync(string.Empty, wait, Encoding.UTF8.GetBytes("filler"));
+    }
+
+    private static async Task<BasicGetResult> GetAsync(IChannel raw, string queue)
+    {
+        DateTime giveUp = DateTime.UtcNow + _giveUpAfter;
+        while (true)
+        {
+            Assert.True(DateTime.UtcNow < giveUp, "Gave up waiting for a message on " + queue + ".");
+            if (await raw.BasicGetAsync(queue, true) is { } taken)
+            {
+                return taken;
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(200));
+        }
+    }
 
     // Once the transport has declared its topology, its queue is made again to hold one message and
     // refuse any publish past that. The broker refuses a redeclare with other arguments, so this is the
@@ -401,7 +462,8 @@ public sealed class FailedPutBackTests
     }
 
     // Sends more messages until the broker refuses one, so the queue is over its limit and refuses the
-    // put-back copy too. How far past the limit a quorum queue lets it go is the broker's choice.
+    // copy the wait queue moves back too, until room is made. How far past the limit a quorum queue lets
+    // it go is the broker's choice.
     private static async Task FillQueueAsync(RabbitMqTransport transport)
     {
         for (int i = 0; i < 10; i++)
@@ -418,7 +480,7 @@ public sealed class FailedPutBackTests
         Assert.Fail("The queue never refused a message, so the put-back copy would not be refused either.");
     }
 
-    // The put-back copy is refused by the full queue; how the transport reports that is its own choice.
+    // The deferral goes through the wait queue; any failure is reported as the transport chooses.
     private static async Task DeferQuietlyAsync(RabbitMqTransport transport, ReceivedMessage delivery)
     {
         try
@@ -427,7 +489,7 @@ public sealed class FailedPutBackTests
         }
         catch (Exception ex) when (ex is not Xunit.Sdk.XunitException)
         {
-            // Reported as a failed settle; the original is back with the broker.
+            // Reported as a failed settle.
         }
     }
 

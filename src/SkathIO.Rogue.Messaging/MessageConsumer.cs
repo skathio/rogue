@@ -443,16 +443,17 @@ public sealed class MessageConsumer
     // the rest, and one that always fails still reaches MaxAttempts.
     private async Task WaitAndPutBackAsync(ReceivedMessage delivery, Outcome outcome, CancellationToken stoppingToken, TaskCompletionSource? slot)
     {
-        bool held = WaitsHere(outcome.Delay) && TryHoldPlaceToWait();
-        TimeSpan delay = held || !WaitsHere(outcome.Delay) ? outcome.Delay : TimeSpan.Zero;
+        bool failed = outcome.Name == RogueMessagingTelemetry.Retried;
+        bool waitsHere = WaitsHere(outcome.Delay, failed);
+        bool held = waitsHere && TryHoldPlaceToWait();
+        TimeSpan delay = held || !waitsHere ? outcome.Delay : TimeSpan.Zero;
         try
         {
-            bool failed = outcome.Name == RogueMessagingTelemetry.Retried;
             if (failed)
             {
                 _logRetry(_logger, Loggable(delivery.Envelope.Id), Loggable(delivery.Envelope.Name), delivery.DeliveryCount, _registry.Options.MaxAttempts, delay, outcome.Exception);
             }
-            TimeSpan left = await WaitUnlessNativeAsync(delay, stoppingToken, slot).ConfigureAwait(false);
+            TimeSpan left = held ? await WaitHereAsync(delay, stoppingToken, slot).ConfigureAwait(false) : delay;
             await (failed ? _transport.NackAsync(delivery, left, CancellationToken.None) : _transport.DeferAsync(delivery, left, CancellationToken.None)).ConfigureAwait(false);
         }
         finally
@@ -476,17 +477,19 @@ public sealed class MessageConsumer
         return true;
     }
 
-    private bool WaitsHere(TimeSpan delay) => (_transport.Capabilities & TransportCapabilities.NativeDelay) == 0 && delay > TimeSpan.Zero;
+    // Whether the delay is waited out here: the transport cannot hold this kind of put-back for it. A
+    // transport may hold deferred deliveries for their delay without holding nacked ones.
+    private bool WaitsHere(TimeSpan delay, bool failed)
+    {
+        TransportCapabilities holds = failed ? TransportCapabilities.NativeDelay : TransportCapabilities.NativeDelay | TransportCapabilities.NativeDeferDelay;
+        return (_transport.Capabilities & holds) == 0 && delay > TimeSpan.Zero;
+    }
 
-    // A transport that cannot hold a nacked message for a delay gets it back at once, so the delay is
+    // A transport that cannot hold a put-back message for a delay gets it back at once, so the delay is
     // waited out here. The slot is given up first: otherwise MaxConcurrency failing messages would stop
     // every other message for their whole delay. Shutting down cuts the wait short.
-    private async Task<TimeSpan> WaitUnlessNativeAsync(TimeSpan delay, CancellationToken stoppingToken, TaskCompletionSource? slot)
+    private async Task<TimeSpan> WaitHereAsync(TimeSpan delay, CancellationToken stoppingToken, TaskCompletionSource? slot)
     {
-        if (!WaitsHere(delay))
-        {
-            return delay;
-        }
         slot?.TrySetResult();
         try
         {

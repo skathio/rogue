@@ -29,7 +29,9 @@ public interface IMessageTransport
     /// the consumer waits out a retry delay holding the delivery unsettled; it lets at most half this
     /// many wait, and nacks any other failed delivery at once, its delivery count still one higher, so
     /// failing messages never take the whole window from the rest. Deliveries an inbox turns away as
-    /// busy wait within the same half, and any other is deferred at once.
+    /// busy wait within the same half, and any other is deferred at once, unless the transport has
+    /// <see cref="TransportCapabilities.NativeDeferDelay"/>: then none of them waits, and each is
+    /// deferred with its delay.
     /// </summary>
     int? UnsettledLimit => null;
 
@@ -56,8 +58,8 @@ public interface IMessageTransport
     /// <summary>
     /// Settles <paramref name="message"/> as not attempted: its handlers did not run, since another
     /// delivery holds its id, or were stopped because the consumer is shutting down. It is delivered again, with the same delivery count, once
-    /// <paramref name="delay"/> has passed (at once, without <see cref="TransportCapabilities.NativeDelay"/>),
-    /// so being put back never uses up one of its attempts.
+    /// <paramref name="delay"/> has passed (at once, without <see cref="TransportCapabilities.NativeDelay"/>
+    /// or <see cref="TransportCapabilities.NativeDeferDelay"/>), so being put back never uses up one of its attempts.
     /// </summary>
     ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken);
 

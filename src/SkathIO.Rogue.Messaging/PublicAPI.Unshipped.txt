@@ -102,6 +102,7 @@ SkathIO.Rogue.Messaging.TransportCapabilities
 SkathIO.Rogue.Messaging.TransportCapabilities.BatchSend = 4 -> SkathIO.Rogue.Messaging.TransportCapabilities
 SkathIO.Rogue.Messaging.TransportCapabilities.NativeDeadLetter = 2 -> SkathIO.Rogue.Messaging.TransportCapabilities
 SkathIO.Rogue.Messaging.TransportCapabilities.NativeDelay = 1 -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.TransportCapabilities.NativeDeferDelay = 8 -> SkathIO.Rogue.Messaging.TransportCapabilities
 SkathIO.Rogue.Messaging.TransportCapabilities.None = 0 -> SkathIO.Rogue.Messaging.TransportCapabilities
 static SkathIO.Rogue.Messaging.DeadLetteredMessage.operator !=(SkathIO.Rogue.Messaging.DeadLetteredMessage? left, SkathIO.Rogue.Messaging.DeadLetteredMessage? right) -> bool
 static SkathIO.Rogue.Messaging.DeadLetteredMessage.operator ==(SkathIO.Rogue.Messaging.DeadLetteredMessage? left, SkathIO.Rogue.Messaging.DeadLetteredMessage? right) -> bool

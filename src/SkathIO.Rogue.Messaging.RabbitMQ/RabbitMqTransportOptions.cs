@@ -9,7 +9,8 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// Options for the RabbitMQ transport, set through <c>AddRogueRabbitMqTransport</c>. Messages are
 /// published to a durable topic exchange, <see cref="Exchange"/>, with their stable name as the routing
 /// key. A service that consumes sets <see cref="ServiceName"/>: it gets a durable queue of that name,
-/// bound to the names of the events and commands it receives, and a dead-letter queue beside it.
+/// bound to the names of the events and commands it receives, a dead-letter queue beside it, and a wait
+/// queue where deferred deliveries wait out their delay.
 /// </summary>
 public sealed class RabbitMqTransportOptions
 {
@@ -70,6 +71,14 @@ public sealed class RabbitMqTransportOptions
 
     /// <summary>The queue dead-lettered messages are kept in, or null when <see cref="ServiceName"/> is null.</summary>
     public string? DeadLetterQueue => ServiceName is null ? null : ServiceName + ".dead-letter";
+
+    /// <summary>
+    /// The queue a deferred delivery waits out its delay in, or null when <see cref="ServiceName"/> is
+    /// null: <see cref="ServiceName"/> followed by <c>.wait</c>. It is a quorum queue with no consumer;
+    /// each copy expires there after its delay and the broker dead-letters it back to the service's
+    /// queue through the default exchange.
+    /// </summary>
+    public string? WaitQueue => ServiceName is null ? null : ServiceName + ".wait";
 
     internal IReadOnlyList<RoutingKeyMap> RoutingKeyMaps => _routingKeyMaps;
 
@@ -156,6 +165,7 @@ public sealed class RabbitMqTransportOptions
         if (ServiceName is not null)
         {
             CheckName(ServiceName, nameof(ServiceName));
+            // The '.wait' queue's suffix is shorter, so this check leaves room for it too.
             if (DeadLetterQueue!.Length > MaxNameLength)
             {
                 throw new ArgumentException("The service name leaves no room for its '.dead-letter' queue.", nameof(ServiceName));

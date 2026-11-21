@@ -34,4 +34,5 @@ SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions.PrefetchCount.set -> v
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions.RabbitMqTransportOptions() -> void
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions.ServiceName.get -> string?
 SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions.ServiceName.set -> void
+SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions.WaitQueue.get -> string?
 static SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqServiceCollectionExtensions.AddRogueRabbitMqTransport(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<SkathIO.Rogue.Messaging.RabbitMQ.RabbitMqTransportOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
