@@ -121,9 +121,9 @@ zero, however short, goes through the wait queue.
 
 The wait queue's own message TTL (`x-message-ttl`) is 24 hours, the longest delay a copy is given,
 so it never cuts a deferral short. A message put on the wait queue by anything but the transport,
-with no expiration or a longer one, therefore leaves it at most 24 hours after it reaches the head
-of the queue, and goes back to the service's queue like any copy. Until then it
-holds back every deferred copy behind it. Keep others from publishing to it (see "Who may publish
+with no expiration or a longer one, therefore leaves it at most 24 hours after it arrived there
+(the TTL runs from its arrival, and nothing ahead of it stays longer), and goes back to the
+service's queue like any copy. Until then it holds back every deferred copy behind it. Keep others from publishing to it (see "Who may publish
 to the default exchange"), and purge it if that happens.
 
 The wait queue is new in this version. A service that upgrades gets it on its next connection; the
