@@ -70,9 +70,10 @@ deliveries. Messages that keep failing therefore never take the whole window fro
 would succeed, but past that half they may be retried sooner than `RetryDelay`. With
 `PrefetchCount` 1 no failed message waits.
 
-Failed retries do not use the wait queue below. Their delay doubles on each attempt, and a queue
-expires a message only once those ahead of it have expired, so a long backoff would hold back every
-shorter delay queued behind it.
+Failed retries stay in the consumer by design and do not use the wait queue below; only busy
+deferrals do. A retry's delay doubles on each attempt, and the wait queue expires messages only from
+its head, once those ahead of them have expired, so a long backoff there would hold back every busy
+copy queued behind it.
 
 ## Busy deliveries and the wait queue
 
@@ -112,10 +113,10 @@ same delay, so the copies leave in order; a caller of `DeferAsync` that mixes de
 one wait behind a longer one ahead of it. A delay is held to at most `int.MaxValue` milliseconds
 (about 24.8 days).
 
-A delivery deferred with no delay, as one whose handlers were stopped by shutdown is, goes through
-the wait queue too, with an expiration of zero. It comes back at once when the wait queue is empty,
-and otherwise after the busy copies ahead of it have left: at most one busy delay (`RetryDelay`, or
-`PollInterval` when that is zero) later.
+A delivery deferred with no delay, as one whose handlers were stopped by shutdown is, skips the wait
+queue: its copy goes straight back to the service's queue with its signed delivery count unchanged,
+so it comes back at once and never waits behind busy copies with a longer delay. Any delay above
+zero, however short, goes through the wait queue.
 
 The wait queue's own message TTL (`x-message-ttl`) is `int.MaxValue` milliseconds, the longest delay
 a copy is given, so it never cuts a deferral short. A message put on the wait queue by anything but
@@ -134,11 +135,13 @@ redelivery counts as the attempt that failed. When the wait queue refuses the co
 delivery (it was deleted or limited by a policy, or the broker refused the publish), the original is
 dead-lettered to the service's dead-letter queue with its delivery count and the reason
 `Deferred, but the wait queue refused its copy; replay it once its id is free.`, and the consumer
-logs one warning that the settle failed. It is neither requeued, which would bring it straight back,
-nor handed to the consumer again, so a refused deferral cannot go round between the broker and the
-consumer at their speed. If that dead-letter copy is refused too, the original is nacked to the
-queue's dead-letter exchange without a reason. Replay it from the dead-letter queue once the wait
-queue accepts copies again.
+logs one warning that the settle failed. A delivery deferred with no delay whose copy the service's
+queue refuses (it is full, for example) is handled the same way, with the reason
+`Deferred with no delay, but the service's queue refused its copy; replay it once the queue accepts messages.`
+Neither is requeued, which would bring it straight back, nor handed to the consumer again, so a
+refused deferral cannot go round between the broker and the consumer at their speed. If that
+dead-letter copy is refused too, the original is nacked to the queue's dead-letter exchange without
+a reason. Replay it from the dead-letter queue once the queue that refused it accepts copies again.
 
 ## Who may publish to the default exchange
 

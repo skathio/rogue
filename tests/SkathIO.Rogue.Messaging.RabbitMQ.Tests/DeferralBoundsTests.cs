@@ -341,6 +341,9 @@ public sealed class FailedPutBackTests
     // Only a bound on how long a broken test waits; no assertion depends on time.
     private static readonly TimeSpan _giveUpAfter = TimeSpan.FromMinutes(2);
 
+    // A deferral with no delay skips the wait queue, so these tests defer for the shortest delay that uses it.
+    private static readonly TimeSpan _shortestWait = TimeSpan.FromTicks(1);
+
     private readonly RabbitMqFixture _broker;
 
     public FailedPutBackTests(RabbitMqFixture broker) => _broker = broker;
@@ -366,7 +369,7 @@ public sealed class FailedPutBackTests
             ReceivedMessage first = await ReceiveAsync(transport, "deferred");
             await FillQueueAsync(transport);
 
-            await DeferQuietlyAsync(transport, first);
+            await DeferQuietlyAsync(transport, first, _shortestWait);
 
             ReceivedMessage again = await ReceiveAsync(transport, "deferred");
             Assert.Equal(first.DeliveryCount, again.DeliveryCount);
@@ -398,12 +401,43 @@ public sealed class FailedPutBackTests
             ReceivedMessage second = await ReceiveAsync(transport, "refused");
             Assert.Equal(2, second.DeliveryCount);
 
-            await DeferQuietlyAsync(transport, second);
+            await DeferQuietlyAsync(transport, second, _shortestWait);
 
             BasicGetResult kept = await GetAsync(raw, options.DeadLetterQueue!);
             Assert.Equal("refused", kept.BasicProperties.MessageId);
             Assert.Equal(2, Convert.ToInt32(kept.BasicProperties.Headers![RabbitMqWire.DeliveryCountHeader], System.Globalization.CultureInfo.InvariantCulture));
             Assert.Contains("wait queue refused", RabbitMqWire.HeaderString(kept.BasicProperties, RabbitMqWire.DeadLetterReasonHeader), StringComparison.Ordinal);
+        }
+    }
+
+    [RabbitMqFact]
+    public async Task ADeferralWithNoDelay_WhoseServiceQueueCopyIsRefused_IsDeadLetteredWithItsCountAndAReason()
+    {
+        string run = Guid.NewGuid().ToString("N");
+        var options = new RabbitMqTransportOptions
+        {
+            ConnectionUri = _broker.ConnectionUri,
+            Exchange = "test-" + run,
+            ServiceName = "service-" + run,
+            DeliveryStampKey = RabbitMqHost.DeliveryStampKey,
+            PrefetchCount = 1,
+        };
+        (IConnection connection, IChannel raw) = await RabbitMqHost.RawChannelAsync(_broker.ConnectionUri);
+        await using (connection)
+        {
+            await using var transport = new RabbitMqTransport(options, new[] { "rmq.order-placed" });
+            await LimitQueueToOneAsync(transport, raw, options);
+            await transport.SendAsync(new[] { Envelope("released") }, CancellationToken.None);
+            ReceivedMessage first = await ReceiveAsync(transport, "released");
+            await FillQueueAsync(transport);
+
+            await DeferQuietlyAsync(transport, first, TimeSpan.Zero);
+
+            BasicGetResult kept = await GetAsync(raw, options.DeadLetterQueue!);
+            Assert.Equal("released", kept.BasicProperties.MessageId);
+            Assert.Equal(1, Convert.ToInt32(kept.BasicProperties.Headers![RabbitMqWire.DeliveryCountHeader], System.Globalization.CultureInfo.InvariantCulture));
+            Assert.Contains("service's queue refused", RabbitMqWire.HeaderString(kept.BasicProperties, RabbitMqWire.DeadLetterReasonHeader), StringComparison.Ordinal);
+            Assert.Equal(0u, (await raw.QueueDeclarePassiveAsync(options.WaitQueue!)).MessageCount);
         }
     }
 
@@ -480,12 +514,12 @@ public sealed class FailedPutBackTests
         Assert.Fail("The queue never refused a message, so the put-back copy would not be refused either.");
     }
 
-    // The deferral goes through the wait queue; any failure is reported as the transport chooses.
-    private static async Task DeferQuietlyAsync(RabbitMqTransport transport, ReceivedMessage delivery)
+    // Any failure of the deferral is reported as the transport chooses; only where it goes is checked.
+    private static async Task DeferQuietlyAsync(RabbitMqTransport transport, ReceivedMessage delivery, TimeSpan delay)
     {
         try
         {
-            await transport.DeferAsync(delivery, TimeSpan.Zero, CancellationToken.None);
+            await transport.DeferAsync(delivery, delay, CancellationToken.None);
         }
         catch (Exception ex) when (ex is not Xunit.Sdk.XunitException)
         {

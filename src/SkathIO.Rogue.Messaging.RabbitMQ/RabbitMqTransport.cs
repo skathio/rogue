@@ -31,18 +31,22 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// so a sender cannot set it. A deferred message (<see cref="TransportCapabilities.NativeDeferDelay"/>) is
 /// published to <see cref="RabbitMqTransportOptions.WaitQueue"/> with its delay as its expiration and
 /// its count unchanged, then acked; the broker dead-letters it back to the service's queue once it
-/// expires, so it waits without holding a prefetch place. A dead-lettered one is published to the
+/// expires, so it waits without holding a prefetch place. One deferred with no delay goes straight back
+/// to the service's queue, its count unchanged. A dead-lettered one is published to the
 /// dead-letter queue with the reason in its <c>rogue-dead-letter-reason</c> header, then acked.
 /// Each copy is confirmed by the broker before the original is acked, so a message is delivered at
 /// least once; when a copy cannot be published, the original is handed back to the broker (requeued,
-/// or dead-lettered without a reason), except a deferred one, which is dead-lettered with its count
-/// kept, so that neither the consumer nor the broker sends it round again at once.
+/// or dead-lettered without a reason), except a deferred one, with or without a delay, which is
+/// dead-lettered with its count kept, so that neither the consumer nor the broker sends it round again at once.
 /// </para>
 /// </remarks>
 public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDisposable
 {
     // The reason a deferred delivery is dead-lettered with when the wait queue refuses its copy.
     private const string RefusedDeferralReason = "Deferred, but the wait queue refused its copy; replay it once its id is free.";
+
+    // The reason a delivery deferred with no delay is dead-lettered with when the service's queue refuses its copy.
+    private const string RefusedReleaseReason = "Deferred with no delay, but the service's queue refused its copy; replay it once the queue accepts messages.";
 
     // How long a receive waits for the first delivery before it returns none.
     private static readonly TimeSpan _receiveWait = TimeSpan.FromSeconds(1);
@@ -206,9 +210,11 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
     /// delivery count, goes to <see cref="RabbitMqTransportOptions.WaitQueue"/> with the delay, in whole
     /// milliseconds rounded up and held to at most <see cref="int.MaxValue"/>, as its expiration, and
     /// comes back to the service's queue when it expires. A copy expires only once those ahead of it in
-    /// the wait queue have, so a shorter delay behind a longer one waits for the longer, and so does a
-    /// message deferred with no delay. When the broker refuses the copy, the message is dead-lettered
-    /// with its count, and the refusal is thrown.
+    /// the wait queue have, so a shorter delay behind a longer one waits for the longer. A message
+    /// deferred with no delay, as on a shutdown release, skips the wait queue: its copy goes straight
+    /// back to the service's queue, with the same signed count, so it never waits behind busy copies.
+    /// When the broker refuses the copy, the message is dead-lettered with its count and a reason, and
+    /// the refusal is thrown.
     /// </remarks>
     /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
     public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
@@ -216,7 +222,8 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
 
     // Publishes a copy of the message, its delivery count raised by countsAs: for a failed attempt (1)
     // back to the service's queue, and for a delivery put back unhandled (0) to the wait queue, which
-    // holds it for the delay.
+    // holds it for the delay, or with no delay back to the service's queue, so it never waits behind
+    // the busy copies in the wait queue.
     private async ValueTask PutBackAsync(ReceivedMessage message, TimeSpan delay, int countsAs)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
@@ -229,13 +236,14 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
         int count = delivery.DeliveryCount + countsAs;
         BasicProperties properties = RabbitMqWire.ToProperties(envelope, count, deliveryStamp: _stamp.Sign(envelope.Name, envelope.Id, count));
         bool deferred = countsAs == 0;
-        if (deferred)
+        bool waits = deferred && delay > TimeSpan.Zero;
+        if (waits)
         {
             properties.Expiration = Expiration(delay);
         }
         try
         {
-            await PublishCopyAsync(string.Empty, deferred ? _options.WaitQueue! : _options.ServiceName!, properties, envelope.Body).ConfigureAwait(false);
+            await PublishCopyAsync(string.Empty, waits ? _options.WaitQueue! : _options.ServiceName!, properties, envelope.Body).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -243,7 +251,7 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
             {
                 // Requeued it would come straight back, as it would if handed to the consumer again, and
                 // go round as fast as the broker refuses. Kept with its count, it can be replayed.
-                await DeadLetterCopyAsync(delivery, RefusedDeferralReason).ConfigureAwait(false);
+                await DeadLetterCopyAsync(delivery, waits ? RefusedDeferralReason : RefusedReleaseReason).ConfigureAwait(false);
             }
             else if (IsCurrent(delivery))
             {
