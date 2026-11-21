@@ -167,6 +167,41 @@ jobs:
           fi
           echo "OK: every Rogue benchmark is within ${ceiling} B per job"
 
+  validation-bench-smoke:
+    name: Validation benchmark smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validation benchmark smoke run (Rogue against FluentValidation and MediatR)
+        run: dotnet run --project bench/SkathIO.Rogue.Benchmarks.Validation/SkathIO.Rogue.Benchmarks.Validation.csproj -c Release -- --filter '*ValidationBenchmarks*' --job short --exporters json
+      - name: Check Rogue's allocation per validation
+        run: |
+          # Gates each Rogue benchmark named in validation_rogue_bytes_ceiling against its own ceiling.
+          # Every named benchmark must be in the results: one that did not run is a broken run.
+          ceilings=$(jq -e '.validation_rogue_bytes_ceiling | objects | select(length > 0 and all(.[]; type == "number"))' .bench/thresholds.json) || {
+            echo "FAIL: validation_rogue_bytes_ceiling in .bench/thresholds.json must map benchmark names to numbers" && exit 1
+          }
+          mapfile -t result_files < <(find BenchmarkDotNet.Artifacts/results -name '*ValidationBenchmarks-report-full-compressed.json' 2>/dev/null)
+          if [ "${#result_files[@]}" = "0" ]; then
+            echo "FAIL: no BDN JSON artifact for the validation benchmarks; a missing artifact is a broken run, not a pass" && exit 1
+          fi
+          rows=$(jq -s '[.[].Benchmarks[]? | {method: .Method, bytes: .Memory.BytesAllocatedPerOperation}]' "${result_files[@]}")
+          echo "$rows" | jq -r '.[] | "\(.method): \(if .bytes == null then "no result" else "\(.bytes) B" end)"'
+          failures=$(jq -n --argjson rows "$rows" --argjson c "$ceilings" '[$c | to_entries[] | . as $e
+            | ([$rows[] | select(.method == $e.key)] | first) as $r
+            | if $r == null or $r.bytes == null then "\($e.key): no result"
+              elif $r.bytes > $e.value then "\($e.key): \($r.bytes) B, ceiling \($e.value) B"
+              else empty end]')
+          if [ "$failures" != "[]" ]; then
+            echo "FAIL: ${failures}" && exit 1
+          fi
+          echo "OK: every gated Rogue validation benchmark is within its ceiling"
+
   license-check:
     name: License check
     runs-on: ubuntu-latest
