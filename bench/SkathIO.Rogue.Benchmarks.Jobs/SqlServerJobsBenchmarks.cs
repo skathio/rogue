@@ -25,6 +25,14 @@ public class SqlServerJobsBenchmarks : JobsBenchmarks
             ? connectionString
             : throw new InvalidOperationException("Set " + ConnectionStringVariable + " to the connection string of a SQL Server database to run this benchmark.");
 
+    /// <summary>
+    /// 1,000 jobs only. Every job is a few committed transactions, and with the database on a laptop's
+    /// spinning disk an operation took minutes at 1,000 jobs (Hangfire about 3 minutes), so 10,000 and
+    /// 100,000 would take hours to days per benchmark.
+    /// </summary>
+    [Params(1_000)]
+    public override int Jobs { get => base.Jobs; set => base.Jobs = value; }
+
     /// <inheritdoc />
     protected override JobStorage CreateHangfireStorage()
     {

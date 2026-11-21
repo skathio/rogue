@@ -14,6 +14,8 @@ from committed BenchmarkDotNet runs; the raw per-class artifacts live under `ben
 - **Raw artifacts:** `bench/results/2026-07-13-1bb0b86/` (full suite, including the validation
   comparison below). Earlier baselines (`2026-06-19-cb81a30`, `2026-06-20-a734d6f`, etc.) are
   retained for history.
+  The jobs and validation benchmarks were run again on 2026-11-21, with their own setup; see
+  [Jobs and validation, 2026-11-21](#jobs-and-validation-2026-11-21) below.
 - **Reproduce:**
 
   ```bash
@@ -106,3 +108,105 @@ each chain link's forwarding lambda plus the transient handler/behavior instance
 
 Latency and allocation scale linearly, with **zero lock contention** at every level — the generated
 dispatcher holds no shared mutable state.
+
+## Jobs and validation, 2026-11-21
+
+A local run of every benchmark class in `bench/SkathIO.Rogue.Benchmarks.Jobs` and
+`bench/SkathIO.Rogue.Benchmarks.Validation`. The raw BenchmarkDotNet reports (GitHub Markdown, CSV
+and HTML for each class) are in `bench/results/2026-11-21-284630b/`.
+
+- **Machine:** a laptop, an MSI GE72VR 6RF: Intel Core i7-6700HQ (Skylake, 2.60 GHz, 4 physical /
+  8 logical cores), 15 GiB of RAM as the OS reports it, Ubuntu 24.04.5 LTS. The Docker data, and so
+  the SQL Server database files, are on its spinning disk (HGST HTS721010A9E630, 7,200 rpm), not on
+  an SSD.
+- **SDK / runtime:** .NET 10.0.115 SDK, .NET 10.0.15 runtime (X64 RyuJIT x86-64-v3), BenchmarkDotNet
+  0.15.8, ShortRun job (3 iterations, 3 warmup, 1 launch). BenchmarkDotNet could not raise its process
+  priority (no permission), so other work on the laptop can show in the times.
+- **Code:** commit `284630b`, plus the change that commits these results: `Jobs` moved from the
+  shared base class onto each benchmark class, so that the SQL Server class runs 1,000 jobs only.
+  That change alters nothing the benchmarks measure.
+- **Baselines:** Hangfire.InMemory 1.0.0 and Hangfire.SqlServer 1.8.25 (Hangfire.Core LGPL-3.0, bench
+  only, in no shipped package). SQL Server 2022 (16.0.4325.4, image
+  `mcr.microsoft.com/mssql/server:2022-latest`) in a local Docker container. Both frameworks use the
+  same database, each in a schema of its own, and Hangfire uses the SQL Server settings its
+  documentation recommends.
+- **Reproduce:**
+
+  ```bash
+  dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks.Jobs -- --filter '*InMemoryJobsBenchmarks*' --job short
+  ROGUE_BENCH_SQLSERVER='Server=…;Database=…;User Id=…;Password=…;TrustServerCertificate=True' \
+    dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks.Jobs -- --filter '*SqlServerJobsBenchmarks*' --job short
+  dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks.Validation -- --filter '*' --job short
+  ```
+
+  Give the SQL Server run an empty database. Jobs left over from an interrupted run are picked up
+  by the next one and break its job count.
+
+### Jobs: Rogue vs Hangfire
+
+Each operation enqueues N small jobs and waits until every one has run, with the storage and worker
+started once per benchmark at their defaults. Hangfire enqueues one job at a time, because it has no
+bulk enqueue outside Hangfire Pro. Rogue is measured with one `Enqueue` per job, with one
+`EnqueueMany`, and with `EnqueueMany` plus one service scope per claimed batch. Allocation is
+process-wide for the whole operation, the worker included.
+
+**In-memory store, against Hangfire.InMemory.** Time and allocation per job:
+
+| Jobs | Hangfire | Rogue, `Enqueue` each | Rogue, `EnqueueMany` | Rogue, `EnqueueMany`, scope per batch |
+|-----:|---------:|----------------------:|---------------------:|--------------------------------------:|
+| 1,000   | 71.5 µs / 38.0 KB | **5.0 µs** / 2.0 KB | **4.8 µs** / 1.4 KB | **4.4 µs** / **1.1 KB** |
+| 10,000  | 48.1 µs / 37.8 KB | **6.7 µs** / 2.0 KB | **6.5 µs** / 1.4 KB | **4.5 µs** / **1.1 KB** |
+| 100,000 | 49.4 µs / 37.8 KB | **5.4 µs** / 2.0 KB | **4.8 µs** / 1.4 KB | **4.8 µs** / **1.1 KB** |
+
+At 100,000 jobs Hangfire.InMemory took 4.94 s and allocated 3.69 GB. Rogue took 0.48 to 0.54 s
+and allocated 108 to 197 MB: 9 to 10 times faster, with 19 to 34 times less allocated.
+
+**SQL Server store, against Hangfire.SqlServer, 1,000 jobs.** Mean per operation and allocated:
+
+| Method | Mean | Per job | Allocated | Ratio |
+|--------|-----:|--------:|----------:|------:|
+| Hangfire, `Enqueue` each | 3.19 min | 191 ms | 134.4 MB | 1.00 |
+| Rogue, `Enqueue` each | **1.99 min** | 120 ms | **29.3 MB** | 0.63 |
+| Rogue, `EnqueueMany` | **1.72 min** | 103 ms | **18.6 MB** | 0.54 |
+| Rogue, `EnqueueMany`, scope per batch | **1.70 min** | 102 ms | **18.6 MB** | 0.53 |
+
+On this laptop both frameworks are bound by the disk: every committed transaction waits for the
+spinning disk, so these times say more about how many commits each framework makes per job than
+about its own CPU cost. Rogue finishes in a little over half Hangfire's time. Bulk enqueue helps
+less than in memory because, at this size, each job's claim and completion still wait on the disk.
+Expect much shorter times on an SSD or a server, and do not read 100 ms per job as Rogue's cost on
+real hardware. The error bands are wide (ShortRun, 3 iterations of minutes each). Allocation counts
+everything the process allocated during an operation, so a longer operation also counts more
+background polling.
+
+The SQL Server class runs 1,000 jobs only. On this disk one Hangfire operation of 1,000 jobs took
+about 3 minutes, so 10,000 and 100,000 would have taken hours to days for each benchmark.
+
+**Exceptions on the one-at-a-time path.** BenchmarkDotNet counted first-chance exceptions during
+Rogue's `Enqueue`-each benchmarks: about one per job on SQL Server and about 0.3 per job in memory
+(none with `EnqueueMany`). They come from the worker's wake-up signal: `JobSignal.Pulse()` catches
+the `SemaphoreFullException` that `SemaphoreSlim.Release()` throws when a wake-up is already
+pending. Each throw costs time, so this path is slower than it needs to be. Rogue is still faster
+than Hangfire here.
+
+### Validation
+
+**Generated validation against FluentValidation, without dispatch** (`InHouseValidationBenchmarks`).
+The same order, with a nested customer and three lines, checked by SkathIO.Rogue.Validation's
+generated method and by FluentValidation 12's `Validate`:
+
+| Scenario | FluentValidation | SkathIO.Rogue.Validation | Verdict |
+|----------|-----------------:|-------------------------:|---------|
+| Valid order | 3,071 ns / 4,064 B | **29.0 ns** / **0 B** | about 106 times faster, allocates nothing |
+| Order with two broken lines | 6,312 ns / 8,536 B | **326 ns** / **888 B** | about 19 times faster, about a tenth of the allocation |
+
+**Validated `Send`, Rogue against MediatR** (`ValidationBenchmarks`). The same FluentValidation rule
+runs as a pipeline behavior on both sides, on a valid payload:
+
+| Method | Mean | Allocated |
+|--------|-----:|----------:|
+| Rogue, `ValidationBehavior<,>` | **515.9 ns** | **1.13 KB** |
+| MediatR, hand-written validation behavior | 578.5 ns | 1.27 KB |
+
+This matches row 8 of the 2026-07-13 table above (549.4 ns / 1.13 KB against 579.0 ns / 1.27 KB),
+within ShortRun's error bands.

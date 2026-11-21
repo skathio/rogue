@@ -1,0 +1,28 @@
+```
+
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.5 LTS (Noble Numbat)
+Intel Core i7-6700HQ CPU 2.60GHz (Max: 0.80GHz) (Skylake), 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.115
+  [Host]   : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v3
+  ShortRun : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v3
+
+Job=ShortRun  IterationCount=3  LaunchCount=1  
+WarmupCount=3  
+
+```
+| Method                                 | Jobs   | Mean         | Error         | StdDev      | Ratio | RatioSD | Gen0         | Gen1       | Gen2      | Allocated | Alloc Ratio |
+|--------------------------------------- |------- |-------------:|--------------:|------------:|------:|--------:|-------------:|-----------:|----------:|----------:|------------:|
+| **Hangfire_EnqueueEach_AndRun**            | **1000**   |    **71.512 ms** |   **115.1767 ms** |   **6.3132 ms** |  **1.01** |    **0.11** |   **10750.0000** |          **-** |         **-** |   **37.1 MB** |        **1.00** |
+| Rogue_EnqueueEach_AndRun               | 1000   |     5.004 ms |     0.7384 ms |   0.0405 ms |  0.07 |    0.01 |     335.9375 |    54.6875 |   15.6250 |   1.98 MB |        0.05 |
+| Rogue_EnqueueMany_AndRun               | 1000   |     4.814 ms |    21.0282 ms |   1.1526 ms |  0.07 |    0.01 |     226.5625 |    46.8750 |   31.2500 |   1.39 MB |        0.04 |
+| Rogue_EnqueueMany_ScopePerBatch_AndRun | 1000   |     4.405 ms |     5.8997 ms |   0.3234 ms |  0.06 |    0.01 |     179.6875 |    54.6875 |   46.8750 |   1.09 MB |        0.03 |
+|                                        |        |              |               |             |       |         |              |            |           |           |             |
+| **Hangfire_EnqueueEach_AndRun**            | **10000**  |   **481.388 ms** |   **289.3713 ms** |  **15.8614 ms** |  **1.00** |    **0.04** |  **108000.0000** |  **1000.0000** |         **-** |  **369.1 MB** |        **1.00** |
+| Rogue_EnqueueEach_AndRun               | 10000  |    66.583 ms |    59.7254 ms |   3.2737 ms |  0.14 |    0.01 |    3250.0000 |   500.0000 |         - |  19.69 MB |        0.05 |
+| Rogue_EnqueueMany_AndRun               | 10000  |    64.912 ms |   159.1194 ms |   8.7219 ms |  0.13 |    0.02 |    2000.0000 |   500.0000 |         - |  13.84 MB |        0.04 |
+| Rogue_EnqueueMany_ScopePerBatch_AndRun | 10000  |    45.016 ms |   101.3068 ms |   5.5530 ms |  0.09 |    0.01 |    2000.0000 |  1000.0000 |  333.3333 |  10.85 MB |        0.03 |
+|                                        |        |              |               |             |       |         |              |            |           |           |             |
+| **Hangfire_EnqueueEach_AndRun**            | **100000** | **4,944.487 ms** | **3,078.5703 ms** | **168.7468 ms** |  **1.00** |    **0.04** | **1076000.0000** | **22000.0000** |         **-** | **3693.1 MB** |        **1.00** |
+| Rogue_EnqueueEach_AndRun               | 100000 |   537.971 ms |   510.4967 ms |  27.9820 ms |  0.11 |    0.01 |   33000.0000 |  4000.0000 |         - | 197.49 MB |        0.05 |
+| Rogue_EnqueueMany_AndRun               | 100000 |   484.320 ms |    56.6063 ms |   3.1028 ms |  0.10 |    0.00 |   36000.0000 |  6000.0000 | 1000.0000 | 137.47 MB |        0.04 |
+| Rogue_EnqueueMany_ScopePerBatch_AndRun | 100000 |   480.993 ms |    67.2531 ms |   3.6864 ms |  0.10 |    0.00 |   26000.0000 |  6000.0000 | 1000.0000 | 107.53 MB |        0.03 |

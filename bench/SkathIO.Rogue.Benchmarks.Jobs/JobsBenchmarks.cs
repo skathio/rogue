@@ -27,9 +27,8 @@ public abstract class JobsBenchmarks
     private CancellationTokenSource? _rogueStopping;
     private Task _rogueWorker = Task.CompletedTask;
 
-    /// <summary>How many jobs one operation enqueues and runs.</summary>
-    [Params(1_000, 10_000, 100_000)]
-    public int Jobs { get; set; }
+    /// <summary>How many jobs one operation enqueues and runs; each concrete benchmark sets its own values with <c>[Params]</c>.</summary>
+    public virtual int Jobs { get; set; }
 
     /// <summary>Hangfire's storage for this benchmark.</summary>
     protected abstract JobStorage CreateHangfireStorage();

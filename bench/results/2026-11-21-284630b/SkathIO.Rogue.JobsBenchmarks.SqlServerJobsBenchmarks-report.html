@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>SkathIO.Rogue.JobsBenchmarks.SqlServerJobsBenchmarks-20261121-194605</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.5 LTS (Noble Numbat)
+Intel Core i7-6700HQ CPU 2.60GHz (Max: 0.80GHz) (Skylake), 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.115
+  [Host]   : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v3
+  ShortRun : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  IterationCount=3  LaunchCount=1  
+WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                          </th><th>Jobs</th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Hangfire_EnqueueEach_AndRun</td><td>1000</td><td>3.191 m</td><td>1.330 m</td><td>0.0729 m</td><td>1.00</td><td>0.03</td><td>45000.0000</td><td>3000.0000</td><td>134.44 MB</td><td>1.00</td>
+</tr><tr><td>Rogue_EnqueueEach_AndRun</td><td>1000</td><td>1.994 m</td><td>2.956 m</td><td>0.1620 m</td><td>0.63</td><td>0.05</td><td>9000.0000</td><td>-</td><td>29.33 MB</td><td>0.22</td>
+</tr><tr><td>Rogue_EnqueueMany_AndRun</td><td>1000</td><td>1.717 m</td><td>1.679 m</td><td>0.0920 m</td><td>0.54</td><td>0.03</td><td>6000.0000</td><td>-</td><td>18.55 MB</td><td>0.14</td>
+</tr><tr><td>Rogue_EnqueueMany_ScopePerBatch_AndRun</td><td>1000</td><td>1.698 m</td><td>2.515 m</td><td>0.1379 m</td><td>0.53</td><td>0.04</td><td>6000.0000</td><td>-</td><td>18.61 MB</td><td>0.14</td>
+</tr></tbody></table>
+</body>
+</html>

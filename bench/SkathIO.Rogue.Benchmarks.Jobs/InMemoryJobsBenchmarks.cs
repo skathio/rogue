@@ -15,6 +15,10 @@ namespace SkathIO.Rogue.JobsBenchmarks;
 public class InMemoryJobsBenchmarks : JobsBenchmarks
 {
     /// <inheritdoc />
+    [Params(1_000, 10_000, 100_000)]
+    public override int Jobs { get => base.Jobs; set => base.Jobs = value; }
+
+    /// <inheritdoc />
     protected override JobStorage CreateHangfireStorage() =>
         // Finished jobs expire after a minute rather than Hangfire's day, so the storage does not grow
         // by every job of every iteration.
