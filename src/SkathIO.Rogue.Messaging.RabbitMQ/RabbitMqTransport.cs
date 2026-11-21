@@ -206,8 +206,9 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
     /// delivery count, goes to <see cref="RabbitMqTransportOptions.WaitQueue"/> with the delay, in whole
     /// milliseconds rounded up and held to at most <see cref="int.MaxValue"/>, as its expiration, and
     /// comes back to the service's queue when it expires. A copy expires only once those ahead of it in
-    /// the wait queue have, so a shorter delay behind a longer one waits for the longer. When the broker
-    /// refuses the copy, the message is dead-lettered with its count, and the refusal is thrown.
+    /// the wait queue have, so a shorter delay behind a longer one waits for the longer, and so does a
+    /// message deferred with no delay. When the broker refuses the copy, the message is dead-lettered
+    /// with its count, and the refusal is thrown.
     /// </remarks>
     /// <exception cref="InvalidOperationException"><paramref name="message"/> is already settled or was not delivered by this transport.</exception>
     public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)

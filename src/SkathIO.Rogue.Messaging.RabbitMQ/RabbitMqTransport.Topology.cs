@@ -13,6 +13,12 @@ public sealed partial class RabbitMqTransport
     private const string DeadLetterRoutingKeyArgument = "x-dead-letter-routing-key";
     private const string DeadLetterStrategyArgument = "x-dead-letter-strategy";
     private const string OverflowArgument = "x-overflow";
+    private const string MessageTtlArgument = "x-message-ttl";
+
+    // The longest delay a deferral copy is given, so the queue's own TTL never cuts a copy short. It
+    // still bounds how long a message published there with no expiration, or a longer one, can hold
+    // the head of the wait queue and every copy behind it.
+    private const int WaitQueueMessageTtlCeiling = int.MaxValue;
 
     // Declared on a channel of the connection, so the client declares it all again after a recovery.
     private async Task DeclareTopologyAsync(IConnection connection, CancellationToken cancellationToken)
@@ -41,7 +47,8 @@ public sealed partial class RabbitMqTransport
             // No consumer reads the wait queue: each copy expires there and goes back to the service's
             // queue through the default exchange, where its signed count is read. At-least-once
             // dead-lettering keeps a copy until the service's queue has taken it, which quorum queues
-            // allow only with reject-publish overflow.
+            // allow only with reject-publish overflow. The queue's TTL is only a ceiling: each copy
+            // carries its own, shorter, expiration.
             var wait = new Dictionary<string, object?>
             {
                 [QueueTypeArgument] = "quorum",
@@ -49,6 +56,7 @@ public sealed partial class RabbitMqTransport
                 [DeadLetterRoutingKeyArgument] = queue,
                 [DeadLetterStrategyArgument] = "at-least-once",
                 [OverflowArgument] = "reject-publish",
+                [MessageTtlArgument] = WaitQueueMessageTtlCeiling,
             };
             await channel.QueueDeclareAsync(_options.WaitQueue!, true, false, false, wait, false, cancellationToken).ConfigureAwait(false);
             foreach (string name in _subscriptions)

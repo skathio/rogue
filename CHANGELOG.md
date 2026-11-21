@@ -187,7 +187,9 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   (at-least-once). So a busy delivery holds no prefetch place, never costs an attempt, and duplicates
   of one id come round once per delay at any `PrefetchCount`, never at the broker's speed. Failed
   retries keep their doubling delay in the consumer, since a queue expires messages only from its
-  head. A deferred delivery whose copy the wait queue refuses is dead-lettered with its count and a
+  head. A delivery deferred with no delay (stopped by shutdown) goes through the wait queue too, so
+  it comes back once the busy copies ahead of it have left: at most one busy delay later.
+  A deferred delivery whose copy the wait queue refuses is dead-lettered with its count and a
   reason, not requeued or handed back to the consumer. `DeliveryStampKey` is
   a required secret of at least 32 bytes (UTF-8) with no default, and must not start or end with
   white space: registration fails at startup otherwise. Give every instance of a service

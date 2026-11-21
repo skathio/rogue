@@ -76,7 +76,8 @@ public sealed class RabbitMqTransportOptions
     /// The queue a deferred delivery waits out its delay in, or null when <see cref="ServiceName"/> is
     /// null: <see cref="ServiceName"/> followed by <c>.wait</c>. It is a quorum queue with no consumer;
     /// each copy expires there after its delay and the broker dead-letters it back to the service's
-    /// queue through the default exchange.
+    /// queue through the default exchange. Its own message TTL, <see cref="int.MaxValue"/> milliseconds,
+    /// bounds how long a message published there with no expiration can stay.
     /// </summary>
     public string? WaitQueue => ServiceName is null ? null : ServiceName + ".wait";
 

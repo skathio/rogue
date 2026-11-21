@@ -112,6 +112,18 @@ same delay, so the copies leave in order; a caller of `DeferAsync` that mixes de
 one wait behind a longer one ahead of it. A delay is held to at most `int.MaxValue` milliseconds
 (about 24.8 days).
 
+A delivery deferred with no delay, as one whose handlers were stopped by shutdown is, goes through
+the wait queue too, with an expiration of zero. It comes back at once when the wait queue is empty,
+and otherwise after the busy copies ahead of it have left: at most one busy delay (`RetryDelay`, or
+`PollInterval` when that is zero) later.
+
+The wait queue's own message TTL (`x-message-ttl`) is `int.MaxValue` milliseconds, the longest delay
+a copy is given, so it never cuts a deferral short. A message put on the wait queue by anything but
+the transport, with no expiration or a longer one, therefore leaves it at the latest that long after
+it reaches the head of the queue, and goes back to the service's queue like any copy. Until then it
+holds back every deferred copy behind it. Keep others from publishing to it (see "Who may publish
+to the default exchange"), and purge it if that happens.
+
 The wait queue is new in this version. A service that upgrades gets it on its next connection; the
 service's queue and the dead-letter queue keep their arguments, so nothing needs to be deleted.
 
