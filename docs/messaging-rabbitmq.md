@@ -92,7 +92,7 @@ Each consuming service gets this topology, declared when the transport connects:
 | `ServiceName` | quorum queue, durable | `x-dead-letter-exchange` = `<Exchange>.dead-letter`, `x-dead-letter-routing-key` = `ServiceName` | the service's messages |
 | `<Exchange>.dead-letter` | direct exchange, durable | | dead letters, routed by service name |
 | `<ServiceName>.dead-letter` | quorum queue, durable | | the messages the service gave up on |
-| `<ServiceName>.wait` | quorum queue, durable | `x-dead-letter-exchange` = `""` (the default exchange), `x-dead-letter-routing-key` = `ServiceName`, `x-dead-letter-strategy` = `at-least-once`, `x-overflow` = `reject-publish` | deferred copies waiting out their delay |
+| `<ServiceName>.wait` | quorum queue, durable | `x-dead-letter-exchange` = `""` (the default exchange), `x-dead-letter-routing-key` = `ServiceName`, `x-dead-letter-strategy` = `at-least-once`, `x-overflow` = `reject-publish`, `x-message-ttl` = `86400000` (24 hours) | deferred copies waiting out their delay |
 
 `RabbitMqTransportOptions.WaitQueue` gives the wait queue's name. No consumer reads it. A deferred
 copy goes there through the default exchange with its delay, in whole milliseconds rounded up, as its
@@ -110,23 +110,28 @@ transport does not connect.
 
 A queue expires a message only from its head. Every busy delivery of one service is deferred for the
 same delay, so the copies leave in order; a caller of `DeferAsync` that mixes delays makes a shorter
-one wait behind a longer one ahead of it. A delay is held to at most `int.MaxValue` milliseconds
-(about 24.8 days).
+one wait behind a longer one ahead of it. A delay is held to at most 24 hours, the wait queue's own
+message TTL. `AddRogueMessaging` refuses a `RetryDelay` over 24 hours, and a `PollInterval` over 24
+hours when `RetryDelay` is zero, since those set how long a busy delivery stays away.
 
 A delivery deferred with no delay, as one whose handlers were stopped by shutdown is, skips the wait
 queue: its copy goes straight back to the service's queue with its signed delivery count unchanged,
 so it comes back at once and never waits behind busy copies with a longer delay. Any delay above
 zero, however short, goes through the wait queue.
 
-The wait queue's own message TTL (`x-message-ttl`) is `int.MaxValue` milliseconds, the longest delay
-a copy is given, so it never cuts a deferral short. A message put on the wait queue by anything but
-the transport, with no expiration or a longer one, therefore leaves it at the latest that long after
-it reaches the head of the queue, and goes back to the service's queue like any copy. Until then it
+The wait queue's own message TTL (`x-message-ttl`) is 24 hours, the longest delay a copy is given,
+so it never cuts a deferral short. A message put on the wait queue by anything but the transport,
+with no expiration or a longer one, therefore leaves it at most 24 hours after it reaches the head
+of the queue, and goes back to the service's queue like any copy. Until then it
 holds back every deferred copy behind it. Keep others from publishing to it (see "Who may publish
 to the default exchange"), and purge it if that happens.
 
 The wait queue is new in this version. A service that upgrades gets it on its next connection; the
 service's queue and the dead-letter queue keep their arguments, so nothing needs to be deleted.
+RabbitMQ cannot change a queue's arguments after its declaration: a redeclare with other arguments
+is refused and the transport does not connect. A later change to the wait queue's arguments, its
+message TTL included, therefore means deleting the wait queue (once it is empty) so the transport
+declares it again.
 
 ## When the broker refuses a copy
 

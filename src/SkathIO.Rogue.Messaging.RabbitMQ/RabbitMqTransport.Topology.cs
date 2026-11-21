@@ -15,10 +15,11 @@ public sealed partial class RabbitMqTransport
     private const string OverflowArgument = "x-overflow";
     private const string MessageTtlArgument = "x-message-ttl";
 
-    // The longest delay a deferral copy is given, so the queue's own TTL never cuts a copy short. It
-    // still bounds how long a message published there with no expiration, or a longer one, can hold
+    // 24 hours in milliseconds: the longest delay a deferral copy is given, so the queue's own TTL never
+    // cuts a copy short, and the longest a busy delivery may stay away under the messaging options. It
+    // also bounds how long a message published there with no expiration, or a longer one, can hold
     // the head of the wait queue and every copy behind it.
-    private const int WaitQueueMessageTtlCeiling = int.MaxValue;
+    private const int WaitQueueMessageTtlCeiling = 24 * 60 * 60 * 1000;
 
     // Declared on a channel of the connection, so the client declares it all again after a recovery.
     private async Task DeclareTopologyAsync(IConnection connection, CancellationToken cancellationToken)

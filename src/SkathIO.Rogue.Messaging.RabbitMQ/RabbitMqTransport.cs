@@ -208,8 +208,8 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
     /// <remarks>
     /// The message waits out <paramref name="delay"/> on the broker: its copy, with the same signed
     /// delivery count, goes to <see cref="RabbitMqTransportOptions.WaitQueue"/> with the delay, in whole
-    /// milliseconds rounded up and held to at most <see cref="int.MaxValue"/>, as its expiration, and
-    /// comes back to the service's queue when it expires. A copy expires only once those ahead of it in
+    /// milliseconds rounded up and held to at most 24 hours (the wait queue's own message TTL), as its
+    /// expiration, and comes back to the service's queue when it expires. A copy expires only once those ahead of it in
     /// the wait queue have, so a shorter delay behind a longer one waits for the longer. A message
     /// deferred with no delay, as on a shutdown release, skips the wait queue: its copy goes straight
     /// back to the service's queue, with the same signed count, so it never waits behind busy copies.
@@ -265,11 +265,11 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
     }
 
     // The per-message TTL of a deferred copy: whole milliseconds, rounded up so a delay is never cut
-    // short, and held to int.MaxValue, well within what the broker accepts.
+    // short, and held to the wait queue's own TTL, which would end a longer one there anyway.
     private static string Expiration(TimeSpan delay)
     {
         double milliseconds = Math.Ceiling(delay.TotalMilliseconds);
-        return (milliseconds >= int.MaxValue ? int.MaxValue : (int)milliseconds).ToString(CultureInfo.InvariantCulture);
+        return (milliseconds >= WaitQueueMessageTtlCeiling ? WaitQueueMessageTtlCeiling : (int)milliseconds).ToString(CultureInfo.InvariantCulture);
     }
 
     /// <inheritdoc />

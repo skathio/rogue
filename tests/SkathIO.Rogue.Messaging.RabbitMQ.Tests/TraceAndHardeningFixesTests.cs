@@ -22,8 +22,15 @@ public sealed class TraceAndHardeningFixesTests
 {
     private const string Failing = "{\"Id\":1,\"Note\":\"fail\"}";
 
+    // A message delivered this many times before, with a first retry delay of at most 24 hours, has
+    // doubled past every delay below, so its next failure is retried after MaxRetryDelay.
+    private const int DeliveredBefore = 29;
+
     // The longest delay one Task.Delay accepts.
     private static readonly TimeSpan _longestWait = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
+    // The longest first retry delay the options allow.
+    private static readonly TimeSpan _day = TimeSpan.FromHours(24);
 
     private static readonly RabbitMqTransportOptions _wire = new RabbitMqTransportOptions { Exchange = "shop", ServiceName = "billing" };
 
@@ -55,7 +62,7 @@ public sealed class TraceAndHardeningFixesTests
         TimeSpan delay = TimeSpan.FromTicks(ticks);
         await using ConsumerHost host = ConsumerHost.Create(delay);
 
-        await host.DeliverAsync(Envelope("rmq.order-placed", Failing));
+        await host.DeliverAgainAsync(Envelope("rmq.order-placed", Failing));
 
         TimeSpan[] waited = host.Clock.Waited.ToArray();
         Assert.NotEmpty(waited);
@@ -66,7 +73,7 @@ public sealed class TraceAndHardeningFixesTests
         Assert.InRange(shortBy, 0m, TimeSpan.TicksPerMillisecond - 1);
         Assert.Equal(TimeSpan.Zero, Assert.Single(host.Transport.NackDelays));
         Assert.Empty(host.Transport.Inner.DeadLettered);
-        Assert.Equal(2, Assert.Single(await host.Transport.ReceiveAsync(1, CancellationToken.None)).DeliveryCount);
+        Assert.Equal(DeliveredBefore + 2, Assert.Single(await host.Transport.ReceiveAsync(1, CancellationToken.None)).DeliveryCount);
     }
 
     [Fact]
@@ -75,8 +82,8 @@ public sealed class TraceAndHardeningFixesTests
         await using ConsumerHost atLimit = ConsumerHost.Create(_longestWait);
         await using ConsumerHost pastLimit = ConsumerHost.Create(_longestWait + TimeSpan.FromMilliseconds(1));
 
-        await atLimit.DeliverAsync(Envelope("rmq.order-placed", Failing));
-        await pastLimit.DeliverAsync(Envelope("rmq.order-placed", Failing));
+        await atLimit.DeliverAgainAsync(Envelope("rmq.order-placed", Failing));
+        await pastLimit.DeliverAgainAsync(Envelope("rmq.order-placed", Failing));
 
         Assert.Equal(new[] { _longestWait }, atLimit.Clock.Waited.ToArray());
         Assert.Equal(new[] { _longestWait, TimeSpan.FromMilliseconds(1) }, pastLimit.Clock.Waited.ToArray());
@@ -295,8 +302,9 @@ public sealed class TraceAndHardeningFixesTests
             collection.AddRogueMessaging(options =>
             {
                 options.SerializerContext = TestMessagesJson.Default;
-                options.RetryDelay = retryDelay;
+                options.RetryDelay = retryDelay > _day ? _day : retryDelay;
                 options.MaxRetryDelay = retryDelay;
+                options.MaxAttempts = DeliveredBefore + 2;
             });
             return new ConsumerHost(collection.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }), clock, transport);
         }
@@ -306,6 +314,19 @@ public sealed class TraceAndHardeningFixesTests
             await Transport.SendAsync(envelopes, CancellationToken.None);
             await _services.GetRequiredService<MessageConsumer>().RunOnceAsync();
             Clock.Advance(TimeSpan.FromDays(1));
+        }
+
+        // Like DeliverAsync, but the message is first put back unhandled until it has been delivered
+        // DeliveredBefore times, through the inner transport so no nack is recorded.
+        public async Task DeliverAgainAsync(MessageEnvelope envelope)
+        {
+            await Transport.Inner.SendAsync(new[] { envelope }, CancellationToken.None);
+            for (int i = 0; i < DeliveredBefore; i++)
+            {
+                ReceivedMessage delivery = Assert.Single(await Transport.Inner.ReceiveAsync(1, CancellationToken.None));
+                await Transport.Inner.NackAsync(delivery, TimeSpan.Zero, CancellationToken.None);
+            }
+            await DeliverAsync();
         }
 
         public ValueTask DisposeAsync() => _services.DisposeAsync();

@@ -29,7 +29,7 @@ public sealed class WaitQueueCeilingTests
     {
         RabbitMqTransportOptions options = await DeclaredAsync();
 
-        Exception? refused = await RedeclareAsync(options, int.MaxValue);
+        Exception? refused = await RedeclareAsync(options, 86_400_000);
 
         Assert.Null(refused);
     }

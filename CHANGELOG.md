@@ -144,7 +144,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   (`IMessageTransport.UnsettledLimit`) lets at most half of it wait out a retry delay this way;
   a failed message past that is nacked at once, its delivery count still raised. A delivery an inbox
   turns away because another delivery holds its id is deferred for `RetryDelay`, or `PollInterval`
-  when `RetryDelay` is zero. A transport with `NativeDelay` or `NativeDeferDelay` holds it for that
+  when `RetryDelay` is zero; registration refuses a `RetryDelay` over 24 hours, and a `PollInterval`
+  over 24 hours when `RetryDelay` is zero. A transport with `NativeDelay` or `NativeDeferDelay` holds it for that
   delay, and the consumer does not wait; on any other transport the consumer waits it out within the
   same half of the window, and past that half defers it at once, so there duplicates of one id cannot
   stall the consumer but may come round at the transport's speed. A message whose handlers are stopped by shutdown is
@@ -184,7 +185,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   its copy, with the same signed count, on a quorum wait queue of the service's own
   (`<ServiceName>.wait`, `RabbitMqTransportOptions.WaitQueue`) with the delay as its expiration; the
   wait queue dead-letters it back to the service's queue through the default exchange
-  (at-least-once). So a busy delivery holds no prefetch place, never costs an attempt, and duplicates
+  (at-least-once). A copy's delay is held to 24 hours, the wait queue's own message TTL, which also
+  bounds how long a message published there with no expiration can stay. So a busy delivery holds no prefetch place, never costs an attempt, and duplicates
   of one id come round once per delay at any `PrefetchCount`, never at the broker's speed. Failed
   retries keep their doubling delay in the consumer, since a queue expires messages only from its
   head, so a long backoff would hold up the busy copies behind it. A delivery deferred with no delay

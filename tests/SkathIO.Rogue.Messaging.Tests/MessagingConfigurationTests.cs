@@ -22,6 +22,13 @@ public sealed class MessagingConfigurationTests
         { static o => o.MaxRetryDelay = o.RetryDelay, false },
         { static o => o.PollInterval = TimeSpan.Zero, true },
         { static o => o.PollInterval = TimeSpan.FromTicks(1), false },
+
+        // A busy delivery stays away for RetryDelay, or PollInterval when it is zero, for at most 24
+        // hours. Failed retries are waited in the consumer, so MaxRetryDelay has no such limit.
+        { static o => o.MaxRetryDelay = TimeSpan.MaxValue, false },
+        { static o => { o.RetryDelay = TimeSpan.FromHours(24) + TimeSpan.FromTicks(1); o.MaxRetryDelay = TimeSpan.MaxValue; }, true },
+        { static o => o.PollInterval = TimeSpan.FromHours(24) + TimeSpan.FromTicks(1), false },
+        { static o => { o.RetryDelay = TimeSpan.Zero; o.PollInterval = TimeSpan.FromHours(24) + TimeSpan.FromTicks(1); }, true },
     };
 
     [Theory]

@@ -9,6 +9,10 @@ public sealed class MessagingOptions
     /// <summary>The longest batch one receive may take.</summary>
     public const int MaxBatchSize = 10_000;
 
+    // The longest a delivery turned away as busy may stay away. A transport that holds it on the
+    // broker, as the RabbitMQ wait queue does, keeps nothing longer than this.
+    internal static readonly TimeSpan MaxBusyDelay = TimeSpan.FromHours(24);
+
     /// <summary>
     /// The source-generated context that serializes message bodies. Required once any
     /// <see cref="MessageAttribute"/> type exists, and each must be covered by a
@@ -37,7 +41,7 @@ public sealed class MessagingOptions
     /// <summary>
     /// The delay before the first redelivery of a failed message; it doubles on each later one. Also how
     /// long a delivery the inbox turns away as busy stays away, not doubled; with no retry delay it
-    /// stays away for <see cref="PollInterval"/>.
+    /// stays away for <see cref="PollInterval"/>. At most 24 hours.
     /// </summary>
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(5);
 
@@ -46,7 +50,8 @@ public sealed class MessagingOptions
 
     /// <summary>
     /// How long an idle consumer waits before it receives again, and how long a delivery the inbox
-    /// turns away as busy stays away when <see cref="RetryDelay"/> is zero.
+    /// turns away as busy stays away when <see cref="RetryDelay"/> is zero. At most 24 hours when
+    /// <see cref="RetryDelay"/> is zero.
     /// </summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
 
@@ -77,7 +82,13 @@ public sealed class MessagingOptions
         }
         ArgumentOutOfRangeException.ThrowIfGreaterThan(BatchSize, MaxBatchSize, nameof(BatchSize));
         ArgumentOutOfRangeException.ThrowIfLessThan(RetryDelay, TimeSpan.Zero, nameof(RetryDelay));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(RetryDelay, MaxBusyDelay, nameof(RetryDelay));
         ArgumentOutOfRangeException.ThrowIfLessThan(MaxRetryDelay, RetryDelay, nameof(MaxRetryDelay));
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(PollInterval, TimeSpan.Zero, nameof(PollInterval));
+        if (RetryDelay == TimeSpan.Zero)
+        {
+            // Then the poll interval is how long a busy delivery stays away.
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(PollInterval, MaxBusyDelay, nameof(PollInterval));
+        }
     }
 }

@@ -8,8 +8,8 @@ using Xunit;
 namespace SkathIO.Rogue.Messaging.RabbitMQ.Tests;
 
 /// <summary>
-/// The ends of a deferral's delay on the RabbitMQ transport: none, the shortest, and at and past the
-/// most the broker is given. A delay is carried as whole milliseconds, rounded up; a copy keeps its
+/// The ends of a deferral's delay on the RabbitMQ transport: none, the shortest, and past the 24
+/// hours the broker is given at most, which are held to 24 hours. A delay is carried as whole milliseconds, rounded up; a copy keeps its
 /// signed count whatever the delay, and a missing or foreign message or a negative delay is refused.
 /// Against a real broker in a container, except the argument checks.
 /// </summary>
@@ -61,9 +61,10 @@ public sealed class WaitQueueDeferralEdgeTests
     [RabbitMqTheory]
     [InlineData(36_000_000_000L, "3600000")]
     [InlineData(36_000_000_001L, "3600001")]
-    [InlineData(21_474_836_470_000L, "2147483647")]
-    [InlineData(21_474_836_470_001L, "2147483647")]
-    [InlineData(long.MaxValue, "2147483647")]
+    [InlineData(864_000_000_001L, "86400000")]
+    [InlineData(864_000_010_000L, "86400000")]
+    [InlineData(21_474_836_470_000L, "86400000")]
+    [InlineData(long.MaxValue, "86400000")]
     public async Task ADelay_IsCarriedAsWholeMilliseconds_RoundedUp_AndHeldToTheMost(long delayTicks, string expiration)
     {
         RabbitMqTransportOptions options = Options();
