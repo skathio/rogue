@@ -187,8 +187,9 @@ Rogue's `Enqueue`-each benchmarks: about one per job on SQL Server and about 0.3
 (none with `EnqueueMany`). They come from the worker's wake-up signal: `JobSignal.Pulse()` catches
 the `SemaphoreFullException` that `SemaphoreSlim.Release()` throws when a wake-up is already
 pending. Each throw costs time, so this path is slower than it needs to be. Rogue is still faster
-than Hangfire here. The committed reports have no exception column; add `--exceptions` to a run to
-count them.
+than Hangfire here. The committed reports have no exception column: these counts come from separate
+runs with `--exceptions` on the same machine, about 0.26 to 0.32 per job for the in-memory store
+and 956 for 1,000 jobs on SQL Server (one operation, `--job dry`).
 
 ### Validation
 
