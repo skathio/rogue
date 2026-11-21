@@ -63,6 +63,22 @@ jobs:
       - name: Run jobs and messaging AOT binary
         run: ./samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Jobs.Messaging.Aot.Sample
 
+  # Packs the twelve packages into a local feed and runs the separate consumer solution
+  # (tests/consumer), which restores them by package reference as an app would. The `ci` job tests
+  # the projects through project references only, so packaging faults show up here alone.
+  consumer:
+    name: Consumer suite
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Pack the packages and run the consumer solution against them
+        run: tests/consumer/run.sh
+
   bench-smoke:
     name: Benchmark smoke
     runs-on: ubuntu-latest

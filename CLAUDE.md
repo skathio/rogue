@@ -14,6 +14,9 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 
 - There is no separate lint step: `TreatWarningsAsErrors` + `EnforceCodeStyleInBuild` make
   `.editorconfig` style and the analyzers part of the build.
+- Consumer suite, as CI runs it: `tests/consumer/run.sh` packs the twelve packages into
+  `artifacts/consumer/feed` and tests `tests/consumer/SkathIO.Rogue.Consumer.sln`, a separate
+  solution that restores them by package reference (~2 min).
 - AOT check (as CI runs it; needs `clang` and `zlib1g-dev`):
   `dotnet publish samples/SkathIO.Rogue.Aot.Sample/SkathIO.Rogue.Aot.Sample.csproj -c Release -r linux-x64`
   then run `samples/SkathIO.Rogue.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Aot.Sample`.
@@ -49,6 +52,8 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   the core generator emits their code through feature modules (`JobsModule.cs`, `MessagingModule.cs`).
 - `tests/`: xunit. `Generator.Tests` drives the generator in-memory; `Smoke.*` is a deliberate
   multi-project solution (Infrastructure/Application/Api/Tests) that catches cross-assembly wiring bugs.
+  `tests/consumer/` is not in `SkathIO.Rogue.sln`: it has its own build files and NuGet.config, and
+  consumes the packed packages, never project references.
 - `samples/`, `bench/` (BenchmarkDotNet; committed baselines in `bench/results/<date>-<sha>/`,
   allocation thresholds in `.bench/thresholds.json`), `docs/`, `site/`.
 
@@ -74,9 +79,9 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 ## CI and release
 
 - `.github/workflows/ci.yml` on every PR: `ci` (hashira's reusable `nuget-package-ci.yml@v2`:
-  build, `dotnet test` on the solution, scans, coverage), `AOT publish`, `Benchmark smoke` (fails if
-  the `ISender.Send` path allocates over the ceiling in `.bench/thresholds.json`), `License check`,
-  `Public API`.
+  build, `dotnet test` on the solution, scans, coverage), `Consumer suite`, `AOT publish`,
+  `Benchmark smoke` (fails if the `ISender.Send` path allocates over the ceiling in
+  `.bench/thresholds.json`), `License check`, `Public API`.
 - hashira is pinned twice (`uses: …@v2` and `library_ref: 'v2'`); keep the two pins identical.
 - Releases are manual: the maintainer dispatches `publish.yml` with a `bump`, and the release needs
   approval in the `production` environment. It packs, pushes to nuget.org over OIDC, tags, then

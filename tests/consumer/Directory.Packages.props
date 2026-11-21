@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The twelve packages, from the local feed (NuGet.config maps SkathIO.Rogue* to it alone). -->
+    <PackageVersion Include="SkathIO.Rogue" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Abstractions" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Logging" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.MediatR" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Validation" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Validation.FluentValidation" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Jobs" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Jobs.Postgres" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Jobs.SqlServer" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Messaging" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Messaging.RabbitMQ" Version="$(RoguePackageVersion)" />
+    <PackageVersion Include="SkathIO.Rogue.Messaging.Outbox" Version="$(RoguePackageVersion)" />
+    <!-- Test and host packages, at the versions the repository pins. -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+  </ItemGroup>
+</Project>
