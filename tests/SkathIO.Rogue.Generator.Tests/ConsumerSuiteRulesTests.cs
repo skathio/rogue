@@ -20,20 +20,8 @@ public sealed class ConsumerSuiteRulesTests
     private const string CiPath = ".github/workflows/ci.yml";
     private const string MainSolution = "SkathIO.Rogue.sln";
     private const int ShippedPackageCount = 12;
-
-    // The package ids Directory.Packages.props pinned before the consumer suite. The maintainer checks
-    // the license of any other package before it is used, so a new id here follows that check.
-    private static readonly string[] _licenseCheckedPackages =
-    {
-        "MinVer", "Microsoft.SourceLink.GitHub", "Microsoft.CodeAnalysis.Analyzers", "Microsoft.CodeAnalysis.CSharp",
-        "Microsoft.Extensions.DependencyInjection.Abstractions", "Microsoft.Extensions.DependencyInjection", "FluentValidation",
-        "Microsoft.Extensions.Logging.Abstractions", "Microsoft.Extensions.Logging", "Microsoft.Extensions.Hosting.Abstractions",
-        "Npgsql", "Microsoft.Data.SqlClient", "RabbitMQ.Client", "Microsoft.AspNetCore.Mvc.Testing", "Microsoft.NET.Test.Sdk",
-        "xunit", "xunit.runner.visualstudio", "coverlet.collector", "Verify.Xunit", "Testcontainers.PostgreSql",
-        "Testcontainers.MsSql", "Testcontainers.RabbitMq", "Microsoft.CodeAnalysis.CSharp.Workspaces", "BenchmarkDotNet",
-        "MediatR", "Hangfire.InMemory", "Hangfire.SqlServer", "Newtonsoft.Json", "Microsoft.Extensions.Hosting",
-        "Microsoft.CodeAnalysis.PublicApiAnalyzers",
-    };
+    private const string AllowListPath = ".github/allowed-packages.txt";
+    private const string MainPackagesProps = "Directory.Packages.props";
 
     private static readonly string[] _skippedDirectories = { "bin", "obj", ".git", "node_modules", "BenchmarkDotNet.Artifacts", "TestResults", ".somi", ".claude" };
 
@@ -145,26 +133,35 @@ public sealed class ConsumerSuiteRulesTests
         Assert.All(files, static f => Assert.DoesNotMatch(@"<Nullable>\s*disable|<ImplicitUsings>\s*enable", File.ReadAllText(f)));
     }
 
+    // A package is not new when the main build already pins it; any other id needs the maintainer's
+    // license check first, recorded on the allow-list.
     [Fact]
     public void ConsumerSolution_UsesOnlyLicenseCheckedPackages()
     {
+        var known = new HashSet<string>(MainBuildPins().Concat(AllowListedIds()), StringComparer.OrdinalIgnoreCase);
         string[] notChecked = ConsumerBuildFiles()
             .SelectMany(static f => Regex.Matches(File.ReadAllText(f), @"<(PackageReference|PackageVersion|GlobalPackageReference)\s+(Include|Update)=""(?<id>[^""]+)""").Select(static m => m.Groups["id"].Value))
-            .Where(static id => !IsRoguePackage(id) && !_licenseCheckedPackages.Contains(id, StringComparer.OrdinalIgnoreCase))
+            .Where(id => !IsRoguePackage(id) && !known.Contains(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        Assert.True(notChecked.Length == 0, "These packages need the maintainer's license check before use: " + string.Join(", ", notChecked));
+        Assert.NotEmpty(known);
+        Assert.True(notChecked.Length == 0, "These packages are neither pinned by the main build nor on " + AllowListPath + "; they need the maintainer's license check before use: " + string.Join(", ", notChecked));
     }
 
+    // The license gate is the license-check job: it lists the packable projects' whole restore graph
+    // and fails on any id that is not on the allow-list.
     [Fact]
-    public void MainBuild_PinsOnlyLicenseCheckedPackages()
+    public void Ci_LicenseCheck_FailsOnAPackageMissingFromTheAllowList()
     {
-        string[] pinned = Regex.Matches(RepoFiles.Read("Directory.Packages.props"), @"<PackageVersion\s+Include=""(?<id>[^""]+)""").Select(static m => m.Groups["id"].Value).ToArray();
-        string[] notChecked = pinned.Where(static id => !_licenseCheckedPackages.Contains(id, StringComparer.OrdinalIgnoreCase)).ToArray();
+        string job = CiJobs().SingleOrDefault(static j => j.StartsWith("  license-check:", StringComparison.Ordinal)) ?? string.Empty;
 
-        Assert.NotEmpty(pinned);
-        Assert.True(notChecked.Length == 0, "These packages need the maintainer's license check before use: " + string.Join(", ", notChecked));
+        Assert.False(job.Length == 0, "ci.yml has no license-check job.");
+        Assert.Matches(@"packable_projects=\(", job);
+        Assert.Matches(@"dotnet\s+list\b[^\n]*\bpackage\b[^\n]*--include-transitive", job);
+        Assert.Contains(AllowListPath, job, StringComparison.Ordinal);
+        Assert.Matches(@"\bexit\s+1\b", job);
+        Assert.DoesNotMatch(@"(?m)^    (if|continue-on-error):", job);
     }
 
     [Fact]
@@ -197,6 +194,15 @@ public sealed class ConsumerSuiteRulesTests
     }
 
     private static string PackageId(string project) => Path.GetFileNameWithoutExtension(project);
+
+    private static string[] MainBuildPins() =>
+        Regex.Matches(RepoFiles.Read(MainPackagesProps), @"<PackageVersion\s+Include=""(?<id>[^""]+)""").Select(static m => m.Groups["id"].Value).ToArray();
+
+    private static string[] AllowListedIds() =>
+        File.ReadLines(Path.Combine(RepoFiles.Root, AllowListPath))
+            .Select(static l => l.Trim())
+            .Where(static l => l.Length > 0 && !l.StartsWith('#'))
+            .ToArray();
 
     private static bool IsRoguePackage(string id) =>
         id.Equals("SkathIO.Rogue", StringComparison.OrdinalIgnoreCase) || id.StartsWith("SkathIO.Rogue.", StringComparison.OrdinalIgnoreCase);
