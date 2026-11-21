@@ -41,7 +41,7 @@ public sealed class OrderPlacedHandler : IEventHandler<OrderPlaced>
         _probe.Record("placed:" + e.Id);
         if (e.Note == "fail")
         {
-            throw new InvalidOperationException("handler failed");
+            throw new InvalidOperationException("secret-detail");
         }
         return default;
     }
