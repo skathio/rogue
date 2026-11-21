@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Packs the twelve SkathIO.Rogue packages into a local feed and runs the consumer solution, which
-# restores them by package reference as an app outside this repository would.
+# restores them by package reference as an app outside this repository would, then publishes the
+# native AOT samples from the same feed and runs them (aot.sh).
 #
 # Usage: tests/consumer/run.sh   (from any directory; CI runs it in the consumer job of ci.yml)
 set -euo pipefail
@@ -31,3 +32,6 @@ for project in SkathIO.Rogue.Abstractions SkathIO.Rogue; do
 done
 
 dotnet test "$root/tests/consumer/SkathIO.Rogue.Consumer.sln" -c Release -p:RoguePackageVersion="$version"
+
+# The native AOT samples, published from the same feed and run.
+"$root/tests/consumer/aot.sh" "$version"

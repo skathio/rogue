@@ -76,6 +76,9 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      # run.sh publishes the two AOT samples natively from the packed packages (tests/consumer/aot.sh).
+      - name: Install native AOT prerequisites
+        run: sudo apt-get install -y clang zlib1g-dev
       - name: Pack the packages and run the consumer solution against them
         run: tests/consumer/run.sh
 

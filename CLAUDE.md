@@ -17,7 +17,9 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 - Consumer suite, as CI runs it: `tests/consumer/run.sh` packs the twelve packages into
   `artifacts/consumer/feed` and tests `tests/consumer/SkathIO.Rogue.Consumer.sln`, a separate
   solution that restores them by package reference (~4 min). Its Postgres and SQL Server job tests
-  need Docker: without it they skip locally and fail in CI (`CI`/`GITHUB_ACTIONS` set).
+  need Docker: without it they skip locally and fail in CI (`CI`/`GITHUB_ACTIONS` set). It then
+  runs `tests/consumer/aot.sh`, which publishes both AOT samples natively from the feed and runs
+  them; without `clang` that step skips locally and fails in CI.
 - AOT check (as CI runs it; needs `clang` and `zlib1g-dev`):
   `dotnet publish samples/SkathIO.Rogue.Aot.Sample/SkathIO.Rogue.Aot.Sample.csproj -c Release -r linux-x64`
   then run `samples/SkathIO.Rogue.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Aot.Sample`.
