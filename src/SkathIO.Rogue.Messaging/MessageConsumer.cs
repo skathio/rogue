@@ -67,8 +67,9 @@ public sealed class MessageConsumer
     private readonly ILogger _logger;
     private readonly IMessageInbox? _inbox;
 
-    // Failed deliveries now waiting out a retry delay here, each holding a place in the transport's window.
-    private int _heldForRetry;
+    // Deliveries now waiting out a delay here before they are put back, failed or turned away as busy,
+    // each holding a place in the transport's window.
+    private int _waitingHere;
 
     // Built only by AddRogueMessaging, which registers every service read here, the transport aside.
     internal MessageConsumer(MessageRegistry registry, IServiceProvider services)
@@ -234,6 +235,10 @@ public sealed class MessageConsumer
         return reason.Length <= MaxReasonLength ? reason : reason.Substring(0, MaxReasonLength);
     }
 
+    // Another delivery holds the id and may finish soon. With no retry delay set, the poll interval still
+    // spaces the tries, so duplicates of one id cannot come round again at the transport's speed.
+    private static TimeSpan BusyDelay(MessagingOptions options) => options.RetryDelay > TimeSpan.Zero ? options.RetryDelay : options.PollInterval;
+
     private static TaskCompletionSource NewSlot() => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
     // Receives up to maxCount messages and starts handling each; returns how many. A failed receive is
@@ -351,7 +356,7 @@ public sealed class MessageConsumer
             case InboxClaim.Handled:
                 return Outcome.Duplicate;
             case InboxClaim.Busy:
-                return Outcome.Defer(_registry.Options.RetryDelay);
+                return Outcome.Defer(BusyDelay(_registry.Options));
         }
 
         Outcome outcome = await RunHandlersAsync(delivery, bound, message, stoppingToken).ConfigureAwait(false);
@@ -409,7 +414,7 @@ public sealed class MessageConsumer
                     await _transport.AckAsync(delivery, CancellationToken.None).ConfigureAwait(false);
                     break;
                 case RogueMessagingTelemetry.Retried:
-                    await RetryAsync(delivery, outcome, stoppingToken, slot).ConfigureAwait(false);
+                    await WaitAndPutBackAsync(delivery, outcome, stoppingToken, slot).ConfigureAwait(false);
                     break;
                 case RogueMessagingTelemetry.DeadLettered:
                     _logDeadLetter(_logger, id, Loggable(envelope.Name), delivery.DeliveryCount, outcome.Reason!, outcome.Exception);
@@ -420,10 +425,7 @@ public sealed class MessageConsumer
                     await _transport.DeadLetterAsync(delivery, TrimReason(reason), CancellationToken.None).ConfigureAwait(false);
                     break;
                 default:
-                    TimeSpan later = await WaitUnlessNativeAsync(outcome.Delay, stoppingToken, slot).ConfigureAwait(false);
-                    // A released message was put back without its handlers failing, either unhandled or
-                    // stopped by shutdown, so it is deferred and keeps every attempt it has left.
-                    await _transport.DeferAsync(delivery, later, CancellationToken.None).ConfigureAwait(false);
+                    await WaitAndPutBackAsync(delivery, outcome, stoppingToken, slot).ConfigureAwait(false);
                     break;
             }
         }
@@ -433,41 +435,42 @@ public sealed class MessageConsumer
         }
     }
 
-    // A delivery that would wait out its delay here holds a place in the transport's unsettled window
-    // all the while. Past half the window it is nacked at once instead, its count still raised, so
-    // failing messages cannot stall the rest, and one that always fails still reaches MaxAttempts.
-    private async Task RetryAsync(ReceivedMessage delivery, Outcome outcome, CancellationToken stoppingToken, TaskCompletionSource? slot)
+    // Puts a retried or released delivery back after its delay. A failed one is nacked, its count
+    // raised; a released one was put back without its handlers failing (turned away as busy, or stopped
+    // by shutdown), so it is deferred and keeps every attempt it has left. One that would wait out its
+    // delay here holds a place in the transport's unsettled window all the while. Past half the window
+    // it is put back at once instead, so neither failing messages nor duplicates of a busy id can stall
+    // the rest, and one that always fails still reaches MaxAttempts.
+    private async Task WaitAndPutBackAsync(ReceivedMessage delivery, Outcome outcome, CancellationToken stoppingToken, TaskCompletionSource? slot)
     {
-        TimeSpan delay = outcome.Delay;
-        bool held = false;
-        if (WaitsHere(delay))
-        {
-            held = TryHoldForRetry();
-            delay = held ? delay : TimeSpan.Zero;
-        }
+        bool held = WaitsHere(outcome.Delay) && TryHoldPlaceToWait();
+        TimeSpan delay = held || !WaitsHere(outcome.Delay) ? outcome.Delay : TimeSpan.Zero;
         try
         {
-            MessageEnvelope envelope = delivery.Envelope;
-            _logRetry(_logger, Loggable(envelope.Id), Loggable(envelope.Name), delivery.DeliveryCount, _registry.Options.MaxAttempts, delay, outcome.Exception);
+            bool failed = outcome.Name == RogueMessagingTelemetry.Retried;
+            if (failed)
+            {
+                _logRetry(_logger, Loggable(delivery.Envelope.Id), Loggable(delivery.Envelope.Name), delivery.DeliveryCount, _registry.Options.MaxAttempts, delay, outcome.Exception);
+            }
             TimeSpan left = await WaitUnlessNativeAsync(delay, stoppingToken, slot).ConfigureAwait(false);
-            await _transport.NackAsync(delivery, left, CancellationToken.None).ConfigureAwait(false);
+            await (failed ? _transport.NackAsync(delivery, left, CancellationToken.None) : _transport.DeferAsync(delivery, left, CancellationToken.None)).ConfigureAwait(false);
         }
         finally
         {
             if (held)
             {
-                Interlocked.Decrement(ref _heldForRetry);
+                Interlocked.Decrement(ref _waitingHere);
             }
         }
     }
 
-    // Takes one of the places half the transport's window allows for waiting retries, when one is free.
-    private bool TryHoldForRetry()
+    // Takes one of the places half the transport's window allows for deliveries waiting here, when one is free.
+    private bool TryHoldPlaceToWait()
     {
-        int held = Interlocked.Increment(ref _heldForRetry);
+        int held = Interlocked.Increment(ref _waitingHere);
         if (_transport.UnsettledLimit is int window && held > window / 2)
         {
-            Interlocked.Decrement(ref _heldForRetry);
+            Interlocked.Decrement(ref _waitingHere);
             return false;
         }
         return true;

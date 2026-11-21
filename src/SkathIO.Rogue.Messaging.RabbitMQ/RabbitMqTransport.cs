@@ -30,7 +30,8 @@ namespace SkathIO.Rogue.Messaging.RabbitMQ;
 /// one is published to the dead-letter queue with the reason in its <c>rogue-dead-letter-reason</c> header, then acked.
 /// Each copy is confirmed by the broker before the original is acked, so a message is delivered at
 /// least once; when a copy cannot be published, the original is handed back to the broker (requeued,
-/// or dead-lettered without a reason).
+/// or dead-lettered without a reason), except a deferred one, which this consumer receives again,
+/// still unsettled, so that being deferred never costs it an attempt.
 /// </para>
 /// </remarks>
 public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposable, IDisposable
@@ -48,7 +49,7 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
     private readonly SemaphoreSlim _connectGate = new SemaphoreSlim(1, 1);
     private readonly SemaphoreSlim _publishGate = new SemaphoreSlim(1, 1);
     private readonly SemaphoreSlim _settleGate = new SemaphoreSlim(1, 1);
-    private readonly Channel<Delivery> _deliveries = Channel.CreateUnbounded<Delivery>(new UnboundedChannelOptions { SingleWriter = true });
+    private readonly Channel<Delivery> _deliveries = Channel.CreateUnbounded<Delivery>(new UnboundedChannelOptions { SingleWriter = false });
     private readonly DeliveryStamp _stamp;
     private IConnection? _connection;
     private IChannel? _publisher;
@@ -223,9 +224,10 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
         }
         catch (Exception)
         {
-            if (IsCurrent(delivery))
+            if (IsCurrent(delivery) && (countsAs > 0 || !HandBack(delivery)))
             {
-                // Handed back as it is: delivered again, but not counted as another attempt.
+                // Handed back to the broker. It marks the redelivery, which counts as one more attempt:
+                // right for a failed attempt, and for a deferral only when the transport is closing.
                 await OnChannelAsync(delivery, channel => channel.BasicNackAsync(delivery.Tag, false, true, CancellationToken.None)).ConfigureAwait(false);
             }
             throw;
@@ -322,6 +324,12 @@ public sealed partial class RabbitMqTransport : IMessageTransport, IAsyncDisposa
     }
 
     private bool IsCurrent(Delivery delivery) => delivery.Generation == Volatile.Read(ref _generation);
+
+    // Gives a deferred delivery whose copy could not be published back to this consumer, still unsettled
+    // with the broker, so it comes back with the count it had: a requeue would be marked redelivered and
+    // cost it an attempt. False once the transport is closing.
+    private bool HandBack(Delivery delivery)
+        => _deliveries.Writer.TryWrite(new Delivery(delivery.Envelope, delivery.DeliveryCount, this, delivery.Handle));
 
     // Settled on the channel the delivery came on: its tag means nothing on any other channel.
     private async Task OnChannelAsync(Delivery delivery, Func<IChannel, ValueTask> settle)

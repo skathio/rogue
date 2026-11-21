@@ -136,6 +136,32 @@ public sealed class DeliveryHardeningTests
     }
 
     [Fact]
+    public async Task AtMostHalfTheWindow_WaitsOutARetryDelay_ForDeliveriesTheInboxTurnsAwayAsBusy()
+    {
+        await using ConsumerHost host = ConsumerHost.Create(window: 4, maxAttempts: 5, inbox: new AlwaysBusyInbox());
+        await host.SendAsync(Envelope("m-1"), Envelope("m-2"), Envelope("m-3"));
+
+        Task<int> run = host.RunOnceAsync();
+
+        // Three duplicates of a busy id: two may wait out the delay, the third is put back at once.
+        await host.Settled.WaitForAsync(3);
+        Assert.Equal(2, host.Clock.Timers.Count);
+
+        host.Clock.FireAll();
+        Assert.Equal(3, await run);
+    }
+
+    private sealed class AlwaysBusyInbox : IMessageInbox
+    {
+        public ValueTask<InboxClaimResult> TryClaimAsync(string messageId, CancellationToken cancellationToken)
+            => new ValueTask<InboxClaimResult>(new InboxClaimResult(InboxClaim.Busy, 0));
+
+        public ValueTask CompleteAsync(string messageId, long claimToken, CancellationToken cancellationToken) => default;
+
+        public ValueTask ReleaseAsync(string messageId, long claimToken, CancellationToken cancellationToken) => default;
+    }
+
+    [Fact]
     public async Task AWaitThatEnds_GivesItsPlaceBack_ToTheNextFailedDelivery()
     {
         await using ConsumerHost host = ConsumerHost.Create(window: 2, maxAttempts: 5);
@@ -315,12 +341,12 @@ public sealed class DeliveryHardeningTests
 
         public WindowTransport Transport { get; }
 
-        /// <summary>Counts each wait a failed delivery starts and each nack.</summary>
+        /// <summary>Counts each wait a delivery starts, each nack and each deferral.</summary>
         public Countdown Settled { get; }
 
         public MessageProbe Probe => _services.GetRequiredService<MessageProbe>();
 
-        public static ConsumerHost Create(int window, int maxAttempts, bool fireAtOnce = false)
+        public static ConsumerHost Create(int window, int maxAttempts, bool fireAtOnce = false, IMessageInbox? inbox = null)
         {
             var settled = new Countdown();
             var clock = new HoldingClock(settled, fireAtOnce);
@@ -329,6 +355,10 @@ public sealed class DeliveryHardeningTests
             collection.AddSingleton<TimeProvider>(clock);
             collection.AddSingleton<MessageProbe>();
             collection.AddSingleton<IMessageTransport>(transport);
+            if (inbox is not null)
+            {
+                collection.AddSingleton(inbox);
+            }
             collection.AddRogue();
             collection.AddRogueMessaging(options =>
             {
@@ -382,7 +412,7 @@ public sealed class DeliveryHardeningTests
         }
     }
 
-    /// <summary>An in-memory transport with no native delay that reports an unsettled window and records each nack.</summary>
+    /// <summary>An in-memory transport with no native delay that reports an unsettled window, records each nack and counts each deferral.</summary>
     private sealed class WindowTransport : IMessageTransport
     {
         private readonly Countdown _settled;
@@ -415,7 +445,11 @@ public sealed class DeliveryHardeningTests
             _settled.Signal();
         }
 
-        public ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken) => Inner.DeferAsync(message, delay, cancellationToken);
+        public async ValueTask DeferAsync(ReceivedMessage message, TimeSpan delay, CancellationToken cancellationToken)
+        {
+            await Inner.DeferAsync(message, delay, cancellationToken);
+            _settled.Signal();
+        }
 
         public ValueTask DeadLetterAsync(ReceivedMessage message, string reason, CancellationToken cancellationToken) => Inner.DeadLetterAsync(message, reason, cancellationToken);
     }
