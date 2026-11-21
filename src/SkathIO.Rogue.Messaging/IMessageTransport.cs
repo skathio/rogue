@@ -28,7 +28,8 @@ public interface IMessageTransport
     /// the default, when it sets no such limit. Without <see cref="TransportCapabilities.NativeDelay"/>
     /// the consumer waits out a retry delay holding the delivery unsettled; it lets at most half this
     /// many wait, and nacks any other failed delivery at once, its delivery count still one higher, so
-    /// failing messages never take the whole window from the rest.
+    /// failing messages never take the whole window from the rest. Deliveries an inbox turns away as
+    /// busy wait within the same half, and any other is deferred at once.
     /// </summary>
     int? UnsettledLimit => null;
 

@@ -69,6 +69,19 @@ so it is still dead-lettered after `MaxAttempts` deliveries. Messages that keep 
 never take the whole window from messages that would succeed, but past that half they may be retried
 sooner than `RetryDelay`. With `PrefetchCount` 1 no failed message waits.
 
+With an inbox, a delivery whose id another delivery holds is put back unhandled, its delivery count
+unchanged. It waits `RetryDelay` first, or `PollInterval` when `RetryDelay` is zero, and it waits
+within the same half of the window as the failed messages. While that half is full, such a delivery
+is put back at once, so duplicates of one id cannot take the whole window either; until the id is
+free, those past the half go round between the queue and the consumer with no delay. With
+`PrefetchCount` 1 none of them waits.
+
+When the broker refuses the copy of a failed message, the original is requeued, and the broker's
+redelivery counts as the attempt that failed. When it refuses the copy of a deferred delivery, the
+original is not requeued: the same consumer receives it again, still unsettled, with the count it
+had. It goes back to the broker only when the channel closes or the transport is disposed, which
+counts one more delivery like any other redelivery (see below).
+
 ## Who may publish to the default exchange
 
 The transport puts its retry copies back on the service's queue through the default exchange, and

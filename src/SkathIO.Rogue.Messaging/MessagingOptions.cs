@@ -34,13 +34,20 @@ public sealed class MessagingOptions
     /// <summary>The most deliveries one receive takes from the transport, from 1 to <see cref="MaxBatchSize"/>.</summary>
     public int BatchSize { get; set; } = 100;
 
-    /// <summary>The delay before the first redelivery of a failed message; it doubles on each later one.</summary>
+    /// <summary>
+    /// The delay before the first redelivery of a failed message; it doubles on each later one. Also how
+    /// long a delivery the inbox turns away as busy stays away, not doubled; with no retry delay it
+    /// stays away for <see cref="PollInterval"/>.
+    /// </summary>
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(5);
 
     /// <summary>The longest delay before a redelivery.</summary>
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(5);
 
-    /// <summary>How long an idle consumer waits before it receives again.</summary>
+    /// <summary>
+    /// How long an idle consumer waits before it receives again, and how long a delivery the inbox
+    /// turns away as busy stays away when <see cref="RetryDelay"/> is zero.
+    /// </summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
 
     /// <summary>New options, set by <paramref name="configure"/> and checked.</summary>
