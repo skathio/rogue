@@ -529,11 +529,15 @@ public abstract class JobStoreContract
 
         bool first = await store.TryAcquireLeadershipAsync(name, "a", _lease, None);
         bool rival = await store.TryAcquireLeadershipAsync(name, "b", _lease, None);
-        Clock.Advance(_lease - TimeSpan.FromTicks(1));
+
+        // The clock moves in whole microseconds, the finest time every store keeps (Postgres timestamptz
+        // keeps no finer), so "just before the lease ends" is a time each store can tell apart from its end.
+        TimeSpan justUnder = _lease - TimeSpan.FromMicroseconds(1);
+        Clock.Advance(justUnder);
         bool renewed = await store.TryAcquireLeadershipAsync(name, "a", _lease, None);
-        Clock.Advance(_lease - TimeSpan.FromTicks(1));
+        Clock.Advance(justUnder);
         bool rivalBeforeExpiry = await store.TryAcquireLeadershipAsync(name, "b", _lease, None);
-        Clock.Advance(TimeSpan.FromTicks(1));
+        Clock.Advance(TimeSpan.FromMicroseconds(1));
         bool rivalAfterExpiry = await store.TryAcquireLeadershipAsync(name, "b", _lease, None);
         bool formerLeader = await store.TryAcquireLeadershipAsync(name, "a", _lease, None);
         await store.ReleaseLeadershipAsync(name, "a", None);
