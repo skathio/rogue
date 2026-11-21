@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- An app with jobs, in a test process of its own: its job commands and handlers are the only
+         ones the core generator, which arrives through SkathIO.Rogue.Jobs, wires into this process. -->
+    <PackageReference Include="SkathIO.Rogue.Jobs" />
+    <PackageReference Include="SkathIO.Rogue.Jobs.Postgres" />
+    <PackageReference Include="SkathIO.Rogue.Jobs.SqlServer" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+</Project>
