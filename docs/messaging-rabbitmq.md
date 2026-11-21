@@ -60,32 +60,78 @@ old key count again from 1.
 
 ## Retries and the prefetch window
 
-RabbitMQ has no native delay, so the consumer waits out a failed message's retry delay itself, with
-the delivery still unsettled. The broker sends at most `PrefetchCount` unsettled deliveries, and the
-transport reports that number as its unsettled window (`IMessageTransport.UnsettledLimit`). At most
-half of the window waits out a retry delay at once. A message that fails while that half is full is
-nacked at once instead: it goes back on the queue with no delay and its delivery count one higher,
-so it is still dead-lettered after `MaxAttempts` deliveries. Messages that keep failing therefore
-never take the whole window from messages that would succeed, but past that half they may be retried
-sooner than `RetryDelay`. With `PrefetchCount` 1 no failed message waits.
+RabbitMQ has no native delay for a single message, so the consumer waits out a failed message's
+retry delay itself, with the delivery still unsettled. The broker sends at most `PrefetchCount`
+unsettled deliveries, and the transport reports that number as its unsettled window
+(`IMessageTransport.UnsettledLimit`). At most half of the window waits out a retry delay at once. A
+message that fails while that half is full is nacked at once instead: it goes back on the queue with
+no delay and its delivery count one higher, so it is still dead-lettered after `MaxAttempts`
+deliveries. Messages that keep failing therefore never take the whole window from messages that
+would succeed, but past that half they may be retried sooner than `RetryDelay`. With
+`PrefetchCount` 1 no failed message waits.
 
-With an inbox, a delivery whose id another delivery holds is put back unhandled, its delivery count
-unchanged. It waits `RetryDelay` first, or `PollInterval` when `RetryDelay` is zero, and it waits
-within the same half of the window as the failed messages. While that half is full, such a delivery
-is put back at once, so duplicates of one id cannot take the whole window either; until the id is
-free, those past the half go round between the queue and the consumer with no delay. With
-`PrefetchCount` 1 none of them waits.
+Failed retries do not use the wait queue below. Their delay doubles on each attempt, and a queue
+expires a message only once those ahead of it have expired, so a long backoff would hold back every
+shorter delay queued behind it.
+
+## Busy deliveries and the wait queue
+
+With an inbox, a delivery whose id another delivery holds is deferred: put back unhandled, its
+delivery count unchanged. It stays away `RetryDelay`, or `PollInterval` when `RetryDelay` is zero,
+and it waits on the broker, not in the consumer. The transport reports
+`TransportCapabilities.NativeDeferDelay`, so the consumer hands it the delay instead of waiting: a
+busy delivery holds no prefetch place and no concurrency slot, at any `PrefetchCount`, however many
+duplicates of one id arrive, and comes round again once per delay for as long as the id stays busy.
+
+Each consuming service gets this topology, declared when the transport connects:
+
+| Name | Kind | Arguments | Role |
+| --- | --- | --- | --- |
+| `Exchange` (`rogue`) | topic exchange, durable | | every message, routed by its name |
+| `ServiceName` | quorum queue, durable | `x-dead-letter-exchange` = `<Exchange>.dead-letter`, `x-dead-letter-routing-key` = `ServiceName` | the service's messages |
+| `<Exchange>.dead-letter` | direct exchange, durable | | dead letters, routed by service name |
+| `<ServiceName>.dead-letter` | quorum queue, durable | | the messages the service gave up on |
+| `<ServiceName>.wait` | quorum queue, durable | `x-dead-letter-exchange` = `""` (the default exchange), `x-dead-letter-routing-key` = `ServiceName`, `x-dead-letter-strategy` = `at-least-once`, `x-overflow` = `reject-publish` | deferred copies waiting out their delay |
+
+`RabbitMqTransportOptions.WaitQueue` gives the wait queue's name. No consumer reads it. A deferred
+copy goes there through the default exchange with its delay, in whole milliseconds rounded up, as its
+per-message expiration (`expiration`), and with its signed delivery count. When it expires, the
+broker dead-letters it to the default exchange with the service's name as routing key, so it lands
+back on the service's queue with an `x-death` header whose reason is `expired`. It arrives through
+the default exchange, where the transport reads its signed count, so a deferral never costs an
+attempt. The wait queue's dead-letter target is the service's queue, not the dead-letter queue:
+expiring there is the end of a wait, not a failure. At-least-once dead-lettering keeps each copy in
+the wait queue until the service's queue has confirmed it, so a full or unavailable service queue
+delays a copy rather than loses it; quorum queues allow that strategy only with `reject-publish`
+overflow. The wait queue sets no length limit of its own. Message TTL and at-least-once dead-lettering on quorum
+queues need RabbitMQ 3.10 or later; on an older broker the wait queue cannot be declared and the
+transport does not connect.
+
+A queue expires a message only from its head. Every busy delivery of one service is deferred for the
+same delay, so the copies leave in order; a caller of `DeferAsync` that mixes delays makes a shorter
+one wait behind a longer one ahead of it. A delay is held to at most `int.MaxValue` milliseconds
+(about 24.8 days).
+
+The wait queue is new in this version. A service that upgrades gets it on its next connection; the
+service's queue and the dead-letter queue keep their arguments, so nothing needs to be deleted.
+
+## When the broker refuses a copy
 
 When the broker refuses the copy of a failed message, the original is requeued, and the broker's
-redelivery counts as the attempt that failed. When it refuses the copy of a deferred delivery, the
-original is not requeued: the same consumer receives it again, still unsettled, with the count it
-had. It goes back to the broker only when the channel closes or the transport is disposed, which
-counts one more delivery like any other redelivery (see below).
+redelivery counts as the attempt that failed. When the wait queue refuses the copy of a deferred
+delivery (it was deleted or limited by a policy, or the broker refused the publish), the original is
+dead-lettered to the service's dead-letter queue with its delivery count and the reason
+`Deferred, but the wait queue refused its copy; replay it once its id is free.`, and the consumer
+logs one warning that the settle failed. It is neither requeued, which would bring it straight back,
+nor handed to the consumer again, so a refused deferral cannot go round between the broker and the
+consumer at their speed. If that dead-letter copy is refused too, the original is nacked to the
+queue's dead-letter exchange without a reason. Replay it from the dead-letter queue once the wait
+queue accepts copies again.
 
 ## Who may publish to the default exchange
 
-The transport puts its retry copies back on the service's queue through the default exchange, and
-names each by its AMQP type property. Anyone allowed to write to the default exchange can therefore
+The transport puts its retry copies back on the service's queue, and its deferred copies on the wait
+queue, through the default exchange, and names each by its AMQP type property. Anyone allowed to write to the default exchange can therefore
 put a message on the queue. The type property names it only when it is a name the service receives
 (one of its subscriptions, or a name a `MapRoutingKey` or `MapHeader` gives); any other is
 dead-lettered unread. Within those names, though, such a sender can still make the service handle a

@@ -134,7 +134,7 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   (taken from the message being handled, if any) and the W3C `traceparent`. `IMessageTransport` is
   the transport contract: batch send, receive, ack, nack with a delay, defer (put back unhandled,
   with the same delivery count), dead-letter, and capability
-  flags (`NativeDelay`, `NativeDeadLetter`, `BatchSend`) whose gaps the consumer fills in.
+  flags (`NativeDelay`, `NativeDeferDelay`, `NativeDeadLetter`, `BatchSend`) whose gaps the consumer fills in.
   `InMemoryTransport` keeps messages in memory, for tests and single-process development. The
   `MessageConsumer` runs at most `MaxConcurrency` handlers at once, each in its own service scope,
   redelivers a failed message after a doubling, capped delay until `MaxAttempts` deliveries have
@@ -142,11 +142,12 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   retry delay itself, but a message waiting does not hold one of the `MaxConcurrency` slots, so
   failing messages cannot stall the others. A transport that reports an unsettled window
   (`IMessageTransport.UnsettledLimit`) lets at most half of it wait out a retry delay this way;
-  a failed message past that is nacked at once, its delivery count still raised. The same half of
-  the window bounds the deliveries an inbox turns away because another delivery holds their id; past
-  it they are deferred at once. Such a delivery comes back after `RetryDelay`, or after
-  `PollInterval` when `RetryDelay` is zero, so duplicates of one id cannot stall the consumer or loop
-  at the transport's speed. A message whose handlers are stopped by shutdown is
+  a failed message past that is nacked at once, its delivery count still raised. A delivery an inbox
+  turns away because another delivery holds its id is deferred for `RetryDelay`, or `PollInterval`
+  when `RetryDelay` is zero. A transport with `NativeDelay` or `NativeDeferDelay` holds it for that
+  delay, and the consumer does not wait; on any other transport the consumer waits it out within the
+  same half of the window, and past that half defers it at once, so there duplicates of one id cannot
+  stall the consumer but may come round at the transport's speed. A message whose handlers are stopped by shutdown is
   deferred with no delay, not nacked, so it keeps its delivery count and is never dead-lettered for
   being stopped. A message with an unknown name, a body over `MaxMessageBytes`, or a
   body that is not JSON of its type within `MaxJsonDepth` is dead-lettered at once without running
@@ -179,8 +180,15 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   of its messages by setting a header or reusing an id. The count travels on the copy, so any number
   of messages can be in retry at once. A delivery the quorum queue redelivers after it was left
   unsettled also counts the queue's own `x-delivery-count`, held to its range. A deferred delivery
-  whose copy the broker refuses is not requeued but received again by the same consumer, still
-  unsettled, so being deferred never costs it an attempt. `DeliveryStampKey` is
+  (an inbox found its id busy) waits on the broker: the transport reports `NativeDeferDelay` and puts
+  its copy, with the same signed count, on a quorum wait queue of the service's own
+  (`<ServiceName>.wait`, `RabbitMqTransportOptions.WaitQueue`) with the delay as its expiration; the
+  wait queue dead-letters it back to the service's queue through the default exchange
+  (at-least-once). So a busy delivery holds no prefetch place, never costs an attempt, and duplicates
+  of one id come round once per delay at any `PrefetchCount`, never at the broker's speed. Failed
+  retries keep their doubling delay in the consumer, since a queue expires messages only from its
+  head. A deferred delivery whose copy the wait queue refuses is dead-lettered with its count and a
+  reason, not requeued or handed back to the consumer. `DeliveryStampKey` is
   a required secret of at least 32 bytes (UTF-8) with no default, and must not start or end with
   white space: registration fails at startup otherwise. Give every instance of a service
   the same key, from configuration or user-secrets, so a retry taken by another instance keeps its
