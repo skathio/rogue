@@ -147,8 +147,10 @@ jobs:
         run: |
           # Gates the allocation of every Rogue benchmark, divided by its job count, against the
           # committed ceiling. Allocation is gated, not time: it is stable on shared CI runners.
-          ceiling=$(jq -e '.jobs_rogue_bytes_per_job_ceiling' .bench/thresholds.json) || {
-            echo "FAIL: jobs_rogue_bytes_per_job_ceiling is missing from .bench/thresholds.json" && exit 1
+          # The ceiling must be a number: jq orders every number before every string, so no
+          # measurement would be over a ceiling written as text, and the gate would pass anything.
+          ceiling=$(jq -e '.jobs_rogue_bytes_per_job_ceiling | numbers' .bench/thresholds.json) || {
+            echo "FAIL: jobs_rogue_bytes_per_job_ceiling in .bench/thresholds.json is missing or is not a number" && exit 1
           }
           result_file=$(find BenchmarkDotNet.Artifacts/results -name '*InMemoryJobsBenchmarks-report-full-compressed.json' | head -1)
           if [ -z "$result_file" ]; then
