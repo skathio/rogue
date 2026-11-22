@@ -1,10 +1,1 @@
 #nullable enable
-SkathIO.Rogue.Messaging.Outbox.IMessageOutbox
-SkathIO.Rogue.Messaging.Outbox.IMessageOutbox.Publish<TMessage>(TMessage message, System.Data.Common.DbTransaction! transaction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
-SkathIO.Rogue.Messaging.Outbox.MessageOutboxOptions
-SkathIO.Rogue.Messaging.Outbox.MessageOutboxOptions.InboxLease.get -> System.TimeSpan
-SkathIO.Rogue.Messaging.Outbox.MessageOutboxOptions.InboxLease.set -> void
-SkathIO.Rogue.Messaging.Outbox.MessageOutboxOptions.MessageOutboxOptions() -> void
-SkathIO.Rogue.Messaging.Outbox.MessageOutboxServiceCollectionExtensions
-static SkathIO.Rogue.Messaging.Outbox.MessageOutboxServiceCollectionExtensions.AddRogueMessagingOutbox(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<SkathIO.Rogue.Messaging.Outbox.MessageOutboxOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-static readonly SkathIO.Rogue.Messaging.Outbox.MessageOutboxOptions.MaxInboxLease -> System.TimeSpan
