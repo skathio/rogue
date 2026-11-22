@@ -331,10 +331,9 @@ public sealed class MtrPingNotificationN20Handler20 : global::MediatR.INotificat
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────
-// Stream types (scenario 5) — Rogue only.
-// MediatR v12's CORE package has no IStreamQuery equivalent (streaming lives in
-// MediatR.Extensions.Microsoft.DependencyInjection's IStreamQueryHandler, not referenced
-// here), so the streaming benchmark intentionally omits MediatR — see StreamBenchmarks.cs.
+// Stream types (scenario 5) — Rogue and MediatR.
+// MediatR 12 streams through IStreamRequest<T> / IStreamRequestHandler<,> and
+// ISender.CreateStream; both handlers yield the same ten integers.
 // ─────────────────────────────────────────────────────────────────────────────────────
 
 // --- Rogue stream types ---
@@ -343,6 +342,21 @@ public sealed class PingStreamHandler : IStreamQueryHandler<PingStreamRequest, i
 {
     public async IAsyncEnumerable<int> Handle(PingStreamRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        for (int i = 0; i < request.Count; i++)
+        {
+            yield return i;
+        }
+        await Task.CompletedTask; // suppress CS1998
+    }
+}
+
+// --- MediatR stream types ---
+public sealed record MtrPingStreamRequest(int Count) : global::MediatR.IStreamRequest<int>;
+public sealed class MtrPingStreamHandler : global::MediatR.IStreamRequestHandler<MtrPingStreamRequest, int>
+{
+    public async IAsyncEnumerable<int> Handle(MtrPingStreamRequest request,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         for (int i = 0; i < request.Count; i++)
         {
