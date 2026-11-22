@@ -30,7 +30,9 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   renewed while it waits for a slot or runs, until its outcome is stored, and a lease the store no
   longer holds is logged as a warning. `JobsOptions.LeaseDuration` and `LeaderLeaseDuration` are at
   most 30 days (`JobsOptions.MaxLeaseDuration`), so a store adding either to the current time never overflows. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
-  follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. Register it
+  follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. A job of a kind this process does not
+  know is measured under the kind `(unknown)`, so rows written into the store cannot add a metric
+  series per made-up kind; the warning log names the real kind. Register it
   with `AddRogueJobs()` next to `AddRogue()`, which is enough to enqueue; add `AddRogueJobWorker()`
   in each host that should run jobs, which registers a hosted service that runs the worker while the
   host runs (the package depends on `Microsoft.Extensions.Hosting.Abstractions`). Targets `net8.0` and `net10.0`; no reflection, AOT-safe.

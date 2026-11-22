@@ -62,6 +62,10 @@ public sealed class JobWorker
         LoggerMessage.Define(LogLevel.Error, new EventId(9, "JobBatchScopeDisposeFailed"),
             "Disposing the service scope a batch of jobs shared failed after every job in it had run.");
 
+    // The kind tag of a job no binding knows: metrics keep one series for all of them, so whoever can
+    // write rows into the store cannot add a series per made-up kind. The warning log names the real kind.
+    private const string UnknownKindTag = "(unknown)";
+
     private readonly JobRegistry _registry;
     private readonly IJobStore _store;
     private readonly IServiceScopeFactory _scopes;
@@ -223,7 +227,7 @@ public sealed class JobWorker
 
         var tags = new TagList
         {
-            { RogueJobsTelemetry.KindTag, job.Kind },
+            { RogueJobsTelemetry.KindTag, _registry.TryGet(job.Kind, out _) ? job.Kind : UnknownKindTag },
             { RogueJobsTelemetry.QueueTag, job.Queue },
             { RogueJobsTelemetry.OutcomeTag, outcome.Name },
         };
