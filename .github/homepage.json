@@ -1,15 +1,18 @@
 {
   "name": "Rogue",
   "kind": ".NET library",
-  "tagline": "AOT-safe, source-generated CQRS and mediator. A drop-in alternative to MediatR, free and MIT-licensed for good.",
+  "tagline": "AOT-safe, source-generated mediator, background jobs and messaging. Meets or beats MediatR and Hangfire in every benchmark we run. MIT, for good.",
   "tags": [
-    ".NET 10",
     "Native AOT",
-    "NuGet"
+    "CQRS mediator",
+    "Background jobs",
+    "Messaging",
+    ".NET 8 & 10"
   ],
   "colour": "#a78bfa",
   "image": "site/mark.svg",
   "links": {
-    "NuGet": "https://www.nuget.org/packages/SkathIO.Rogue"
+    "NuGet": "https://www.nuget.org/packages/SkathIO.Rogue",
+    "Docs": "https://github.com/skathio/rogue/tree/main/docs"
   }
 }
