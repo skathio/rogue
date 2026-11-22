@@ -19,8 +19,12 @@ namespace SkathIO.Rogue.Generator.Tests;
 /// -p:TargetFramework still finds and ships it. The site workflow's comment on its checkout pin names
 /// the version that pin is.
 /// </summary>
-public sealed class HousekeepingRulesTests
+public sealed class HousekeepingRulesTests : IClassFixture<HousekeepingRulesTests.IsolatedBuilds>
 {
+    private readonly IsolatedBuilds _builds;
+
+    public HousekeepingRulesTests(IsolatedBuilds builds) => _builds = builds;
+
     private const string AllowListPath = ".github/allowed-packages.txt";
     private const string SiteWorkflowPath = ".github/workflows/site.yml";
     private const string CiPath = ".github/workflows/ci.yml";
@@ -132,7 +136,7 @@ public sealed class HousekeepingRulesTests
         string output = Path.Combine(Path.GetTempPath(), "rogue-pack-" + Guid.NewGuid().ToString("N"));
         try
         {
-            (int exitCode, string log) = DotnetPack(project, framework, output);
+            (int exitCode, string log) = DotnetPack(project, framework, _builds.ArtifactsOf(project), output);
             Assert.True(exitCode == 0, "dotnet pack " + project + " -p:TargetFramework=" + framework + " failed:\n" + log);
 
             string package = Assert.Single(Directory.GetFiles(output, "*.nupkg"));
@@ -192,33 +196,69 @@ public sealed class HousekeepingRulesTests
         return pins;
     }
 
-    private static (int ExitCode, string Log) DotnetPack(string project, string framework, string output)
+    private static (int ExitCode, string Log) DotnetPack(string project, string framework, string artifacts, string output) =>
+        Dotnet("pack", project, "-c", BuildConfiguration(), "--no-build", "--artifacts-path", artifacts, "-p:TargetFramework=" + framework, "-o", output);
+
+    private static (int ExitCode, string Log) Dotnet(params string[] arguments)
     {
         var start = new ProcessStartInfo("dotnet") { WorkingDirectory = RepoFiles.Root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         // No build servers: a reused MSBuild node would inherit the redirected pipes and keep them open.
-        foreach (string argument in new[] { "pack", project, "-c", BuildConfiguration(), "--no-build", "--disable-build-servers", "-p:TargetFramework=" + framework, "-o", output, "-nologo" })
+        foreach (string argument in arguments.Concat(new[] { "--disable-build-servers", "-nologo" }))
         {
             start.ArgumentList.Add(argument);
         }
         start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
-        using Process pack = Process.Start(start)!;
-        System.Threading.Tasks.Task<string> stderr = pack.StandardError.ReadToEndAsync();
-        string stdout = pack.StandardOutput.ReadToEnd();
-        bool exited = pack.WaitForExit(TimeSpan.FromMinutes(5));
+        using Process process = Process.Start(start)!;
+        System.Threading.Tasks.Task<string> stderr = process.StandardError.ReadToEndAsync();
+        string stdout = process.StandardOutput.ReadToEnd();
+        bool exited = process.WaitForExit(TimeSpan.FromMinutes(5));
         if (!exited)
         {
-            pack.Kill(entireProcessTree: true);
+            process.Kill(entireProcessTree: true);
         }
-        Assert.True(exited, "dotnet pack did not finish:\n" + stdout);
-        return (pack.ExitCode, stdout + stderr.Result);
+        Assert.True(exited, "dotnet " + arguments[0] + " did not finish:\n" + stdout);
+        return (process.ExitCode, stdout + stderr.Result);
     }
 
-    // The configuration this test assembly was built in (bin/<Configuration>/<tfm>/), which the
-    // solution build also used for the packages, so the no-build pack finds their output.
+    // The configuration this test assembly was built in (bin/<Configuration>/<tfm>/).
     private static string BuildConfiguration()
     {
         string tfmDir = Path.GetDirectoryName(AppContext.BaseDirectory.TrimEnd('/', '\\'))!;
         return Path.GetFileName(tfmDir);
+    }
+
+    /// <summary>
+    /// Each package built once, every target framework, into its own artifacts folder. A pack under a
+    /// global TargetFramework still packs every framework's output, and the solution's own output may
+    /// still be being written by a build running alongside these tests, so the pack reads this copy.
+    /// </summary>
+    public sealed class IsolatedBuilds : IDisposable
+    {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "rogue-pack-build-" + Guid.NewGuid().ToString("N"));
+        private readonly Dictionary<string, string> _built = new(StringComparer.Ordinal);
+
+        public string ArtifactsOf(string project)
+        {
+            lock (_built)
+            {
+                if (!_built.TryGetValue(project, out string? artifacts))
+                {
+                    artifacts = Path.Combine(_root, _built.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    (int exitCode, string log) = Dotnet("build", project, "-c", BuildConfiguration(), "--artifacts-path", artifacts);
+                    Assert.True(exitCode == 0, "dotnet build " + project + " failed:\n" + log);
+                    _built.Add(project, artifacts);
+                }
+                return artifacts;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, recursive: true);
+            }
+        }
     }
 
     private static string[] AllowListIds() =>
