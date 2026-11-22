@@ -6,10 +6,11 @@ setup and the headline findings.
 
 **Status of the numbers:** the competitive comparison in `bench/RESULTS.md` is populated from committed
 baseline runs (newest: `bench/results/2026-11-22-696836e/`, a full BenchmarkDotNet run of the core and
-validation suites for 2.0.0). The headline finding: **Rogue meets or
+validation suites for 2.0.0, plus `bench/results/2026-11-22-ed39edf/`, a full rerun of the stream
+benchmark with MediatR's `CreateStream` added). The headline finding: **Rogue meets or
 beats MediatR on every currently-measured head-to-head scenario** — single-handler `Send` (both the
 mean and the generated concrete fast path), the untyped object path, notification fan-out at
-N = 2 / 5 / 20, and (new in 1.1.0) validated `Send` with a real `FluentValidation` behavior on both
+N = 2 / 5 / 20, a 10-item stream (362.0 ns / 344 B against 683.6 ns / 608 B), and (new in 1.1.0) validated `Send` with a real `FluentValidation` behavior on both
 sides — on both wall-clock and allocated bytes, plus a structural **~20.7× cold-start** lead (no
 runtime assembly scan; the earlier 2026-07-13 ShortRun measured ~18.5×). The portable `ISender.Send<T>` interface path allocates **48 B** (one
 `ValueTask<T>` box by design — see [Allocation profile](#allocation-profile)); the generated concrete
@@ -50,9 +51,9 @@ The suite covers typed `Send` with zero behaviors, cold-start (first dispatch in
 that the generated `switch` stays O(1)), notification fan-out at N = 2 / 5 / 20, a 10-item
 stream, `Send` through a real `FluentValidation` validation behavior (steady-state, valid payload —
 new in 1.1.0), and a Rogue-only concurrent-dispatch sweep (`Task.WhenAll` over N = 1 / 4 / 8 / 16
-independent DI scopes, with `[ThreadingDiagnoser]`). Some cells are `n/a`: MediatR v12's core has no
-streaming, and the concurrency and pipeline-depth sweeps are Rogue-only scaling checks, not
-comparisons.
+independent DI scopes, with `[ThreadingDiagnoser]`). The stream is measured against MediatR's own
+`IStreamRequest<T>` and `CreateStream`, enumerating all ten items on both sides. Some cells are `n/a`:
+the concurrency and pipeline-depth sweeps are Rogue-only scaling checks, not comparisons.
 
 ## Allocation profile
 
