@@ -136,9 +136,9 @@ telemetry-gated fast path removed the remaining per-call overhead — flipping b
 
 | Scenario | Rogue | MediatR |
 |----------|-------|---------|
-| Publish N=2 | **129.9 ns / 112 B** | 218.9 ns / 464 B |
-| Publish N=5 | **257.1 ns / 208 B** | 404.8 ns / 920 B |
-| Publish N=20 | **1,054.5 ns / 688 B** | 1,389.2 ns / 3,200 B |
+| Publish N=2 | **113.0 ns / 112 B** | 195.8 ns / 464 B |
+| Publish N=5 | **238.9 ns / 208 B** | 364.4 ns / 920 B |
+| Publish N=20 | **861.3 ns / 688 B** | 1,293.4 ns / 3,200 B |
 
 As of the current baseline there is **no measured head-to-head scenario where MediatR beats Rogue**.
 The honesty commitment stands regardless: if a future change (or a higher fan-out N) reintroduces a
