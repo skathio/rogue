@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- net8.0 is built only when RogueTestNet8 is true. The .NET 8 job in ci.yml sets it, so the store
+         test projects that derive from this library can build for net8.0 too. -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(RogueTestNet8)' != 'true'">net10.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <!-- A library of abstract contract tests, not a test project: each store's test project derives
          from JobStoreContract, so the in-memory, Postgres and SQL Server stores pass the same suite. -->

@@ -285,3 +285,33 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Build (enforces PublicApiAnalyzers)
         run: dotnet build SkathIO.Rogue.sln -c Release
+
+  # The runtime packages ship net8.0 and net10.0 builds, and the `ci` job tests only net10.0. This
+  # job installs the .NET 8 runtime next to the .NET 10 SDK and runs the runtime packages' tests
+  # under net8.0. RogueTestNet8=true makes those test projects build for net8.0 as well; without it
+  # they build net10.0 alone, so the jobs that install only .NET 10 are unchanged.
+  net8-tests:
+    name: .NET 8 tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Test the runtime packages under net8.0
+        run: |
+          dotnet test tests/SkathIO.Rogue.UnitTests/SkathIO.Rogue.UnitTests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Integration.Tests/SkathIO.Rogue.Integration.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Behaviors.Tests/SkathIO.Rogue.Behaviors.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.DiResolution.Tests/SkathIO.Rogue.DiResolution.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.MediatR.Tests/SkathIO.Rogue.MediatR.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Jobs.Tests/SkathIO.Rogue.Jobs.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Jobs.Postgres.Tests/SkathIO.Rogue.Jobs.Postgres.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Jobs.SqlServer.Tests/SkathIO.Rogue.Jobs.SqlServer.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Messaging.Tests/SkathIO.Rogue.Messaging.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Messaging.RabbitMQ.Tests/SkathIO.Rogue.Messaging.RabbitMQ.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Messaging.Outbox.Tests/SkathIO.Rogue.Messaging.Outbox.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
