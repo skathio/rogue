@@ -2,6 +2,10 @@
 
 `SkathIO.Rogue.Messaging.RabbitMQ` carries `SkathIO.Rogue.Messaging` messages over RabbitMQ.
 
+Read the [messaging guide](messaging.md) first for messages, the bus, the consumer and retries, and
+the [outbox and inbox guide](outbox.md) to publish in a database transaction and handle a duplicate
+delivery once.
+
 ## Register
 
 ```csharp

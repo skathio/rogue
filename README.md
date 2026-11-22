@@ -301,12 +301,12 @@ See the [migration guide](docs/migration-guide.md) and the [before/after sample]
 | `SkathIO.Rogue.Validation` | Source-generated `[Validate]` request validation — attributes, a `Rules` hook, async rules from DI, 0 B on the valid path ([docs](docs/validation.md)) |
 | `SkathIO.Rogue.Validation.FluentValidation` | `ValidationBehavior<,>` — FluentValidation pipeline integration *(v1.0)* |
 | `SkathIO.Rogue.MediatR` | MediatR compatibility shim — `IMediator` adapter *(v1.0)* |
-| `SkathIO.Rogue.Jobs` | Background jobs — any `[Job]` command is enqueued and runs its handler on a worker, with retries, backoff, dead-lettering, delayed, recurring and unique jobs, and source-generated dispatch and serialization |
-| `SkathIO.Rogue.Jobs.Postgres` | PostgreSQL job store — enqueue in your own transaction, bulk enqueue through binary `COPY`, batched `SKIP LOCKED` claims, `LISTEN/NOTIFY` wake-ups |
-| `SkathIO.Rogue.Jobs.SqlServer` | SQL Server job store — batched `READPAST`/`UPDLOCK` claims, bulk enqueue through a table-valued parameter, adaptive polling |
-| `SkathIO.Rogue.Messaging` | Message bus — `[Message]` events and commands travel between services under stable names and reach Rogue handlers through generated dispatch, with retries and dead-lettering |
+| `SkathIO.Rogue.Jobs` | Background jobs — any `[Job]` command is enqueued and runs its handler on a worker, with retries, backoff, dead-lettering, delayed, recurring and unique jobs, and source-generated dispatch and serialization ([docs](docs/jobs.md)) |
+| `SkathIO.Rogue.Jobs.Postgres` | PostgreSQL job store — enqueue in your own transaction, bulk enqueue through binary `COPY`, batched `SKIP LOCKED` claims, `LISTEN/NOTIFY` wake-ups ([docs](docs/jobs.md#stores)) |
+| `SkathIO.Rogue.Jobs.SqlServer` | SQL Server job store — batched `READPAST`/`UPDLOCK` claims, bulk enqueue through a table-valued parameter, adaptive polling ([docs](docs/jobs.md#stores)) |
+| `SkathIO.Rogue.Messaging` | Message bus — `[Message]` events and commands travel between services under stable names and reach Rogue handlers through generated dispatch, with retries and dead-lettering ([docs](docs/messaging.md)) |
 | `SkathIO.Rogue.Messaging.RabbitMQ` | RabbitMQ transport — topic exchange, a queue per consuming service with dead-lettering, publisher confirms, recovery, and foreign JSON mapped by routing key or header; needs a shared `DeliveryStampKey` secret ([docs](docs/messaging-rabbitmq.md)) |
-| `SkathIO.Rogue.Messaging.Outbox` | Transactional outbox and inbox on the Postgres and SQL Server job stores — a publish in your database transaction is sent only once it commits, and a duplicate delivery runs its handlers once |
+| `SkathIO.Rogue.Messaging.Outbox` | Transactional outbox and inbox on the Postgres and SQL Server job stores — a publish in your database transaction is sent only once it commits, and a duplicate delivery runs its handlers once ([docs](docs/outbox.md)) |
 
 ---
 

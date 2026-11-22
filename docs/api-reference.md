@@ -14,6 +14,12 @@ The authoritative public surface is tracked per package in `PublicAPI.Shipped.tx
 | `SkathIO.Rogue.Validation` | Source-generated validation for `[Validate]` requests: `ValidateAttribute`, the rule attributes and `RuleAttribute`, `ValidationErrors`, `IAsyncRules<T>`, `RogueValidationException` with `ToProblemDictionary()`. See [validation](validation.md). |
 | `SkathIO.Rogue.Validation.FluentValidation` | `ValidationBehavior` over FluentValidation. |
 | `SkathIO.Rogue.MediatR` | MediatR compatibility shim + migration analyzer (ROGM001–006) bundled as an analyzer asset. |
+| `SkathIO.Rogue.Jobs` | Background jobs: `[Job]`, `[Recurring]`, `IJobScheduler`, `JobWorker`, `JobsOptions`, the `IJobStore` contract and `InMemoryJobStore`, `AddRogueJobs` / `AddRogueJobWorker`. Bundles the ROGUE019 serializer-coverage analyzer and its code fix. See [jobs](jobs.md). |
+| `SkathIO.Rogue.Jobs.Postgres` | PostgreSQL job store: `AddRoguePostgresJobs`, `PostgresJobStore`, `PostgresJobsOptions`, `IPostgresJobScheduler` (enqueue in your own transaction). See [jobs](jobs.md#stores). |
+| `SkathIO.Rogue.Jobs.SqlServer` | SQL Server job store: `AddRogueSqlServerJobs`, `SqlServerJobStore`, `SqlServerJobsOptions`. See [jobs](jobs.md#stores). |
+| `SkathIO.Rogue.Messaging` | Message bus: `[Message]`, `IMessageBus`, `MessageConsumer`, `MessagingOptions`, `MessageEnvelope`, the `IMessageTransport` contract and `InMemoryTransport`, `IMessageInbox`, `AddRogueMessaging` / `AddRogueMessageConsumer`. See [messaging](messaging.md). |
+| `SkathIO.Rogue.Messaging.RabbitMQ` | RabbitMQ transport: `AddRogueRabbitMqTransport`, `RabbitMqTransport`, `RabbitMqTransportOptions`. See [RabbitMQ](messaging-rabbitmq.md). |
+| `SkathIO.Rogue.Messaging.Outbox` | Transactional outbox and inbox on the database job stores: `IMessageOutbox`, `MessageOutboxOptions`, `AddRogueMessagingOutbox`. See [outbox](outbox.md). |
 
 ## Abstractions (`SkathIO.Rogue.Abstractions`)
 
@@ -102,6 +108,7 @@ for a synchronously-completing, behavior-free handler.
   not `public`, to respect accessibility.
 
 ```csharp
+using SkathIO.Rogue;
 using SkathIO.Rogue.Generated;
 
 public sealed class Endpoint(RogueDispatcher dispatcher)   // inject the dispatcher, not ISender
@@ -151,6 +158,56 @@ For drop-in MediatR migration. Types live in the `SkathIO.Rogue.Compatibility` n
 
 Migration analyzer diagnostics `ROGM001`–`ROGM006` — see [migration-guide](migration-guide.md).
 
+## Jobs (`SkathIO.Rogue.Jobs`, `.Jobs.Postgres`, `.Jobs.SqlServer`)
+
+Namespaces `SkathIO.Rogue.Jobs`, `SkathIO.Rogue.Jobs.Postgres` and `SkathIO.Rogue.Jobs.SqlServer`.
+Guide: [jobs](jobs.md).
+
+- **Declaring** — `JobAttribute` (`Kind`, `Queue`, `MaxAttempts`, `BackoffSeconds`,
+  `TimeoutSeconds`, `UniqueKey`) and `RecurringAttribute(string cron)`.
+- **Registration** — `JobsServiceCollectionExtensions.AddRogueJobs(Action<JobsOptions>?)`,
+  `AddRogueJobWorker()`; `AddJobDefinition` and `AddRecurringJob` are called by generated code.
+- **`JobsOptions`** — `SerializerContext`, `DefaultQueue`, `Queues`, `DefaultMaxAttempts`,
+  `DefaultBackoff`, `MaxBackoff`, `BackoffJitter`, `BatchSize`, `MaxConcurrency`, `ScopePerBatch`,
+  `PollInterval`, `LeaseDuration`, `MaxPayloadBytes`, `LeaderLeaseDuration`.
+- **Scheduling** — `IJobScheduler`: `Enqueue`, `Schedule`, `EnqueueMany`, and `CreateJob` /
+  `CreateJobs` for a store's own enqueue.
+- **Running** — `JobWorker`: `RunAsync(stoppingToken)`, `RunOnceAsync()`.
+- **Stores** — `IJobStore` (with `GetAsync` returning a `JobSnapshot`, and `RequeueAsync` for
+  dead-lettered jobs), `ITransactionalJobStore`, `IMessageInboxStore`, `InMemoryJobStore`, `NewJob`,
+  `ClaimedJob`, `JobLease`, `JobState`; `DatabaseJobsOptions` (`Schema`, `AutoMigrate`,
+  `SucceededRetention`, `DeadLetteredRetention`, `PruneInterval`, `PruneBatchSize`).
+- **Postgres** — `AddRoguePostgresJobs(NpgsqlDataSource, Action<PostgresJobsOptions>?)`,
+  `PostgresJobStore` (`MigrateAsync`), `PostgresJobsOptions` (`ListenReconnectDelay`),
+  `IPostgresJobScheduler` (`Enqueue` / `EnqueueMany` on an `NpgsqlTransaction` or `NpgsqlConnection`).
+- **SQL Server** — `AddRogueSqlServerJobs(string connectionString, Action<SqlServerJobsOptions>?)`,
+  `SqlServerJobStore` (`MigrateAsync`), `SqlServerJobsOptions` (`MinPollInterval`, `MaxPollInterval`).
+- **Telemetry** — `RogueJobsTelemetry.Name = "SkathIO.Rogue.Jobs"`.
+
+## Messaging (`SkathIO.Rogue.Messaging`, `.Messaging.RabbitMQ`, `.Messaging.Outbox`)
+
+Namespaces `SkathIO.Rogue.Messaging`, `SkathIO.Rogue.Messaging.RabbitMQ` and
+`SkathIO.Rogue.Messaging.Outbox`. Guides: [messaging](messaging.md), [RabbitMQ](messaging-rabbitmq.md),
+[outbox and inbox](outbox.md).
+
+- **Declaring** — `MessageAttribute(string name)`; `MessageLimits` (name and id limits).
+- **Registration** — `MessagingServiceCollectionExtensions.AddRogueMessaging(Action<MessagingOptions>?)`,
+  `AddRogueMessageConsumer()`; `AddMessageBinding` is called by generated code.
+- **`MessagingOptions`** — `SerializerContext`, `MaxConcurrency`, `MaxAttempts`, `MaxMessageBytes`,
+  `MaxJsonDepth`, `BatchSize`, `RetryDelay`, `MaxRetryDelay`, `PollInterval`.
+- **Sending** — `IMessageBus`: `Publish`, `CreateEnvelope`; `MessageEnvelope`.
+- **Consuming** — `MessageConsumer`: `RunAsync(stoppingToken)`, `RunOnceAsync()`; `IMessageInbox`
+  with `InboxClaim` / `InboxClaimResult`.
+- **Transports** — `IMessageTransport`, `TransportCapabilities`, `ReceivedMessage`, `InMemoryTransport`
+  with `DeadLetteredMessage`.
+- **RabbitMQ** — `AddRogueRabbitMqTransport(Action<RabbitMqTransportOptions>)`, `RabbitMqTransport`,
+  `RabbitMqTransportOptions` (`ConnectionUri`, `ConfigureConnection`, `Exchange`, `ServiceName`,
+  `DeliveryStampKey`, `PrefetchCount`, `WaitQueue`, `MapRoutingKey`, `MapHeader`).
+- **Outbox and inbox** — `AddRogueMessagingOutbox(Action<MessageOutboxOptions>?)`,
+  `IMessageOutbox.Publish(message, DbTransaction)`, `MessageOutboxOptions` (`InboxLease`,
+  `MaxInboxLease`).
+- **Telemetry** — `RogueMessagingTelemetry.Name = "SkathIO.Rogue.Messaging"`.
+
 ## Diagnostics
 
 Compile-time generator diagnostics: `ROGUE001`–`ROGUE006` + `ROGUE010`–`ROGUE018`
@@ -158,3 +215,5 @@ Compile-time generator diagnostics: `ROGUE001`–`ROGUE006` + `ROGUE010`–`ROGU
 [getting-started](getting-started.md#troubleshooting); `ROGUE014`–`ROGUE018` cover validation
 misuse (see [validation](validation.md#diagnostics)). Migration analyzer diagnostics:
 `ROGM001`–`ROGM006` (see [migration-guide](migration-guide.md)).
+Jobs analyzer diagnostic: `ROGUE019`, a `[Job]` type the `JsonSerializerContext` does not cover (see
+[jobs](jobs.md#the-serializer-context-and-rogue019)).
