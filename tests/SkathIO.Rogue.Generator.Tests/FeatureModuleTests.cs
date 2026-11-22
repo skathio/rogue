@@ -184,7 +184,13 @@ namespace App
         {
             data.Add(name, VersionShift.MinorUp);
             data.Add(name, VersionShift.MajorUp);
-            data.Add(name, VersionShift.MajorDown);
+
+            // A feature major below the core's exists only when the core's major is at least 1. A
+            // checkout without tags (CI's shallow clone) builds the core as 0.x, where there is none.
+            if (CoreMajor() >= 1)
+            {
+                data.Add(name, VersionShift.MajorDown);
+            }
         }
         return data;
     }
@@ -339,16 +345,21 @@ namespace App
     {
         int build = Math.Max(v.Build, 0);
         int revision = Math.Max(v.Revision, 0);
-        Assert.True(v.Major >= 1, "The core package major version must be at least 1 to shift it down.");
         return shift switch
         {
             VersionShift.None => new Version(v.Major, v.Minor, build, revision),
             VersionShift.PatchUp => new Version(v.Major, v.Minor, build + 7, revision),
             VersionShift.MinorUp => new Version(v.Major, v.Minor + 1, 0, 0),
             VersionShift.MajorUp => new Version(v.Major + 1, v.Minor, 0, 0),
-            _ => new Version(v.Major - 1, v.Minor, 0, 0),
+            _ => v.Major >= 1
+                ? new Version(v.Major - 1, v.Minor, 0, 0)
+                : throw new InvalidOperationException("A core package of major version 0 has no lower major to shift to."),
         };
     }
+
+    private static int CoreMajor() =>
+        LeadingVersion(typeof(SkathIO.Rogue.ICommand<>).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion).Major;
 
     private static Version LeadingVersion(string informational)
     {
