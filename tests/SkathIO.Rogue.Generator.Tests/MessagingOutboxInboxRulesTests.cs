@@ -68,8 +68,11 @@ public sealed class MessagingOutboxInboxRulesTests
             string root = Path.Combine(RepoFiles.Root, "src", publish.Package);
             Assert.True(File.Exists(Path.Combine(root, "PublicAPI.Shipped.txt")), publish.Package + " has no PublicAPI.Shipped.txt at its root.");
             Assert.False(Directory.Exists(Path.Combine(root, "PublicAPI")), publish.Package + " splits its public API per target framework.");
-            string[] unshipped = File.ReadAllLines(Path.Combine(root, "PublicAPI.Unshipped.txt"));
-            Assert.Contains(unshipped, l => l.Contains(publish.Type + "." + publish.Method + "(", StringComparison.Ordinal)
+            // Released entries move to PublicAPI.Shipped.txt, so the member counts as tracked in either file.
+            string[] tracked = File.ReadAllLines(Path.Combine(root, "PublicAPI.Unshipped.txt"))
+                .Concat(File.ReadAllLines(Path.Combine(root, "PublicAPI.Shipped.txt")))
+                .ToArray();
+            Assert.Contains(tracked, l => l.Contains(publish.Type + "." + publish.Method + "(", StringComparison.Ordinal)
                 || l.Contains(publish.Type + "." + publish.Method + "<", StringComparison.Ordinal));
             Assert.True(IsDocumented(publish), publish.Type + "." + publish.Method + " has no /// comment.");
         }

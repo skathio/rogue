@@ -6,6 +6,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-22
+
 ### Added
 
 - **New package: `SkathIO.Rogue.Jobs`**, background jobs on Rogue commands. An `ICommand` or
@@ -29,8 +31,8 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   fails startup without a build warning. Every claimed job keeps its lease,
   renewed while it waits for a slot or runs, until its outcome is stored, and a lease the store no
   longer holds is logged as a warning. `JobsOptions.LeaseDuration` and `LeaderLeaseDuration` are at
-  most 30 days (`JobsOptions.MaxLeaseDuration`), so a store adding either to the current time never overflows. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; durable stores
-  follow. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. A job of a kind this process does not
+  most 30 days (`JobsOptions.MaxLeaseDuration`), so a store adding either to the current time never overflows. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; the durable
+  Postgres and SQL Server stores are below. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. A job of a kind this process does not
   know is measured under the kind `(unknown)`, so rows written into the store cannot add a metric
   series per made-up kind; the warning log names the real kind. Register it
   with `AddRogueJobs()` next to `AddRogue()`, which is enough to enqueue; add `AddRogueJobWorker()`
@@ -115,7 +117,7 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   `ROGUE015` (a rule does not fit its property), `ROGUE016` (a `Rules` method has the wrong
   signature) and `ROGUE017` (a `[Validate]` type from an assembly built without the generator) are
   errors; `ROGUE018` warns when rules are declared for a type without `[Validate]`.
-- **`ROGUE013` warning: feature package version mismatch.** The upcoming feature packages
+- **`ROGUE013` warning: feature package version mismatch.** The feature packages
   (`SkathIO.Rogue.Validation`, `SkathIO.Rogue.Jobs`, `SkathIO.Rogue.Messaging`) have no generator of
   their own; the core source generator emits their code. When one of them is referenced with a
   different major.minor version than the core `SkathIO.Rogue` package, the build warns. Patch
@@ -506,7 +508,8 @@ commit to reporting any scenario where Rogue is not fastest, honestly and in the
   linked documentation is unreachable. Confirm visibility in GitHub settings before tagging. See
   [docs/governance.md](docs/governance.md#release-readiness).
 
-[Unreleased]: https://github.com/skathio/rogue/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/skathio/rogue/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/skathio/rogue/compare/v1.2.1...v2.0.0
 [1.2.1]: https://github.com/skathio/rogue/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/skathio/rogue/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/skathio/rogue/compare/v1.1.0...v1.1.1

@@ -13,7 +13,7 @@ namespace SkathIO.Rogue.Generator.Tests;
 /// cover every packable project, and every package in their restore graphs is allow-listed with the
 /// license nuget.org reports. Bench-only and test-only packages never reach a packable project. CI
 /// publishes a jobs and messaging sample with native AOT. The governance doc, CLAUDE.md, the README,
-/// the roadmap, the site and the CHANGELOG's [Unreleased] section describe the new packages.
+/// the roadmap, the site and the CHANGELOG's newest entry describe the new packages.
 /// </summary>
 public sealed class ReleaseWiringRulesTests
 {
@@ -228,12 +228,12 @@ public sealed class ReleaseWiringRulesTests
     }
 
     [Fact]
-    public void ChangelogUnreleased_CarriesNoPlanningIds()
+    public void ChangelogNewestEntry_CarriesNoPlanningIds()
     {
-        string unreleased = ChangelogParts().Unreleased;
+        string newest = NewestChangelogEntry();
 
-        Assert.NotEmpty(unreleased.Trim());
-        Assert.DoesNotMatch(@"\.somi\b|\b(PD|NFR|AC)-[A-Z0-9-]*\d|\bM\d{1,2}\b", unreleased);
+        Assert.NotEmpty(newest.Trim());
+        Assert.DoesNotMatch(@"\.somi\b|\b(PD|NFR|AC)-[A-Z0-9-]*\d|\bM\d{1,2}\b", newest);
     }
 
     private static string PackageId(string project) => Path.GetFileNameWithoutExtension(project);
@@ -264,6 +264,18 @@ public sealed class ReleaseWiringRulesTests
         Match unreleased = Regex.Match(changelog, @"(?ms)^## \[Unreleased\]\s*$(?<body>.*?)(?=^## \[)");
         Assert.True(unreleased.Success, "CHANGELOG.md has no [Unreleased] section followed by a release.");
         return (unreleased.Groups["body"].Value, changelog.Substring(unreleased.Index + unreleased.Length));
+    }
+
+    // The first section from [Unreleased] down that has content: [Unreleased] until a release moves
+    // it into a dated section, then that release.
+    private static string NewestChangelogEntry()
+    {
+        string changelog = RepoFiles.Read("CHANGELOG.md");
+        string? newest = Regex.Matches(changelog, @"(?ms)^## \[[^\n]*\n(?<body>.*?)(?=^## \[|^\[Unreleased\]:)")
+            .Select(static m => m.Groups["body"].Value)
+            .FirstOrDefault(static body => body.Trim().Length > 0);
+        Assert.True(newest is not null, "CHANGELOG.md has no section with content.");
+        return newest;
     }
 
     private static bool IsBuildOutput(string path)

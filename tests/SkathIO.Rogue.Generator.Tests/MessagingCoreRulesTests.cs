@@ -375,7 +375,10 @@ namespace Msg
         string root = Path.Combine(RepoFiles.Root, "src", PackageName);
 
         Assert.True(File.Exists(Path.Combine(root, "PublicAPI.Shipped.txt")), "PublicAPI.Shipped.txt is missing at the project root.");
-        Assert.Contains(member, File.ReadAllText(Path.Combine(root, "PublicAPI.Unshipped.txt")), StringComparison.Ordinal);
+        // Released entries move to PublicAPI.Shipped.txt, so the member counts as tracked in either file.
+        string tracked = File.ReadAllText(Path.Combine(root, "PublicAPI.Unshipped.txt"))
+            + File.ReadAllText(Path.Combine(root, "PublicAPI.Shipped.txt"));
+        Assert.Contains(member, tracked, StringComparison.Ordinal);
     }
 
     [Fact]

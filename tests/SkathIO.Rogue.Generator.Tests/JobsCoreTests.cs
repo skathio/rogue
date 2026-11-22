@@ -358,13 +358,13 @@ namespace App
     }
 
     [Fact]
-    public void Changelog_Unreleased_DescribesThePackage()
+    public void Changelog_Release200_DescribesThePackage()
     {
         string changelog = File.ReadAllText(Path.Combine(RepoRoot(), "CHANGELOG.md")).Replace("\r\n", "\n", StringComparison.Ordinal);
-        Match unreleased = Regex.Match(changelog, @"^## \[Unreleased\]\n(.*?)(?=^## \[)", RegexOptions.Multiline | RegexOptions.Singleline);
+        Match release = Regex.Match(changelog, @"^## \[2\.0\.0\][^\n]*\n(.*?)(?=^## \[)", RegexOptions.Multiline | RegexOptions.Singleline);
 
-        Assert.True(unreleased.Success, "CHANGELOG.md has no [Unreleased] section.");
-        Assert.Contains("IJobScheduler", unreleased.Groups[1].Value, StringComparison.Ordinal);
+        Assert.True(release.Success, "CHANGELOG.md has no [2.0.0] section.");
+        Assert.Contains("IJobScheduler", release.Groups[1].Value, StringComparison.Ordinal);
     }
 
     // ── Helpers: sources and generator runs ──────────────────────────────────────────

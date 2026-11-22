@@ -115,10 +115,13 @@ public sealed class JobsSqlServerPolicyTests
     [Fact]
     public void SqlServerStore_ExposesThePublicRequeueOfDeadLetteredJobs()
     {
-        string path = Path.Combine(RepoFiles.Root, PackageDir, "PublicAPI.Unshipped.txt");
+        string unshipped = Path.Combine(RepoFiles.Root, PackageDir, "PublicAPI.Unshipped.txt");
+        string shipped = Path.Combine(RepoFiles.Root, PackageDir, "PublicAPI.Shipped.txt");
 
-        Assert.True(File.Exists(path), PackageDir + "/PublicAPI.Unshipped.txt does not exist.");
-        Assert.Contains(File.ReadLines(path), static l => Regex.IsMatch(l, @"^SkathIO\.Rogue\.Jobs\.SqlServer\.\w+\.RequeueAsync\("));
+        Assert.True(File.Exists(unshipped), PackageDir + "/PublicAPI.Unshipped.txt does not exist.");
+        Assert.True(File.Exists(shipped), PackageDir + "/PublicAPI.Shipped.txt does not exist.");
+        // Released entries move to PublicAPI.Shipped.txt, so the member counts as tracked in either file.
+        Assert.Contains(File.ReadLines(unshipped).Concat(File.ReadLines(shipped)), static l => Regex.IsMatch(l, @"^SkathIO\.Rogue\.Jobs\.SqlServer\.\w+\.RequeueAsync\("));
     }
 
     [Fact]

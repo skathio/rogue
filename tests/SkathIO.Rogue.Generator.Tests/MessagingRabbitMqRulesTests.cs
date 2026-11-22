@@ -54,10 +54,12 @@ public sealed class MessagingRabbitMqRulesTests
         string[] transports = BuiltPackage().PublicTypes
             .Where(static t => !t.IsAbstract && t.AllInterfaces.Any(static i => i.ToDisplayString() == TransportContract))
             .Select(static t => t.ToDisplayString()).ToArray();
-        string unshipped = File.ReadAllText(Path.Combine(PackageRoot, "PublicAPI.Unshipped.txt"));
+        // Released entries move to PublicAPI.Shipped.txt, so a type counts as tracked in either file.
+        string tracked = File.ReadAllText(Path.Combine(PackageRoot, "PublicAPI.Unshipped.txt"))
+            + File.ReadAllText(Path.Combine(PackageRoot, "PublicAPI.Shipped.txt"));
 
         Assert.NotEmpty(transports);
-        Assert.All(transports, t => Assert.Contains(t, unshipped, StringComparison.Ordinal));
+        Assert.All(transports, t => Assert.Contains(t, tracked, StringComparison.Ordinal));
     }
 
     // ── Package conventions ──────────────────────────────────────────────────────────

@@ -114,7 +114,8 @@ public sealed class JobsSqlServerRulesTests
 
         Assert.NotEmpty(unshipped);
         Assert.All(unshipped, f => Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(f)!, "PublicAPI.Shipped.txt")), Relative(f) + " has no PublicAPI.Shipped.txt beside it."));
-        Assert.Contains(unshipped.SelectMany(File.ReadLines), static l => l.Contains("SkathIO.Rogue.Jobs.SqlServer.", StringComparison.Ordinal));
+        // Released entries move to PublicAPI.Shipped.txt, so the member counts as tracked in either file.
+        Assert.Contains(unshipped.SelectMany(f => File.ReadLines(f).Concat(File.ReadLines(Path.Combine(Path.GetDirectoryName(f)!, "PublicAPI.Shipped.txt")))), static l => l.Contains("SkathIO.Rogue.Jobs.SqlServer.", StringComparison.Ordinal));
     }
 
     [Theory]
