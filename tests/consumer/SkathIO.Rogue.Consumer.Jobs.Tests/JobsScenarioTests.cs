@@ -117,7 +117,7 @@ public abstract class JobsScenarioTests
 
         Assert.Equal((1, 0, 1), (firstAttempt, beforeBackoff, retry));
         Assert.Equal((JobState.Enqueued, 1, JobsHost.Start.AddSeconds(2)), (afterFailure.State, afterFailure.Attempt, afterFailure.RunAt));
-        Assert.Contains(ChargeCardHandler.Declined, afterFailure.LastError, StringComparison.Ordinal);
+        Assert.Equal(typeof(InvalidOperationException).FullName, afterFailure.LastError);
         Assert.Equal((JobState.Succeeded, 2), (afterRetry.State, afterRetry.Attempt));
         Assert.Equal(new[] { "charged 4242", "declined 4242" }, host.Probe.Ran());
     }
@@ -137,7 +137,7 @@ public abstract class JobsScenarioTests
 
         Assert.Equal((1, 1, 0), (firstAttempt, lastAttempt, later));
         Assert.Equal((JobState.DeadLettered, 2, 2), (deadLettered.State, deadLettered.Attempt, deadLettered.MaxAttempts));
-        Assert.Contains(CallPartnerHandler.Down, deadLettered.LastError, StringComparison.Ordinal);
+        Assert.Equal(typeof(InvalidOperationException).FullName, deadLettered.LastError);
         Assert.Equal(JobState.DeadLettered, (await host.SnapshotAsync(id)).State);
         Assert.Equal(new[] { "called 9", "called 9" }, host.Probe.Ran());
     }

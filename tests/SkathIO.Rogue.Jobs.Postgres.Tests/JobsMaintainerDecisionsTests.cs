@@ -108,7 +108,7 @@ public sealed class JobsMaintainerDecisionsTests
     }
 
     [Fact]
-    public async Task FailureWhoseMessageHasANul_IsRecordedWithoutIt_OnRetryAndDeadLetter()
+    public async Task FailureWhoseMessageHasANul_IsRecordedAsItsTypeOnly_OnRetryAndDeadLetter()
     {
         var clock = new ManualTimeProvider(Start);
         await using ServiceProvider provider = Host(clock, failWithNul: true, maxAttempts: 2).BuildServiceProvider();
@@ -127,7 +127,7 @@ public sealed class JobsMaintainerDecisionsTests
         {
             Assert.NotNull(error);
             Assert.DoesNotContain('\0', error);
-            Assert.Contains("badnews", error, StringComparison.Ordinal);
+            Assert.Equal(typeof(InvalidOperationException).FullName, error);
         });
     }
 
@@ -294,7 +294,7 @@ public sealed class JobsMaintainerDecisionsPostgresTests
         Assert.IsType<PostgresJobStore>(store);
         Assert.Equal((JobState.Enqueued, 1), (retried.State, retried.Attempt));
         Assert.Equal(JobState.DeadLettered, deadLettered.State);
-        Assert.Contains("badnews", deadLettered.LastError, StringComparison.Ordinal);
+        Assert.Equal(typeof(InvalidOperationException).FullName, deadLettered.LastError);
     }
 }
 

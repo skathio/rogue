@@ -453,8 +453,12 @@ public sealed class JobWorker
 
         public Exception? Exception { get; }
 
-        /// <summary>The error recorded with the job: the exception's type and message, cut to the store's limit.</summary>
-        public string? Error => Exception is null ? null : JobLimits.TrimError(Exception.GetType().FullName + ": " + Exception.Message);
+        /// <summary>
+        /// The error recorded with the job: the exception's full type name only, because the store
+        /// returns it to anyone who reads the job and the message can quote the payload or a secret.
+        /// The retry and dead-letter logs keep the whole exception.
+        /// </summary>
+        public string? Error => Exception is null ? null : JobLimits.TrimError(Exception.GetType().FullName ?? Exception.GetType().Name);
 
         /// <summary>The exception's type name, the only part of it telemetry carries.</summary>
         public string? ErrorType => Exception?.GetType().Name;

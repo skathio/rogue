@@ -72,6 +72,9 @@ public sealed class JobSnapshot
     /// <summary>When the job is next due (for an enqueued job), or was last due.</summary>
     public required DateTimeOffset RunAt { get; init; }
 
-    /// <summary>The error of the last failed attempt, if any.</summary>
+    /// <summary>
+    /// The error of the last failed attempt, if any. The worker records the exception's full type
+    /// name, never its message, which can quote the payload or a secret; the log has the whole exception.
+    /// </summary>
     public string? LastError { get; init; }
 }

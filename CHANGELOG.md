@@ -18,8 +18,10 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   dead-lettered; an unreadable payload is dead-lettered at once. A job whose kind this process does
   not know is put back after the default backoff without counting the attempt, so during a rolling
   deploy an older worker leaves a newer kind for a worker that knows it. `IJobStore.RequeueAsync(ids)`
-  moves dead-lettered jobs back to ready with all their attempts. Stored errors have NUL characters
-  removed. On shutdown running jobs are put back without counting the attempt.
+  moves dead-lettered jobs back to ready with all their attempts. The error stored with a failed
+  job, and returned by `IJobStore.GetAsync`, names the exception's type but never its message,
+  which can quote the payload or a secret; the retry and dead-letter logs keep the whole exception.
+  Stored errors have NUL characters removed. On shutdown running jobs are put back without counting the attempt.
   The core source generator emits the kind-to-invoker map, so jobs are found by a stable kind, never
   by a type name, and requests are dispatched exactly as before. Payloads go through your
   System.Text.Json `JsonSerializerContext` (`JobsOptions.SerializerContext`), checked at startup

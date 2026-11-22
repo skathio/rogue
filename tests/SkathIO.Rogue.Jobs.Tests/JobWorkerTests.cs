@@ -191,7 +191,7 @@ public sealed class JobWorkerTests
         Assert.Equal(1, await host.Worker.RunOnceAsync());
 
         Assert.Equal(JobState.Enqueued, afterFirst.State);
-        Assert.Contains("flaky failure for a", afterFirst.LastError, StringComparison.Ordinal);
+        Assert.Equal(typeof(InvalidOperationException).FullName, afterFirst.LastError);
         JobSnapshot done = await host.SnapshotAsync(id);
         Assert.Equal(JobState.Succeeded, done.State);
         Assert.Equal(3, done.Attempt);
