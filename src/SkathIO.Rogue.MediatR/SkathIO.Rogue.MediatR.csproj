@@ -22,7 +22,8 @@
          component's target framework. -->
     <MSBuild Projects="..\SkathIO.Rogue.Migration.Analyzer\SkathIO.Rogue.Migration.Analyzer.csproj"
              Targets="GetTargetPath"
-             Properties="Configuration=$(Configuration)">
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework;RuntimeIdentifier">
       <Output TaskParameter="TargetOutputs" PropertyName="_MigrationAnalyzerDll" />
     </MSBuild>
     <Error Condition="!Exists('$(_MigrationAnalyzerDll)')"

@@ -37,7 +37,8 @@
   <Target Name="PackJobsAnalyzers" BeforeTargets="_GetPackageFiles">
     <MSBuild Projects="..\SkathIO.Rogue.Jobs.Analyzers\SkathIO.Rogue.Jobs.Analyzers.csproj;..\SkathIO.Rogue.Jobs.CodeFixes\SkathIO.Rogue.Jobs.CodeFixes.csproj"
              Targets="GetTargetPath"
-             Properties="Configuration=$(Configuration)">
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework;RuntimeIdentifier">
       <Output TaskParameter="TargetOutputs" ItemName="_JobsAnalyzerDll" />
     </MSBuild>
     <Error Condition="!Exists('%(_JobsAnalyzerDll.Identity)')"

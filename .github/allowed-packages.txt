@@ -34,8 +34,6 @@
 
 # FluentValidation — Apache-2.0 — verified 2026-06-12
 FluentValidation
-# Microsoft.Bcl.AsyncInterfaces — MIT — verified 2026-06-12
-Microsoft.Bcl.AsyncInterfaces
 # Microsoft.Bcl.Cryptography — MIT — verified 2026-11-20
 Microsoft.Bcl.Cryptography
 # Microsoft.Build.Tasks.Git — MIT — verified 2026-06-12
@@ -102,12 +100,8 @@ Microsoft.SqlServer.Server
 MinVer
 # Npgsql — PostgreSQL — verified 2026-11-20
 Npgsql
-# NETStandard.Library — MIT (.NET Foundation and Contributors, dotnet/standard LICENSE.TXT) — verified 2026-06-12
-NETStandard.Library
 # RabbitMQ.Client — Apache-2.0 OR MPL-2.0 — verified 2026-11-20
 RabbitMQ.Client
-# System.Buffers — MIT — verified 2026-06-12
-System.Buffers
 # System.Configuration.ConfigurationManager — MIT — verified 2026-11-20
 System.Configuration.ConfigurationManager
 # System.Diagnostics.DiagnosticSource — MIT — verified 2026-06-12

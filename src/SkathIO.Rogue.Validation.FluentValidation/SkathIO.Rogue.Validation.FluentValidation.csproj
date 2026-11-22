@@ -29,7 +29,8 @@
          component's target framework. -->
     <MSBuild Projects="..\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator\SkathIO.Rogue.Validation.FluentValidation.SourceGenerator.csproj"
              Targets="GetTargetPath"
-             Properties="Configuration=$(Configuration)">
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework;RuntimeIdentifier">
       <Output TaskParameter="TargetOutputs" PropertyName="_FluentValidationGeneratorDll" />
     </MSBuild>
     <Error Condition="!Exists('$(_FluentValidationGeneratorDll)')"
