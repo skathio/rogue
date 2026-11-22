@@ -28,7 +28,7 @@ The authoritative public surface is tracked per package in `PublicAPI.Shipped.tx
 - `IQuery<TResponse>` — a read. Dispatched by `ISender.Send`.
 - `ICommand` / `ICommand<TResponse>` — a write, void or with a response. Dispatched by `ISender.Send`.
 - `IEvent` — a fan-out message. Dispatched by `IPublisher.Publish`.
-- `IStreamQuery<TItem>` — a streaming read returning `IAsyncEnumerable<TItem>` (net8.0+).
+- `IStreamQuery<TItem>` — a streaming read returning `IAsyncEnumerable<TItem>`.
 - `Unit` — the void response type (value type; `Unit.Value`, `Unit.Task`).
 
 The MediatR-shaped surface (`IRequest`, `INotification`, `IStreamRequest`, …) is **not** in this
@@ -40,12 +40,12 @@ package; it lives in `SkathIO.Rogue.MediatR` for migration — see
 - `IQueryHandler<TQuery, TResponse>` — one handler per query.
 - `ICommandHandler<TCommand, TResponse>` / `ICommandHandler<TCommand>` — one handler per command.
 - `IEventHandler<TEvent>` — zero-to-many handlers per event (fan-out).
-- `IStreamQueryHandler<TQuery, TItem>` (net8.0+)
+- `IStreamQueryHandler<TQuery, TItem>`
 
 **Pipeline**
 
 - `IPipelineBehavior<TRequest, TResponse>` + `RequestHandlerDelegate<TResponse>`
-- `IStreamPipelineBehavior<TRequest, TResponse>` + `StreamHandlerDelegate<TResponse>` (net8.0+)
+- `IStreamPipelineBehavior<TRequest, TResponse>` + `StreamHandlerDelegate<TResponse>`
 - `IRequestPreProcessor<TRequest>`, `IRequestPostProcessor<TRequest, TResponse>`
 - `IRequestExceptionAction<TRequest, TException>`
 - `IRequestExceptionHandler<TRequest, TResponse, TException>` + `RequestExceptionHandlerState<TResponse>`
@@ -147,7 +147,7 @@ For drop-in MediatR migration. Types live in the `SkathIO.Rogue.Compatibility` n
 - **MediatR-shaped messages/handlers** — `IRequest` / `IRequest<TResponse>`,
   `IRequestHandler<TRequest, TResponse>` / `IRequestHandler<TRequest>`, `INotification`,
   `INotificationHandler<TNotification>`, `IStreamRequest<TResponse>`,
-  `IStreamRequestHandler<TRequest, TItem>` (net8.0+), `IPipelineBehavior<TRequest, TResponse>`,
+  `IStreamRequestHandler<TRequest, TItem>`, `IPipelineBehavior<TRequest, TResponse>`,
   `IMediator` / `ISender` / `IPublisher`, `Unit`, `ServiceFactory`.
 - **Registration shim** — `MediatRCompatExtensions.AddMediatR(this IServiceCollection, …)` +
   `MediatRCompatOptions` (`RegisterServicesFromAssembly…`), forwarding to `AddRogue`.

@@ -48,7 +48,7 @@ The default migration rewrites MediatR types to Rogue's native CQS core (via the
 | `IRequest<T>` (write) | `ICommand<T>` + `ICommandHandler<T,R>` | Ambiguous intent → `ICommand<T>` + ROGM005 review |
 | `IRequest` (void) | `ICommand` + `ICommandHandler<T>` | Void path returns `ValueTask` |
 | `INotification` / `INotificationHandler<>` | `IEvent` / `IEventHandler<>` | Fan-out preserved |
-| `IStreamRequest<T>` / `IStreamRequestHandler<,>` | `IStreamQuery<T>` / `IStreamQueryHandler<,>` | net8.0+ |
+| `IStreamRequest<T>` / `IStreamRequestHandler<,>` | `IStreamQuery<T>` / `IStreamQueryHandler<,>` | Returns `IAsyncEnumerable<T>` |
 | `IPipelineBehavior<T,R>` | `IPipelineBehavior<T,R>` | Shape preserved; `Task` → `ValueTask` |
 | `IMediator` / `ISender` / `IPublisher` | same names | Prefer `ISender` / `IPublisher` |
 | `AddMediatR(cfg => ...)` | `AddRogue()` | Assembly scan → compile-time discovery (the compat shim forwards `AddMediatR`) |

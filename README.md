@@ -21,7 +21,7 @@ Rogue is a drop-in alternative to MediatR built for the modern .NET ecosystem: r
 | Streaming | No | No | **`IAsyncEnumerable<T>`** |
 | Migration path from MediatR | — | Manual | **One-line + compat shim** |
 
-Benchmarks: Rogue meets or beats MediatR across the measured warm-path scenarios (single-handler `Send`, notification fan-out at N = 2 / 5 / 20, and validated `Send` with a real FluentValidation behavior) and leads cold-start by ~18.5×. See [docs/benchmarks.md](docs/benchmarks.md) and [bench/RESULTS.md](bench/RESULTS.md) for the full measured tables and methodology.
+Benchmarks: Rogue meets or beats MediatR across the measured warm-path scenarios (single-handler `Send`, notification fan-out at N = 2 / 5 / 20, and validated `Send` with a real FluentValidation behavior) and leads cold-start by ~20.7×. See [docs/benchmarks.md](docs/benchmarks.md) and [bench/RESULTS.md](bench/RESULTS.md) for the full measured tables and methodology.
 
 ---
 
@@ -37,7 +37,7 @@ For library authors who only need the interfaces (no source generator or DI wiri
 dotnet add package SkathIO.Rogue.Abstractions
 ```
 
-Optional integration packages (v1.0):
+Optional integration packages (the [Packages](#packages) table lists all of them):
 
 ```
 dotnet add package SkathIO.Rogue.Logging
@@ -263,7 +263,9 @@ if you're upgrading from a version that predates validator auto-discovery, and t
 Rogue dispatches via source-generated, DI-resolved methods — no reflection on the hot path.
 
 - **0 bytes allocated** on the generated concrete dispatch path (`RogueDispatcher.Send{Request}`) for a behavior-free, synchronously-completing handler; the portable `ISender.Send<T>` path boxes one `ValueTask<T>` by design
-- **Faster than MediatR** on the measured warm paths (single-handler `Send`, notification fan-out at N = 2 / 5 / 20) and ~19× faster cold-start — no runtime assembly scan
+- **Faster than MediatR** on the measured warm paths (single-handler `Send`, notification fan-out at N = 2 / 5 / 20) and ~20.7× faster cold-start — no runtime assembly scan
+- **Background jobs 9 to 10× faster than Hangfire** in memory: at 100,000 jobs, 4.8 µs and 1.1 KB per job against Hangfire.InMemory's 49.4 µs and 37.8 KB; on SQL Server, Rogue finishes 1,000 jobs in a little over half Hangfire's time
+- **Generated validation about 100× faster than FluentValidation** on a valid order: 25.2 ns and 0 B against 2,518 ns and 4,064 B
 - **Native AOT compatible** — no dynamic code generation, no `Expression.Compile()`, no `MakeGenericMethod`
 - **`ValueTask`-based** throughout — avoids unnecessary heap allocations vs `Task`
 
@@ -297,10 +299,10 @@ See the [migration guide](docs/migration-guide.md) and the [before/after sample]
 |---------|---------|
 | `SkathIO.Rogue` | Core library — source generator + DI wiring + dispatcher |
 | `SkathIO.Rogue.Abstractions` | Interfaces only — for library authors |
-| `SkathIO.Rogue.Logging` | `LoggingBehavior<,>` — structured request/response logging *(v1.0)* |
+| `SkathIO.Rogue.Logging` | `LoggingBehavior<,>` — structured request/response logging |
 | `SkathIO.Rogue.Validation` | Source-generated `[Validate]` request validation — attributes, a `Rules` hook, async rules from DI, 0 B on the valid path ([docs](docs/validation.md)) |
-| `SkathIO.Rogue.Validation.FluentValidation` | `ValidationBehavior<,>` — FluentValidation pipeline integration *(v1.0)* |
-| `SkathIO.Rogue.MediatR` | MediatR compatibility shim — `IMediator` adapter *(v1.0)* |
+| `SkathIO.Rogue.Validation.FluentValidation` | `ValidationBehavior<,>` — FluentValidation pipeline integration |
+| `SkathIO.Rogue.MediatR` | MediatR compatibility shim — `IMediator` adapter |
 | `SkathIO.Rogue.Jobs` | Background jobs — any `[Job]` command is enqueued and runs its handler on a worker, with retries, backoff, dead-lettering, delayed, recurring and unique jobs, and source-generated dispatch and serialization ([docs](docs/jobs.md)) |
 | `SkathIO.Rogue.Jobs.Postgres` | PostgreSQL job store — enqueue in your own transaction, bulk enqueue through binary `COPY`, batched `SKIP LOCKED` claims, `LISTEN/NOTIFY` wake-ups ([docs](docs/jobs.md#stores)) |
 | `SkathIO.Rogue.Jobs.SqlServer` | SQL Server job store — batched `READPAST`/`UPDLOCK` claims, bulk enqueue through a table-valued parameter, adaptive polling ([docs](docs/jobs.md#stores)) |

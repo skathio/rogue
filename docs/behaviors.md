@@ -51,7 +51,7 @@ at runtime via `IRoguePipelineInspector.GetPipeline<TRequest>()`, which returns 
 Streaming queries (`IStreamQuery<T>`) have their own behavior interface,
 `IStreamPipelineBehavior<TRequest, TResponse>`, which wraps an `IAsyncEnumerable<T>` via
 `StreamHandlerDelegate<T>`. These are woven around the stream handler in generated code the same way
-the request behaviors are (net8.0+).
+the request behaviors are.
 
 ## Pre/post processors and exception handlers
 

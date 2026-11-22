@@ -77,7 +77,7 @@ The core is CQS-explicit — each contract is independent (a type implementing t
 | `ICommand<T>` | `ICommandHandler<TCommand, T>` | `ISender.Send` | A write with a response; one handler. |
 | `ICommand` | `ICommandHandler<TCommand>` | `ISender.Send` | A write, void; returns `ValueTask`. |
 | `IEvent` | `IEventHandler<TEvent>` | `IPublisher.Publish` | Zero-to-many handlers, fan-out. |
-| `IStreamQuery<T>` | `IStreamQueryHandler<TQuery, T>` | `ISender.CreateStream` | Returns `IAsyncEnumerable<T>` (net8.0+). |
+| `IStreamQuery<T>` | `IStreamQueryHandler<TQuery, T>` | `ISender.CreateStream` | Returns `IAsyncEnumerable<T>`. |
 
 The untyped `Send(object)` / `Publish(object)` overloads exist for dynamic dispatch but are **opt-in**
 via `RogueOptions.EnableObjectDispatch`; they route through a generated type `switch`.
