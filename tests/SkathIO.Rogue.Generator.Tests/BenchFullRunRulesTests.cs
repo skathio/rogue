@@ -208,30 +208,67 @@ public sealed class BenchFullRunRulesTests
         return data;
     }
 
-    // Each benchmark class of a bench project with its [Benchmark] methods. Each file holds at most one
-    // benchmark class, so the methods of a file belong to the class in it that declares them.
+    // Each benchmark class of a bench project that BenchmarkDotNet runs, with its [Benchmark] methods.
+    // An abstract base is not run and gets no report of its own; the concrete classes that derive from
+    // it run its methods, so they hold its methods along with their own.
     private static Dictionary<string, string[]> BenchmarkClasses(string project)
     {
+        Dictionary<string, DeclaredClass> declared = DeclaredClasses(project);
         var classes = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        foreach (string file in Directory.GetFiles(Path.Combine(RepoFiles.Root, project), "*.cs", SearchOption.AllDirectories))
+        foreach (KeyValuePair<string, DeclaredClass> benchmark in declared.Where(static c => !c.Value.IsAbstract))
         {
-            string normalized = file.Replace('\\', '/');
-            if (normalized.Contains("/bin/", StringComparison.Ordinal) || normalized.Contains("/obj/", StringComparison.Ordinal))
+            string[] methods = MethodsWithInherited(benchmark.Key, declared);
+            if (methods.Length > 0)
             {
-                continue;
-            }
-            string text = File.ReadAllText(file);
-            string[] methods = Regex.Matches(text, @"\[Benchmark\b[^\]]*\]\s*public\s+[^(=]*?\b(?<name>\w+)\s*\(")
-                .Select(static m => m.Groups["name"].Value)
-                .ToArray();
-            Match declaration = Regex.Match(text, @"public\s+(?:sealed\s+)?class\s+(?<name>\w+Benchmarks)\b");
-            if (methods.Length > 0 && declaration.Success)
-            {
-                classes[declaration.Groups["name"].Value] = methods;
+                classes[benchmark.Key] = methods;
             }
         }
         return classes;
     }
+
+    private static string[] MethodsWithInherited(string benchmark, Dictionary<string, DeclaredClass> declared)
+    {
+        var methods = new List<string>();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        string? current = benchmark;
+        while (current is not null && visited.Add(current) && declared.TryGetValue(current, out DeclaredClass? declaration))
+        {
+            methods.AddRange(declaration.Methods);
+            current = declaration.Base;
+        }
+        return methods.Distinct(StringComparer.Ordinal).ToArray();
+    }
+
+    // Each file holds at most one benchmark class (abstract or not), so the [Benchmark] methods of a
+    // file belong to the class in it that declares them.
+    private static Dictionary<string, DeclaredClass> DeclaredClasses(string project)
+    {
+        var declared = new Dictionary<string, DeclaredClass>(StringComparer.Ordinal);
+        IEnumerable<string> files = Directory.GetFiles(Path.Combine(RepoFiles.Root, project), "*.cs", SearchOption.AllDirectories)
+            .Where(static f => !Regex.IsMatch(f.Replace('\\', '/'), "/(bin|obj)/"));
+        foreach (string file in files)
+        {
+            string text = File.ReadAllText(file);
+            Match declaration = Regex.Match(
+                text,
+                @"public\s+(?<modifiers>(?:(?:sealed|abstract|partial)\s+)*)class\s+(?<name>\w+Benchmarks)\b(?:\s*:\s*(?<base>\w+))?");
+            if (declaration.Success)
+            {
+                declared[declaration.Groups["name"].Value] = new DeclaredClass(
+                    declaration.Groups["modifiers"].Value.Contains("abstract", StringComparison.Ordinal),
+                    declaration.Groups["base"].Success ? declaration.Groups["base"].Value : null,
+                    BenchmarkMethods(text));
+            }
+        }
+        return declared;
+    }
+
+    private static string[] BenchmarkMethods(string text) =>
+        Regex.Matches(text, @"\[Benchmark\b[^\]]*\]\s*public\s+[^(=]*?\b(?<name>\w+)\s*\(")
+            .Select(static m => m.Groups["name"].Value)
+            .ToArray();
+
+    private sealed record DeclaredClass(bool IsAbstract, string? Base, string[] Methods);
 
     // Result directories dated after the earlier 2026-11-21 results, oldest first.
     private static string[] NewResultDirectories() =>
