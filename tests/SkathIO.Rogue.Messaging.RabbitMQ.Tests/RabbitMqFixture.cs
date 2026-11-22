@@ -24,7 +24,13 @@ public sealed class RabbitMqFixture : IAsyncLifetime
         {
             return;
         }
-        _container = new RabbitMqBuilder("rabbitmq:4.1-alpine").WithPortBinding(FreePort(), AmqpPort).Build();
+        // A quorum queue dead-letters at least once: when the target queue refuses a copy, the broker
+        // sends it again only after this timeout, three minutes by default. That is longer than a test
+        // waits for a deferred message to come back to a full queue, so the test broker retries sooner.
+        _container = new RabbitMqBuilder("rabbitmq:4.1-alpine")
+            .WithPortBinding(FreePort(), AmqpPort)
+            .WithEnvironment("RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS", "-rabbit dead_letter_worker_publisher_confirm_timeout 5000")
+            .Build();
         await _container.StartAsync();
     }
 

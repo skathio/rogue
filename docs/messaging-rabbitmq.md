@@ -107,7 +107,8 @@ the default exchange, where the transport reads its signed count, so a deferral 
 attempt. The wait queue's dead-letter target is the service's queue, not the dead-letter queue:
 expiring there is the end of a wait, not a failure. At-least-once dead-lettering keeps each copy in
 the wait queue until the service's queue has confirmed it, so a full or unavailable service queue
-delays a copy rather than loses it; quorum queues allow that strategy only with `reject-publish`
+delays a copy rather than loses it. The broker sends a refused copy again after its
+`dead_letter_worker_publisher_confirm_timeout` setting, three minutes by default. Quorum queues allow that strategy only with `reject-publish`
 overflow. The wait queue sets no length limit of its own. Message TTL and at-least-once dead-lettering on quorum
 queues need RabbitMQ 3.10 or later; on an older broker the wait queue cannot be declared and the
 transport does not connect.
