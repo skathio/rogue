@@ -304,6 +304,8 @@ jobs:
             10.0.x
       - name: Test the runtime packages under net8.0
         run: |
+          # Some tests read every project's restore graph, so restore the whole solution first.
+          dotnet restore SkathIO.Rogue.sln -p:RogueTestNet8=true
           dotnet test tests/SkathIO.Rogue.UnitTests/SkathIO.Rogue.UnitTests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
           dotnet test tests/SkathIO.Rogue.Integration.Tests/SkathIO.Rogue.Integration.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
           dotnet test tests/SkathIO.Rogue.Behaviors.Tests/SkathIO.Rogue.Behaviors.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true

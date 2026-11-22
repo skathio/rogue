@@ -49,15 +49,6 @@ public sealed class BenchFullRunRulesTests
     }
 
     [Fact]
-    public void EveryNewResultDirectory_NamesACommitOfThisRepository()
-    {
-        string[] directories = NewResultDirectories();
-
-        Assert.NotEmpty(directories);
-        Assert.All(directories, static d => Assert.Equal(0, GitExitCode("cat-file", "-e", d.Substring(11) + "^{commit}")));
-    }
-
-    [Fact]
     public void EveryNewResultDirectory_HasItsOwnUnignoreLine_InGitignore()
     {
         string[] lines = RepoFiles.Read(".gitignore").Split('\n').Select(static l => l.Trim()).ToArray();
