@@ -59,6 +59,10 @@ Mean wall-clock and allocated bytes per operation. Lower is better. **Bold** mar
 | 7 | CreateStream (10 items) | 361.9 ns / 344 B | n/a | Rogue-only (MediatR v12 core has no streaming) |
 | 8 | Validated `Send` (real `FluentValidation` rule, valid payload, steady-state) | **521.4 ns** / **1.13 KB** | 543.8 ns / 1.27 KB | Rogue faster + fewer B |
 
+As ratios of MediatR's figure to Rogue's: cold start ~20.7× faster with 23× less allocated; typed
+`Send` 4.7× less allocated (224 B against 48 B); untyped `Send` 1.6× faster; publish to 2 handlers
+1.7× faster, to 5 handlers 1.5× faster, and to 20 handlers 1.5× faster with 4.7× less allocated.
+
 Across the currently-measured head-to-head scenarios, Rogue meets or beats MediatR on **both** wall-clock
 and allocation, plus the structural ~20.7× cold-start lead. The 2026-07-13 ShortRun measured that lead
 as ~18.5× (22.50 µs against 416.68 µs); the allocation figures are the same in both runs.
@@ -173,7 +177,10 @@ process-wide for the whole operation, the worker included.
 | 100,000 | 49.4 µs / 37.8 KB | **5.4 µs** / 2.0 KB | **4.8 µs** / 1.4 KB | **4.8 µs** / **1.1 KB** |
 
 At 100,000 jobs Hangfire.InMemory took 4.94 s and allocated 3.69 GB. Rogue took 0.48 to 0.54 s
-and allocated 108 to 197 MB: 9 to 10 times faster, with 19 to 34 times less allocated.
+and allocated 108 to 197 MB: 9 to 10 times faster, with 19 to 34 times less allocated. Per job,
+Rogue with `EnqueueMany` and a scope per batch is 16× faster than Hangfire.InMemory at 1,000 jobs
+(4.4 µs against 71.5 µs), 10.7× faster at 10,000 and 10.3× faster at 100,000, and allocates 34× less
+(1.1 KB against 37.8 KB).
 
 **SQL Server store, against Hangfire.SqlServer, 1,000 jobs.** Mean per operation and allocated:
 
@@ -186,7 +193,8 @@ and allocated 108 to 197 MB: 9 to 10 times faster, with 19 to 34 times less allo
 
 On this laptop both frameworks are bound by the disk: every committed transaction waits for the
 spinning disk, so these times say more about how many commits each framework makes per job than
-about its own CPU cost. Rogue finishes in a little over half Hangfire's time. Bulk enqueue helps
+about its own CPU cost. Rogue finishes in a little over half Hangfire's time: with `EnqueueMany` and a scope per batch it is
+1.9× faster (1.70 min against 3.19 min) and allocates 7× less (18.6 MB against 134.4 MB). Bulk enqueue helps
 less than in memory because, at this size, each job's claim and completion still wait on the disk.
 Expect much shorter times on an SSD or a server, and do not read 100 ms per job as Rogue's cost on
 real hardware. The error bands are wide (ShortRun, 3 iterations of minutes each). Allocation counts
