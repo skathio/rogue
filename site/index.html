@@ -125,7 +125,7 @@ builder.Services.<span class=k>AddRogueMessaging</span>(o =&gt;
 <tr><td>Publish to 5 handlers</td><td class=r>238.9 ns · 208 B</td><td>364.4 ns · 920 B</td><td class=x>1.5× faster</td></tr>
 <tr><td>Publish to 20 handlers</td><td class=r>861.3 ns · 688 B</td><td>1,293.4 ns · 3,200 B</td><td class=x>4.7× less allocated</td></tr>
 <tr><td><code>Send</code> with a FluentValidation behavior</td><td class=r>521.4 ns · 1.13 KB</td><td>543.8 ns · 1.27 KB</td><td class=x>less allocated; time within noise</td></tr>
-<tr><td>Streaming (<code>CreateStream</code>, 10 items)</td><td class=r>361.9 ns · 344 B</td><td>not measured</td><td>—</td></tr></table></div>
+<tr><td>Streaming (<code>CreateStream</code>, 10 items)</td><td class=r>362.0 ns · 344 B</td><td>683.6 ns · 608 B</td><td class=x>1.9× faster</td></tr></table></div>
 <p class=note>The generated concrete path adds 0 B of its own (27.03 ns), checked by a unit test. Untyped dispatch costs the same with 1 or 25 handler types, and concurrent dispatch shows zero lock contention.</p>
 <h3>Jobs: Rogue vs Hangfire 1.8</h3>
 <div class=scroll><table><tr><th>Store, jobs</th><th>Rogue</th><th>Hangfire</th><th>Rogue wins by</th></tr>

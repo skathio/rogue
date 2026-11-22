@@ -19,6 +19,8 @@ from committed BenchmarkDotNet runs; the raw per-class artifacts live under `ben
   run of every class in `bench/SkathIO.Rogue.Benchmarks` and `bench/SkathIO.Rogue.Benchmarks.Validation`
   at commit `696836e`. Earlier baselines (`2026-07-13-1bb0b86`, a ShortRun of the same suite, then
   `2026-06-19-cb81a30`, `2026-06-20-a734d6f`, etc.) are retained for history.
+  The stream benchmark gained a MediatR `CreateStream` case afterwards and was rerun alone, a full
+  run at commit `ed39edf`: `bench/results/2026-11-22-ed39edf/`. Row 7 comes from that run.
   The jobs benchmarks were run on 2026-11-21 with their own setup and were not rerun; see
   [Jobs and validation](#jobs-and-validation) below.
 - **Reproduce:**
@@ -56,12 +58,13 @@ Mean wall-clock and allocated bytes per operation. Lower is better. **Bold** mar
 | 4 | Publish — 2 event handlers | **113.0 ns** / **112 B** | 195.8 ns / 464 B | Rogue faster + fewer B |
 | 5 | Publish — 5 event handlers | **238.9 ns** / **208 B** | 364.4 ns / 920 B | Rogue faster + fewer B |
 | 6 | Publish — 20 event handlers | **861.3 ns** / **688 B** | 1,293.4 ns / 3,200 B | Rogue faster + fewer B |
-| 7 | CreateStream (10 items) | 361.9 ns / 344 B | n/a | Rogue-only (MediatR v12 core has no streaming) |
+| 7 | CreateStream (10 items, enumerated) | **362.0 ns** / **344 B** | 683.6 ns / 608 B | Rogue faster + fewer B |
 | 8 | Validated `Send` (real `FluentValidation` rule, valid payload, steady-state) | **521.4 ns** / **1.13 KB** | 543.8 ns / 1.27 KB | Rogue faster + fewer B |
 
 As ratios of MediatR's figure to Rogue's: cold start ~20.7× faster with 23× less allocated; typed
 `Send` 4.7× less allocated (224 B against 48 B); untyped `Send` 1.6× faster; publish to 2 handlers
-1.7× faster, to 5 handlers 1.5× faster, and to 20 handlers 1.5× faster with 4.7× less allocated.
+1.7× faster, to 5 handlers 1.5× faster, and to 20 handlers 1.5× faster with 4.7× less allocated; a
+10-item stream 1.9× faster with 1.8× less allocated.
 
 Across the currently-measured head-to-head scenarios, Rogue meets or beats MediatR on **both** wall-clock
 and allocation, plus the structural ~20.7× cold-start lead. The 2026-07-13 ShortRun measured that lead

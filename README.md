@@ -18,10 +18,10 @@ Rogue is a drop-in alternative to MediatR built for the modern .NET ecosystem: r
 | Dispatch | Reflection | Source-gen (monomorphized) | **Source-gen (DI-resolved)** |
 | Native AOT | No | Yes | **Yes** |
 | Pipeline behaviors | Open generic | Open generic | **Open generic + `[BehaviorOrder]`** |
-| Streaming | No | No | **`IAsyncEnumerable<T>`** |
+| Streaming (`IAsyncEnumerable<T>`) | Yes | Yes | **Yes, 1.9× faster than MediatR** |
 | Migration path from MediatR | — | Manual | **One-line + compat shim** |
 
-Benchmarks: Rogue meets or beats MediatR across the measured warm-path scenarios (single-handler `Send`, notification fan-out at N = 2 / 5 / 20, and validated `Send` with a real FluentValidation behavior) and leads cold-start by ~20.7×. See [docs/benchmarks.md](docs/benchmarks.md) and [bench/RESULTS.md](bench/RESULTS.md) for the full measured tables and methodology.
+Benchmarks: Rogue meets or beats MediatR across the measured warm-path scenarios (single-handler `Send`, notification fan-out at N = 2 / 5 / 20, a 10-item stream, and validated `Send` with a real FluentValidation behavior) and leads cold-start by ~20.7×. See [docs/benchmarks.md](docs/benchmarks.md) and [bench/RESULTS.md](bench/RESULTS.md) for the full measured tables and methodology.
 
 ---
 
