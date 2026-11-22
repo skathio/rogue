@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.Jobs</PackageId>
+    <Description>Background jobs for SkathIO.Rogue: any command can be enqueued and runs its handler on a worker, with retries, backoff, dead-lettering and source-generated dispatch and serialization (no reflection).</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>cqrs;mediator;jobs;background;source-generator;aot</PackageTags>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The kind-to-invoker map is emitted by the core source generator, which this package brings in
+         through its SkathIO.Rogue dependency. -->
+    <ProjectReference Include="..\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <!-- The serializer-coverage analyzer and its code fix run in the consumer's compilation. They are
+         two assemblies, so the analyzer does not load the Workspaces layer the code fix needs. -->
+    <ProjectReference Include="..\SkathIO.Rogue.Jobs.Analyzers\SkathIO.Rogue.Jobs.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\SkathIO.Rogue.Jobs.CodeFixes\SkathIO.Rogue.Jobs.CodeFixes.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Source the database store packages compile in as internals of their own; not part of this
+         package. -->
+    <Compile Remove="StoreShared\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <!-- Pack the analyzer and code fix under analyzers/dotnet/cs, as the MediatR package does for its
+       migration analyzer: the analyzer ProjectReferences feed the build, not the pack. -->
+  <Target Name="PackJobsAnalyzers" BeforeTargets="_GetPackageFiles">
+    <MSBuild Projects="..\SkathIO.Rogue.Jobs.Analyzers\SkathIO.Rogue.Jobs.Analyzers.csproj;..\SkathIO.Rogue.Jobs.CodeFixes\SkathIO.Rogue.Jobs.CodeFixes.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework;RuntimeIdentifier">
+      <Output TaskParameter="TargetOutputs" ItemName="_JobsAnalyzerDll" />
+    </MSBuild>
+    <Error Condition="!Exists('%(_JobsAnalyzerDll.Identity)')"
+           Text="Jobs analyzer DLL not found at %(_JobsAnalyzerDll.Identity); build it before packing." />
+    <ItemGroup>
+      <None Include="@(_JobsAnalyzerDll)"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
+</Project>

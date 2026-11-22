@@ -48,16 +48,39 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
       - name: Install native AOT prerequisites
-        run: sudo apt-get install -y clang zlib1g-dev
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
       - name: Publish AOT sample
         run: dotnet publish samples/SkathIO.Rogue.Aot.Sample/SkathIO.Rogue.Aot.Sample.csproj -c Release -r linux-x64
       - name: Run AOT binary
         run: ./samples/SkathIO.Rogue.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Aot.Sample
+      - name: Publish jobs and messaging AOT sample
+        run: dotnet publish samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample/SkathIO.Rogue.Jobs.Messaging.Aot.Sample.csproj -c Release -r linux-x64
+      - name: Run jobs and messaging AOT binary
+        run: ./samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample/bin/Release/net10.0/linux-x64/publish/SkathIO.Rogue.Jobs.Messaging.Aot.Sample
+
+  # Packs the twelve packages into a local feed and runs the separate consumer solution
+  # (tests/consumer), which restores them by package reference as an app would. The `ci` job tests
+  # the projects through project references only, so packaging faults show up here alone.
+  consumer:
+    name: Consumer suite
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      # run.sh publishes the two AOT samples natively from the packed packages (tests/consumer/aot.sh).
+      - name: Install native AOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+      - name: Pack the packages and run the consumer solution against them
+        run: tests/consumer/run.sh
 
   bench-smoke:
     name: Benchmark smoke
@@ -65,8 +88,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
       - name: Benchmark smoke run
@@ -108,14 +131,87 @@ jobs:
           fi
           echo "OK: Rogue interface-path allocation ${measured} B is within ceiling ${ceiling} B"
 
+  jobs-bench-smoke:
+    name: Jobs benchmark smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Jobs benchmark smoke run (Rogue against Hangfire.InMemory)
+        run: dotnet run --project bench/SkathIO.Rogue.Benchmarks.Jobs/SkathIO.Rogue.Benchmarks.Jobs.csproj -c Release -- --filter '*InMemoryJobsBenchmarks*' --job short --exporters json
+      - name: Check Rogue's allocation per job
+        run: |
+          # Gates the allocation of every Rogue benchmark, divided by its job count, against the
+          # committed ceiling. Allocation is gated, not time: it is stable on shared CI runners.
+          # The ceiling must be a number: jq orders every number before every string, so no
+          # measurement would be over a ceiling written as text, and the gate would pass anything.
+          ceiling=$(jq -e '.jobs_rogue_bytes_per_job_ceiling | numbers' .bench/thresholds.json) || {
+            echo "FAIL: jobs_rogue_bytes_per_job_ceiling in .bench/thresholds.json is missing or is not a number" && exit 1
+          }
+          result_file=$(find BenchmarkDotNet.Artifacts/results -name '*InMemoryJobsBenchmarks-report-full-compressed.json' | head -1)
+          if [ -z "$result_file" ]; then
+            echo "FAIL: no BDN JSON artifact for InMemoryJobsBenchmarks; a missing artifact is a broken run, not a pass" && exit 1
+          fi
+          rows=$(jq '[.Benchmarks[] | {name: (.Method + " " + .Parameters), rogue: (.Method | startswith("Rogue_")), bytes: .Memory.BytesAllocatedPerOperation, jobs: (.Parameters | capture("Jobs=(?<n>[0-9]+)").n | tonumber)}]' "$result_file")
+          echo "$rows" | jq -r '.[] | "\(.name): \(if .bytes == null then "no result" else "\(.bytes / .jobs | floor) B per job" end)"'
+          missing=$(echo "$rows" | jq '[.[] | select(.bytes == null)] | length')
+          rogue=$(echo "$rows" | jq '[.[] | select(.rogue)] | length')
+          if [ "$missing" != "0" ] || [ "$rogue" = "0" ]; then
+            echo "FAIL: a benchmark has no result, or no Rogue benchmark ran; treat as a broken run" && exit 1
+          fi
+          over=$(echo "$rows" | jq --argjson c "$ceiling" '[.[] | select(.rogue and (.bytes / .jobs) > $c) | .name]')
+          if [ "$over" != "[]" ]; then
+            echo "FAIL: over the ceiling of ${ceiling} B per job: ${over}" && exit 1
+          fi
+          echo "OK: every Rogue benchmark is within ${ceiling} B per job"
+
+  validation-bench-smoke:
+    name: Validation benchmark smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validation benchmark smoke run (Rogue against FluentValidation and MediatR)
+        run: dotnet run --project bench/SkathIO.Rogue.Benchmarks.Validation/SkathIO.Rogue.Benchmarks.Validation.csproj -c Release -- --filter '*ValidationBenchmarks*' --job short --exporters json
+      - name: Check Rogue's allocation per validation
+        run: |
+          # Gates each Rogue benchmark named in validation_rogue_bytes_ceiling against its own ceiling.
+          # Every named benchmark must be in the results: one that did not run is a broken run.
+          ceilings=$(jq -e '.validation_rogue_bytes_ceiling | objects | select(length > 0 and all(.[]; type == "number"))' .bench/thresholds.json) || {
+            echo "FAIL: validation_rogue_bytes_ceiling in .bench/thresholds.json must map benchmark names to numbers" && exit 1
+          }
+          mapfile -t result_files < <(find BenchmarkDotNet.Artifacts/results -name '*ValidationBenchmarks-report-full-compressed.json' 2>/dev/null)
+          if [ "${#result_files[@]}" = "0" ]; then
+            echo "FAIL: no BDN JSON artifact for the validation benchmarks; a missing artifact is a broken run, not a pass" && exit 1
+          fi
+          rows=$(jq -s '[.[].Benchmarks[]? | {method: .Method, bytes: .Memory.BytesAllocatedPerOperation}]' "${result_files[@]}")
+          echo "$rows" | jq -r '.[] | "\(.method): \(if .bytes == null then "no result" else "\(.bytes) B" end)"'
+          failures=$(jq -n --argjson rows "$rows" --argjson c "$ceilings" '[$c | to_entries[] | . as $e
+            | ([$rows[] | select(.method == $e.key)] | first) as $r
+            | if $r == null or $r.bytes == null then "\($e.key): no result"
+              elif $r.bytes > $e.value then "\($e.key): \($r.bytes) B, ceiling \($e.value) B"
+              else empty end]')
+          if [ "$failures" != "[]" ]; then
+            echo "FAIL: ${failures}" && exit 1
+          fi
+          echo "OK: every gated Rogue validation benchmark is within its ceiling"
+
   license-check:
     name: License check
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
       - name: Restore
@@ -138,7 +234,7 @@ jobs:
       - name: Check transitive dependency allow-list (AC-H / NFR-LIC-1)
         run: |
           # Enumerate the union of all top-level + transitive package ids (all
-          # target frameworks) across the 5 packable projects, and fail the
+          # target frameworks) across the packable projects, and fail the
           # build if any id is not on the committed allow-list
           # (.github/allowed-packages.txt). The allow-list gates on package
           # identity: adding a new id requires a human to first verify the
@@ -149,6 +245,13 @@ jobs:
             "src/SkathIO.Rogue.MediatR/SkathIO.Rogue.MediatR.csproj"
             "src/SkathIO.Rogue.Logging/SkathIO.Rogue.Logging.csproj"
             "src/SkathIO.Rogue.Validation.FluentValidation/SkathIO.Rogue.Validation.FluentValidation.csproj"
+            "src/SkathIO.Rogue.Validation/SkathIO.Rogue.Validation.csproj"
+            "src/SkathIO.Rogue.Jobs/SkathIO.Rogue.Jobs.csproj"
+            "src/SkathIO.Rogue.Jobs.Postgres/SkathIO.Rogue.Jobs.Postgres.csproj"
+            "src/SkathIO.Rogue.Jobs.SqlServer/SkathIO.Rogue.Jobs.SqlServer.csproj"
+            "src/SkathIO.Rogue.Messaging/SkathIO.Rogue.Messaging.csproj"
+            "src/SkathIO.Rogue.Messaging.RabbitMQ/SkathIO.Rogue.Messaging.RabbitMQ.csproj"
+            "src/SkathIO.Rogue.Messaging.Outbox/SkathIO.Rogue.Messaging.Outbox.csproj"
           )
 
           : > closure-ids.txt
@@ -176,9 +279,41 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
       - name: Build (enforces PublicApiAnalyzers)
         run: dotnet build SkathIO.Rogue.sln -c Release
+
+  # The runtime packages ship net8.0 and net10.0 builds, and the `ci` job tests only net10.0. This
+  # job installs the .NET 8 runtime next to the .NET 10 SDK and runs the runtime packages' tests
+  # under net8.0. RogueTestNet8=true makes those test projects build for net8.0 as well; without it
+  # they build net10.0 alone, so the jobs that install only .NET 10 are unchanged.
+  net8-tests:
+    name: .NET 8 tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Test the runtime packages under net8.0
+        run: |
+          # Some tests read every project's restore graph, so restore the whole solution first.
+          dotnet restore SkathIO.Rogue.sln -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.UnitTests/SkathIO.Rogue.UnitTests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Integration.Tests/SkathIO.Rogue.Integration.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Behaviors.Tests/SkathIO.Rogue.Behaviors.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.DiResolution.Tests/SkathIO.Rogue.DiResolution.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.MediatR.Tests/SkathIO.Rogue.MediatR.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Jobs.Tests/SkathIO.Rogue.Jobs.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Jobs.Postgres.Tests/SkathIO.Rogue.Jobs.Postgres.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Jobs.SqlServer.Tests/SkathIO.Rogue.Jobs.SqlServer.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Messaging.Tests/SkathIO.Rogue.Messaging.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Messaging.RabbitMQ.Tests/SkathIO.Rogue.Messaging.RabbitMQ.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true
+          dotnet test tests/SkathIO.Rogue.Messaging.Outbox.Tests/SkathIO.Rogue.Messaging.Outbox.Tests.csproj -c Release -f net8.0 -p:RogueTestNet8=true

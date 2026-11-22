@@ -1,4 +1,3 @@
-#if !NETSTANDARD2_0
 namespace SkathIO.Rogue.Compatibility;
 
 // MediatR-shaped streaming request marker (the adapter is the sole home of this surface — the core
@@ -11,4 +10,3 @@ namespace SkathIO.Rogue.Compatibility;
 // core IStreamQuery<T>: the generator's existing IStreamQuery-keyed discovery records it as a stream
 // message and the dispatcher's CreateStream<TItem> switch matches it with no adapter-specific emission.
 public interface IStreamRequest<out TResponse> : global::SkathIO.Rogue.IStreamQuery<TResponse> { }
-#endif

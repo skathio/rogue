@@ -30,8 +30,6 @@ public interface ISender
     /// <summary>Sends a command or query via the object-dispatch path. Requires <c>EnableObjectDispatch</c>.</summary>
     ValueTask<object?> Send(object request, CancellationToken cancellationToken = default);
 
-#if !NETSTANDARD2_0
     /// <summary>Creates a stream from a streaming query.</summary>
     IAsyncEnumerable<TItem> CreateStream<TItem>(IStreamQuery<TItem> query, CancellationToken cancellationToken = default);
-#endif
 }

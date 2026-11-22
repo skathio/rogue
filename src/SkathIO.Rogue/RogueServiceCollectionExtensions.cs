@@ -36,8 +36,7 @@ public static class RogueServiceCollectionExtensions
 
         // Invoke every generator-wired registrar (PD-33/PD-38). The bridge is an append-only,
         // order-preserving registry rather than a single last-writer-wins slot: each consumer
-        // compilation's module initializer (net5+) appends its registrar via RogueRegistrationBridge.Register;
-        // on ns2.0 the consumer calls RogueGeneratedRegistration.Register(services, options) explicitly.
+        // compilation's module initializer appends its registrar via RogueRegistrationBridge.Register.
         // We snapshot the registry under the bridge's lock and invoke every distinct registrar in
         // append order, so no compilation's registrations are silently clobbered. Each registrar's
         // generated body is itself idempotent (TryAdd*/TryAddEnumerable, PD-38), so a double-AddRogue()

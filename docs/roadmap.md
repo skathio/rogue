@@ -12,6 +12,23 @@ stream behaviors with ordering, pre/post processors and exception handlers, comp
 telemetry shim, MediatR compatibility + migration analyzer (ROGM001–006), AOT/trim support, and a
 benchmark suite against MediatR.
 
+## 2.0.0 (unreleased)
+
+Every runtime package targets `net8.0;net10.0` (netstandard2.0 is dropped; the generators stay on
+it). Two package families join the core, built on the same generator:
+
+- **Jobs.** `SkathIO.Rogue.Jobs` runs any `[Job]` command as a background job, with retries,
+  backoff, dead-lettering, delayed, recurring and unique jobs, and dispatch and serialization
+  generated at compile time. Stores: in memory, `SkathIO.Rogue.Jobs.Postgres` and
+  `SkathIO.Rogue.Jobs.SqlServer`. A bench compares it with Hangfire.
+- **Messaging.** `SkathIO.Rogue.Messaging` carries `[Message]` events and commands between services
+  under stable names and dispatches them to ordinary Rogue handlers. `SkathIO.Rogue.Messaging.RabbitMQ`
+  is the first broker transport, and `SkathIO.Rogue.Messaging.Outbox` adds a transactional outbox
+  and inbox on the Postgres and SQL Server job stores.
+
+Not in 2.0.0, by decision: a jobs dashboard. Candidates after it: more transports (Azure Service
+Bus, NATS), and native broker delays where a broker offers them.
+
 ## Post-v1 candidates
 
 **Performance**

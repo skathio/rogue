@@ -14,7 +14,7 @@ internal static class WellKnownTypeNames
     // ── Primary event handler (PD-42 — renamed from INotificationHandler)
     public const string IEventHandler1 = "SkathIO.Rogue.IEventHandler`1";
 
-    // ── Primary streaming (net8+ only, but the generator may encounter them in any TFM)
+    // ── Primary streaming
     public const string IStreamQueryHandler2 = "SkathIO.Rogue.IStreamQueryHandler`2";
     public const string IStreamQuery1        = "SkathIO.Rogue.IStreamQuery`1";
 
@@ -74,4 +74,27 @@ internal static class WellKnownTypeNames
     // maps the discovered handler to IQuery<TResponse> instead of the F8 default ICommand<TResponse>.
     // Read via ExtractFromSymbol's HasMapAsQueryAttribute (same GetAttributes() scan as [BehaviorOrder]).
     public const string MapAsQueryAttribute = "SkathIO.Rogue.MediatR.MapAsQueryAttribute";
+
+    // Feature-module markers: a request carrying one of these gets that module's generated
+    // pre-handler step in its typed Send_X (see FeatureModules).
+    public const string ValidateAttribute = "SkathIO.Rogue.Validation.ValidateAttribute";
+    public const string JobAttribute      = "SkathIO.Rogue.Jobs.JobAttribute";
+    public const string MessageAttribute  = "SkathIO.Rogue.Messaging.MessageAttribute";
+
+    // Validation feature module: the runtime types its generated code calls.
+    public const string ValidationErrors = "SkathIO.Rogue.Validation.ValidationErrors";
+    public const string RuleAttribute    = "SkathIO.Rogue.Validation.RuleAttribute";
+    public const string IAsyncRules1     = "SkathIO.Rogue.Validation.IAsyncRules`1";
+
+    // Jobs feature module: the runtime type whose presence means the jobs package is referenced.
+    public const string JobDefinition1 = "SkathIO.Rogue.Jobs.JobDefinition`1";
+    public const string RecurringAttribute = "SkathIO.Rogue.Jobs.RecurringAttribute";
+
+    // Messaging feature module: the runtime type whose presence means the messaging package is referenced.
+    public const string MessageBinding1 = "SkathIO.Rogue.Messaging.MessageBinding`1";
+
+    // Assemblies whose version is the core package's version (ROGUE013): the runtime first, then the
+    // contracts, which a library that only declares requests references on its own.
+    public const string CoreAssemblyName         = "SkathIO.Rogue";
+    public const string AbstractionsAssemblyName = "SkathIO.Rogue.Abstractions";
 }

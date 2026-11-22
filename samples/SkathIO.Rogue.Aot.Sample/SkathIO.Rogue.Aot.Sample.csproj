@@ -8,6 +8,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <!-- Validation package: its checks are generated into this sample by the core generator, so the
+         AOT publish also proves the validation path is trim- and AOT-clean. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation\SkathIO.Rogue.Validation.csproj" />
     <!-- Analyzer reference makes the generator run in this sample's compilation, -->
     <!-- discovering PingHandler and emitting the dispatcher + registration (PD-26). -->
     <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"

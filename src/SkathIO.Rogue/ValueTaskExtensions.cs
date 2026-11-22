@@ -2,11 +2,10 @@ namespace SkathIO.Rogue;
 
 /// <summary>
 /// Internal extension helpers for <see cref="System.Threading.Tasks.ValueTask"/> conversions.
-/// Used by the generated dispatcher to handle void-path handlers on net8+.
+/// Used by the generated dispatcher to handle void-path handlers.
 /// </summary>
 internal static class ValueTaskExtensions
 {
-#if !NETSTANDARD2_0
     /// <summary>
     /// Converts a bare <see cref="System.Threading.Tasks.ValueTask"/> to a
     /// <see cref="System.Threading.Tasks.ValueTask{Unit}"/>.
@@ -27,5 +26,4 @@ internal static class ValueTaskExtensions
         await vt.ConfigureAwait(false);
         return Unit.Value;
     }
-#endif
 }

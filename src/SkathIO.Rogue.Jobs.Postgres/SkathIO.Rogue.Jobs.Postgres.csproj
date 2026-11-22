@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.Jobs.Postgres</PackageId>
+    <Description>PostgreSQL job store for SkathIO.Rogue.Jobs: enqueue inside your own transaction, bulk enqueue through binary COPY, batched SKIP LOCKED claims, LISTEN/NOTIFY wake-ups with polling as a fallback, and a pruner for finished jobs.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>cqrs;mediator;jobs;background;postgres;postgresql;npgsql;aot</PackageTags>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Internals every database store shares (pruner, migration gate, claim order), compiled into
+         each store package from one source so the stores cannot drift apart. -->
+    <Compile Include="..\SkathIO.Rogue.Jobs\StoreShared\*.cs" LinkBase="StoreShared" />
+  </ItemGroup>
+</Project>

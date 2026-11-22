@@ -15,9 +15,8 @@ The source of these steps is `docs/governance.md`, "Release readiness".
    means `minor`, fixes and dependency updates mean `patch`. Recommend a bump; the maintainer decides.
 
 2. **Promote public API.** For every packable project whose `PublicAPI.Unshipped.txt` has entries,
-   move them to `PublicAPI.Shipped.txt`, keeping the per-TFM split (`PublicAPI/netstandard2.0/` and
-   `PublicAPI/modern/` in `Abstractions`, `SkathIO.Rogue` and `MediatR`). This freezes that API for
-   good, so list every promoted line in the PR description.
+   move them to `PublicAPI.Shipped.txt` (one pair per project, at the project root). This freezes
+   that API for good, so list every promoted line in the PR description.
 
 3. **Benchmarks: required before every release** (`docs/governance.md`). Run the full suite on a
    quiet machine: `dotnet run -c Release --project bench/SkathIO.Rogue.Benchmarks -- --filter '*'`,

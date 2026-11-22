@@ -112,4 +112,90 @@ internal static class DiagnosticDescriptors
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         helpLinkUri: HelpLinkBase + "ROGUE012");
+
+    /// <summary>
+    /// ROGUE013 — a referenced feature package (SkathIO.Rogue.Validation, .Jobs or .Messaging) has a
+    /// different major.minor version than the core SkathIO.Rogue package. The feature packages carry
+    /// no generator of their own: the core generator emits their code, so it assumes the feature
+    /// package's types and contracts match its own release. Warning: the build may still succeed, but
+    /// the generated code can call members the referenced feature package does not have.
+    /// </summary>
+    internal static readonly DiagnosticDescriptor FeaturePackageVersionMismatch = new DiagnosticDescriptor(
+        id: "ROGUE013",
+        title: "Feature package version differs from the core package",
+        messageFormat: "Package '{0}' is version {1}, but the core SkathIO.Rogue package is version {2}. The core source generator emits the code for '{0}', so reference the same major.minor version of both packages.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGUE013");
+
+    /// <summary>
+    /// ROGUE014 — a <c>[Validate]</c> type, or a type that contains it, is not declared <c>partial</c>.
+    /// The validator is generated into the type (so it can call the type's private <c>Rules</c> hook),
+    /// which needs every declaration in the chain to be partial. Error: the type would go unvalidated.
+    /// </summary>
+    internal static readonly DiagnosticDescriptor ValidatedTypeNotPartial = new DiagnosticDescriptor(
+        id: "ROGUE014",
+        title: "[Validate] type must be partial",
+        messageFormat: "'{0}' has [Validate], but it or a type that contains it is not declared partial, so its validator cannot be generated",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGUE014");
+
+    /// <summary>
+    /// ROGUE015 — a validation rule attribute cannot check the property it is placed on: no public static
+    /// <c>IsValid</c> overload takes the property's type with the attribute's arguments, or the rule lacks
+    /// its <c>DefaultCode</c>/<c>DefaultMessage</c> members. Error: reported here instead of as a compile
+    /// error inside generated code.
+    /// </summary>
+    internal static readonly DiagnosticDescriptor RuleDoesNotFitProperty = new DiagnosticDescriptor(
+        id: "ROGUE015",
+        title: "Validation rule does not fit the property",
+        messageFormat: "Rule '{0}' cannot check '{1}': {2}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGUE015");
+
+    /// <summary>
+    /// ROGUE016 — a <c>[Validate]</c> type declares a method named <c>Rules</c> whose signature is not the
+    /// hook's. Error: the hook would silently never run.
+    /// </summary>
+    internal static readonly DiagnosticDescriptor RulesHookSignature = new DiagnosticDescriptor(
+        id: "ROGUE016",
+        title: "Rules hook has the wrong signature",
+        messageFormat: "'{0}' declares a Rules method that is not the validation hook; declare it as 'static void Rules({1} x, ref ValidationErrors errors)'",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGUE016");
+
+    /// <summary>
+    /// ROGUE017 — a <c>[Validate]</c> type from a referenced assembly carries no generated validator,
+    /// because that assembly was built without the SkathIO.Rogue generator. Error: the request or nested
+    /// value would otherwise go unchecked without a word.
+    /// </summary>
+    internal static readonly DiagnosticDescriptor ValidatorMissing = new DiagnosticDescriptor(
+        id: "ROGUE017",
+        title: "Validated type has no generated validator",
+        messageFormat: "'{0}' has [Validate], but its assembly was built without the SkathIO.Rogue source generator, so '{1}' cannot be validated",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGUE017");
+
+    /// <summary>
+    /// ROGUE018 — validation rules (rule attributes or an <c>IAsyncRules&lt;T&gt;</c> class) are declared for
+    /// a type that has no <c>[Validate]</c> attribute, so they never run. Warning: the build still works,
+    /// but the rules are dead.
+    /// </summary>
+    internal static readonly DiagnosticDescriptor RulesNeverRun = new DiagnosticDescriptor(
+        id: "ROGUE018",
+        title: "Validation rules never run",
+        messageFormat: "Validation rules are declared for '{0}', but it has no [Validate] attribute, so they never run",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        helpLinkUri: HelpLinkBase + "ROGUE018");
 }

@@ -37,17 +37,6 @@ public sealed class FaultingRequestExceptionHandler
     public const string FallbackValue = "faulting-request:fallback";
 
     /// <inheritdoc />
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Handle(
-        FaultingRequest request,
-        InvalidOperationException exception,
-        RequestExceptionHandlerState<FaultingResponse> state,
-        CancellationToken cancellationToken)
-    {
-        state.SetHandled(new FaultingResponse(FallbackValue));
-        return Unit.Task;
-    }
-#else
     public ValueTask Handle(
         FaultingRequest request,
         InvalidOperationException exception,
@@ -57,7 +46,6 @@ public sealed class FaultingRequestExceptionHandler
         state.SetHandled(new FaultingResponse(FallbackValue));
         return default;
     }
-#endif
 }
 
 /// <summary>
@@ -76,17 +64,9 @@ public sealed class FaultingRequestExceptionAction
     public FaultingRequestExceptionAction(IHandlerCallTracker tracker) => _tracker = tracker;
 
     /// <inheritdoc />
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Execute(FaultingRequest request, InvalidOperationException exception, CancellationToken cancellationToken)
-    {
-        _tracker.Record(Marker);
-        return Unit.Task;
-    }
-#else
     public ValueTask Execute(FaultingRequest request, InvalidOperationException exception, CancellationToken cancellationToken)
     {
         _tracker.Record(Marker);
         return default;
     }
-#endif
 }

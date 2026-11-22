@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SkathIO.Rogue.Messaging.Outbox</PackageId>
+    <Description>Transactional outbox and inbox for SkathIO.Rogue.Messaging on the SkathIO.Rogue.Jobs database stores: a message published inside your own database transaction is stored as a job and relayed to the transport once the transaction commits, and the consumer's inbox runs the handlers of a message delivered twice only once.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>cqrs;mediator;messaging;outbox;inbox;jobs;postgres;sqlserver;aot</PackageTags>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
+    <ProjectReference Include="..\SkathIO.Rogue.Messaging\SkathIO.Rogue.Messaging.csproj" />
+  </ItemGroup>
+</Project>

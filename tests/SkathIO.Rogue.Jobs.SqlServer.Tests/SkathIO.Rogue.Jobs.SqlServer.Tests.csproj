@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- net8.0 is built only when RogueTestNet8 is true. The .NET 8 job in ci.yml sets it and runs
+         these tests under net8.0; the other jobs install only .NET 10, so they build net10.0 alone. -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(RogueTestNet8)' != 'true'">net10.0</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs.SqlServer\SkathIO.Rogue.Jobs.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging\SkathIO.Rogue.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging.Outbox\SkathIO.Rogue.Messaging.Outbox.csproj" />
+    <ProjectReference Include="..\SkathIO.Rogue.Jobs.StoreContract\SkathIO.Rogue.Jobs.StoreContract.csproj" />
+    <!-- The core generator emits the dispatcher and the message bindings for the outbox tests. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Testcontainers.MsSql" />
+  </ItemGroup>
+</Project>

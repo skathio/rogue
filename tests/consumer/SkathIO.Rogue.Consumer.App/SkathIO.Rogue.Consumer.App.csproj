@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Only the validation package, as docs/validation.md installs it: SkathIO.Rogue, its
+         abstractions and the source generator arrive as its dependencies. -->
+    <PackageReference Include="SkathIO.Rogue.Validation" />
+  </ItemGroup>
+</Project>

@@ -11,16 +11,6 @@ namespace SkathIO.Rogue;
 public sealed class ForeachAwaitPublisher : IEventPublisher
 {
     /// <inheritdoc/>
-#if NETSTANDARD2_0
-    public async ValueTask<Unit> Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
-    {
-        for (var i = 0; i < handlers.Count; i++)
-        {
-            await handlers[i].Handle(ev, cancellationToken).ConfigureAwait(false);
-        }
-        return Unit.Value;
-    }
-#else
     public async ValueTask Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
     {
         for (var i = 0; i < handlers.Count; i++)
@@ -28,5 +18,4 @@ public sealed class ForeachAwaitPublisher : IEventPublisher
             await handlers[i].Handle(ev, cancellationToken).ConfigureAwait(false);
         }
     }
-#endif
 }

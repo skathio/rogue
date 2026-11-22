@@ -25,15 +25,16 @@
     <!-- DI -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
-    <!-- netstandard2.0 polyfills -->
-    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.14" />
-    <!-- Observability shim: ActivitySource + Meter (in-box on net8+; NuGet for ns2.0) -->
-    <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.14" />
-    <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
     <!-- Integration packages -->
-    <PackageVersion Include="FluentValidation" Version="11.12.0" />
+    <PackageVersion Include="FluentValidation" Version="12.2.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.14" />
+    <!-- Job stores -->
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.2" />
+    <!-- Message transports -->
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
     <!-- Test -->
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
@@ -41,6 +42,11 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Verify.Xunit" Version="31.12.5" />
+    <!-- Integration tests only: a database in a container per test collection. Never referenced by
+         a packable project (the license check covers only those). -->
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.17.0" />
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.17.0" />
+    <PackageVersion Include="Testcontainers.RabbitMq" Version="4.17.0" />
     <!-- Companion package to Microsoft.CodeAnalysis.CSharp above (migration analyzer/test
          projects); kept in lockstep to avoid a restore/assembly-version conflict (D4/D8, F-6). -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
@@ -56,6 +62,15 @@
          Dependabot may still propose them; only v13+ is excluded via .github/dependabot.yml's
          ignore rule, so that boundary is never silently crossed. -->
     <PackageVersion Include="MediatR" Version="12.5.0" />
+    <!-- Bench only: the Hangfire baselines the jobs bench (bench/SkathIO.Rogue.Benchmarks.Jobs) measures
+         Rogue's jobs against. Hangfire is LGPL-3.0, approved by the maintainer for bench use only: no
+         project under src/, tests/ or samples/ may reference it, and it ships in no package.
+         Hangfire.Core comes in transitively. -->
+    <PackageVersion Include="Hangfire.InMemory" Version="1.0.0" />
+    <PackageVersion Include="Hangfire.SqlServer" Version="1.8.25" />
+    <!-- Bench only (MIT): Hangfire.Core asks for Newtonsoft.Json 11.0.1, which has a known high
+         severity advisory (GHSA-5crp-9r3c-p9vr); the jobs bench references it directly to lift it. -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <!-- Public API surface enforcement -->
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />

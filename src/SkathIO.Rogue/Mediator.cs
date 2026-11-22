@@ -1,7 +1,5 @@
 using System;
-#if !NETSTANDARD2_0
 using System.Collections.Generic;
-#endif
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -48,27 +46,11 @@ public sealed class Mediator : IMediator
     public ValueTask<object?> Send(object request, CancellationToken cancellationToken = default)
         => _dispatcher.SendObject(request, cancellationToken);
 
-#if !NETSTANDARD2_0
     /// <inheritdoc/>
     public IAsyncEnumerable<TItem> CreateStream<TItem>(IStreamQuery<TItem> query, CancellationToken cancellationToken = default)
         => _dispatcher.CreateStream(query, cancellationToken);
-#endif
 
     /// <inheritdoc/>
-#if NETSTANDARD2_0
-    public ValueTask<Unit> Publish(IEvent @event, CancellationToken cancellationToken = default)
-        => _dispatcher.Publish(@event, cancellationToken);
-
-    /// <inheritdoc/>
-    public ValueTask<Unit> Publish(object @event, CancellationToken cancellationToken = default)
-    {
-        if (@event is not IEvent e)
-        {
-            throw new ArgumentException($"Object of type '{@event?.GetType().FullName}' does not implement {nameof(IEvent)}.", nameof(@event));
-        }
-        return Publish(e, cancellationToken);
-    }
-#else
     public ValueTask Publish(IEvent @event, CancellationToken cancellationToken = default)
         => _dispatcher.Publish(@event, cancellationToken);
 
@@ -81,5 +63,4 @@ public sealed class Mediator : IMediator
         }
         return Publish(e, cancellationToken);
     }
-#endif
 }

@@ -1,0 +1,242 @@
+#nullable enable
+abstract SkathIO.Rogue.Jobs.JobDefinition.CommandType.get -> System.Type!
+const SkathIO.Rogue.Jobs.InMemoryJobStore.DefaultFinishedRetention = 10000 -> int
+const SkathIO.Rogue.Jobs.JobLimits.MaxErrorLength = 4000 -> int
+const SkathIO.Rogue.Jobs.JobLimits.MaxKindLength = 200 -> int
+const SkathIO.Rogue.Jobs.JobLimits.MaxQueueLength = 100 -> int
+const SkathIO.Rogue.Jobs.JobsOptions.MaxBatchSize = 10000 -> int
+const SkathIO.Rogue.Jobs.RogueJobsTelemetry.Name = "SkathIO.Rogue.Jobs" -> string!
+override SkathIO.Rogue.Jobs.JobDefinition<TCommand>.CommandType.get -> System.Type!
+~override SkathIO.Rogue.Jobs.JobLease.Equals(object obj) -> bool
+override SkathIO.Rogue.Jobs.JobLease.GetHashCode() -> int
+~override SkathIO.Rogue.Jobs.JobLease.ToString() -> string
+SkathIO.Rogue.Jobs.ClaimedJob
+SkathIO.Rogue.Jobs.ClaimedJob.Attempt.get -> int
+SkathIO.Rogue.Jobs.ClaimedJob.Attempt.init -> void
+SkathIO.Rogue.Jobs.ClaimedJob.ClaimedJob() -> void
+SkathIO.Rogue.Jobs.ClaimedJob.Id.get -> System.Guid
+SkathIO.Rogue.Jobs.ClaimedJob.Id.init -> void
+SkathIO.Rogue.Jobs.ClaimedJob.Kind.get -> string!
+SkathIO.Rogue.Jobs.ClaimedJob.Kind.init -> void
+SkathIO.Rogue.Jobs.ClaimedJob.Lease.get -> SkathIO.Rogue.Jobs.JobLease
+SkathIO.Rogue.Jobs.ClaimedJob.MaxAttempts.get -> int
+SkathIO.Rogue.Jobs.ClaimedJob.MaxAttempts.init -> void
+SkathIO.Rogue.Jobs.ClaimedJob.Payload.get -> System.ReadOnlyMemory<byte>
+SkathIO.Rogue.Jobs.ClaimedJob.Payload.init -> void
+SkathIO.Rogue.Jobs.ClaimedJob.Queue.get -> string!
+SkathIO.Rogue.Jobs.ClaimedJob.Queue.init -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.AutoMigrate.get -> bool
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.AutoMigrate.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.DatabaseJobsOptions() -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.DeadLetteredRetention.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.DeadLetteredRetention.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.PruneBatchSize.get -> int
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.PruneBatchSize.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.PruneInterval.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.PruneInterval.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.Schema.get -> string!
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.Schema.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.SucceededRetention.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.SucceededRetention.set -> void
+SkathIO.Rogue.Jobs.DatabaseJobsOptions.Validate() -> void
+SkathIO.Rogue.Jobs.IJobScheduler
+SkathIO.Rogue.Jobs.IJobScheduler.EnqueueMany<TCommand>(System.Collections.Generic.IReadOnlyList<TCommand>! commands, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<System.Guid>!>
+SkathIO.Rogue.Jobs.IJobScheduler.Enqueue<TCommand>(TCommand command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Guid>
+SkathIO.Rogue.Jobs.IJobStore
+SkathIO.Rogue.Jobs.IJobStore.ClaimAsync(string! queue, int maxCount, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.ClaimedJob!>!>
+SkathIO.Rogue.Jobs.IJobStore.CompleteAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.JobLease>! leases, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.IJobStore.DeadLetterAsync(SkathIO.Rogue.Jobs.JobLease lease, string! error, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.IJobStore.EnqueueAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.NewJob!>! jobs, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.IJobStore.ExtendLeasesAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.JobLease>! leases, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.IJobStore.GetAsync(System.Guid id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.JobSnapshot?>
+SkathIO.Rogue.Jobs.IJobStore.RetryAsync(SkathIO.Rogue.Jobs.JobLease lease, System.TimeSpan delay, string! error, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.InMemoryJobStore
+SkathIO.Rogue.Jobs.InMemoryJobStore.ClaimAsync(string! queue, int maxCount, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.ClaimedJob!>!>
+SkathIO.Rogue.Jobs.InMemoryJobStore.CompleteAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.JobLease>! leases, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.InMemoryJobStore.DeadLetterAsync(SkathIO.Rogue.Jobs.JobLease lease, string! error, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.InMemoryJobStore.EnqueueAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.NewJob!>! jobs, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.InMemoryJobStore.ExtendLeasesAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.JobLease>! leases, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.InMemoryJobStore.GetAsync(System.Guid id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.JobSnapshot?>
+SkathIO.Rogue.Jobs.InMemoryJobStore.InMemoryJobStore(System.TimeProvider! timeProvider, int finishedRetention = 10000) -> void
+SkathIO.Rogue.Jobs.InMemoryJobStore.InMemoryJobStore() -> void
+SkathIO.Rogue.Jobs.InMemoryJobStore.RetryAsync(SkathIO.Rogue.Jobs.JobLease lease, System.TimeSpan delay, string! error, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.JobAttribute
+SkathIO.Rogue.Jobs.JobAttribute.BackoffSeconds.get -> int
+SkathIO.Rogue.Jobs.JobAttribute.BackoffSeconds.set -> void
+SkathIO.Rogue.Jobs.JobAttribute.JobAttribute() -> void
+SkathIO.Rogue.Jobs.JobAttribute.Kind.get -> string?
+SkathIO.Rogue.Jobs.JobAttribute.Kind.set -> void
+SkathIO.Rogue.Jobs.JobAttribute.MaxAttempts.get -> int
+SkathIO.Rogue.Jobs.JobAttribute.MaxAttempts.set -> void
+SkathIO.Rogue.Jobs.JobAttribute.Queue.get -> string?
+SkathIO.Rogue.Jobs.JobAttribute.Queue.set -> void
+SkathIO.Rogue.Jobs.JobAttribute.TimeoutSeconds.get -> int
+SkathIO.Rogue.Jobs.JobAttribute.TimeoutSeconds.set -> void
+SkathIO.Rogue.Jobs.JobDefaults
+SkathIO.Rogue.Jobs.JobDefaults.BackoffSeconds.get -> int
+SkathIO.Rogue.Jobs.JobDefaults.JobDefaults(string? queue, int maxAttempts, int backoffSeconds, int timeoutSeconds) -> void
+SkathIO.Rogue.Jobs.JobDefaults.MaxAttempts.get -> int
+SkathIO.Rogue.Jobs.JobDefaults.Queue.get -> string?
+SkathIO.Rogue.Jobs.JobDefaults.TimeoutSeconds.get -> int
+SkathIO.Rogue.Jobs.JobDefinition
+SkathIO.Rogue.Jobs.JobDefinition.Defaults.get -> SkathIO.Rogue.Jobs.JobDefaults!
+SkathIO.Rogue.Jobs.JobDefinition.Kind.get -> string!
+SkathIO.Rogue.Jobs.JobDefinition<TCommand>
+SkathIO.Rogue.Jobs.JobDefinition<TCommand>.JobDefinition(string! kind, SkathIO.Rogue.Jobs.JobDefaults! defaults, System.Func<SkathIO.Rogue.RogueDispatcher!, TCommand, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! invoke) -> void
+SkathIO.Rogue.Jobs.JobLease
+SkathIO.Rogue.Jobs.JobLease.Attempt.get -> int
+SkathIO.Rogue.Jobs.JobLease.Attempt.init -> void
+SkathIO.Rogue.Jobs.JobLease.Deconstruct(out System.Guid Id, out int Attempt) -> void
+SkathIO.Rogue.Jobs.JobLease.Equals(SkathIO.Rogue.Jobs.JobLease other) -> bool
+SkathIO.Rogue.Jobs.JobLease.Id.get -> System.Guid
+SkathIO.Rogue.Jobs.JobLease.Id.init -> void
+SkathIO.Rogue.Jobs.JobLease.JobLease(System.Guid Id, int Attempt) -> void
+SkathIO.Rogue.Jobs.JobLease.JobLease() -> void
+SkathIO.Rogue.Jobs.JobLimits
+SkathIO.Rogue.Jobs.JobSnapshot
+SkathIO.Rogue.Jobs.JobSnapshot.Attempt.get -> int
+SkathIO.Rogue.Jobs.JobSnapshot.Attempt.init -> void
+SkathIO.Rogue.Jobs.JobSnapshot.Id.get -> System.Guid
+SkathIO.Rogue.Jobs.JobSnapshot.Id.init -> void
+SkathIO.Rogue.Jobs.JobSnapshot.JobSnapshot() -> void
+SkathIO.Rogue.Jobs.JobSnapshot.Kind.get -> string!
+SkathIO.Rogue.Jobs.JobSnapshot.Kind.init -> void
+SkathIO.Rogue.Jobs.JobSnapshot.LastError.get -> string?
+SkathIO.Rogue.Jobs.JobSnapshot.LastError.init -> void
+SkathIO.Rogue.Jobs.JobSnapshot.MaxAttempts.get -> int
+SkathIO.Rogue.Jobs.JobSnapshot.MaxAttempts.init -> void
+SkathIO.Rogue.Jobs.JobSnapshot.Queue.get -> string!
+SkathIO.Rogue.Jobs.JobSnapshot.Queue.init -> void
+SkathIO.Rogue.Jobs.JobSnapshot.RunAt.get -> System.DateTimeOffset
+SkathIO.Rogue.Jobs.JobSnapshot.RunAt.init -> void
+SkathIO.Rogue.Jobs.JobSnapshot.State.get -> SkathIO.Rogue.Jobs.JobState
+SkathIO.Rogue.Jobs.JobSnapshot.State.init -> void
+SkathIO.Rogue.Jobs.JobsOptions
+SkathIO.Rogue.Jobs.JobsOptions.BackoffJitter.get -> double
+SkathIO.Rogue.Jobs.JobsOptions.BackoffJitter.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.BatchSize.get -> int
+SkathIO.Rogue.Jobs.JobsOptions.BatchSize.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.DefaultBackoff.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.JobsOptions.DefaultBackoff.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.DefaultMaxAttempts.get -> int
+SkathIO.Rogue.Jobs.JobsOptions.DefaultMaxAttempts.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.DefaultQueue.get -> string!
+SkathIO.Rogue.Jobs.JobsOptions.DefaultQueue.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.JobsOptions() -> void
+SkathIO.Rogue.Jobs.JobsOptions.LeaseDuration.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.JobsOptions.LeaseDuration.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.MaxBackoff.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.JobsOptions.MaxBackoff.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.MaxConcurrency.get -> int
+SkathIO.Rogue.Jobs.JobsOptions.MaxConcurrency.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.MaxPayloadBytes.get -> int
+SkathIO.Rogue.Jobs.JobsOptions.MaxPayloadBytes.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.PollInterval.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.JobsOptions.PollInterval.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.Queues.get -> System.Collections.Generic.IList<string!>!
+SkathIO.Rogue.Jobs.JobsOptions.ScopePerBatch.get -> bool
+SkathIO.Rogue.Jobs.JobsOptions.ScopePerBatch.set -> void
+SkathIO.Rogue.Jobs.JobsOptions.SerializerContext.get -> System.Text.Json.Serialization.JsonSerializerContext?
+SkathIO.Rogue.Jobs.JobsOptions.SerializerContext.set -> void
+SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions
+SkathIO.Rogue.Jobs.JobState
+SkathIO.Rogue.Jobs.JobState.DeadLettered = 3 -> SkathIO.Rogue.Jobs.JobState
+SkathIO.Rogue.Jobs.JobState.Enqueued = 0 -> SkathIO.Rogue.Jobs.JobState
+SkathIO.Rogue.Jobs.JobState.Processing = 1 -> SkathIO.Rogue.Jobs.JobState
+SkathIO.Rogue.Jobs.JobState.Succeeded = 2 -> SkathIO.Rogue.Jobs.JobState
+SkathIO.Rogue.Jobs.JobWorker
+SkathIO.Rogue.Jobs.JobWorker.RunAsync(System.Threading.CancellationToken stoppingToken) -> System.Threading.Tasks.Task!
+SkathIO.Rogue.Jobs.JobWorker.RunOnceAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+SkathIO.Rogue.Jobs.NewJob
+SkathIO.Rogue.Jobs.NewJob.Id.get -> System.Guid
+SkathIO.Rogue.Jobs.NewJob.Id.init -> void
+SkathIO.Rogue.Jobs.NewJob.Kind.get -> string!
+SkathIO.Rogue.Jobs.NewJob.Kind.init -> void
+SkathIO.Rogue.Jobs.NewJob.MaxAttempts.get -> int
+SkathIO.Rogue.Jobs.NewJob.MaxAttempts.init -> void
+SkathIO.Rogue.Jobs.NewJob.NewJob() -> void
+SkathIO.Rogue.Jobs.NewJob.Payload.get -> System.ReadOnlyMemory<byte>
+SkathIO.Rogue.Jobs.NewJob.Payload.init -> void
+SkathIO.Rogue.Jobs.NewJob.Queue.get -> string!
+SkathIO.Rogue.Jobs.NewJob.Queue.init -> void
+SkathIO.Rogue.Jobs.RogueJobsTelemetry
+static SkathIO.Rogue.Jobs.JobDefaults.None.get -> SkathIO.Rogue.Jobs.JobDefaults!
+static SkathIO.Rogue.Jobs.JobDefinition.IgnoreResult<TResult>(System.Threading.Tasks.ValueTask<TResult> pending) -> System.Threading.Tasks.ValueTask
+static SkathIO.Rogue.Jobs.JobLease.operator !=(SkathIO.Rogue.Jobs.JobLease left, SkathIO.Rogue.Jobs.JobLease right) -> bool
+static SkathIO.Rogue.Jobs.JobLease.operator ==(SkathIO.Rogue.Jobs.JobLease left, SkathIO.Rogue.Jobs.JobLease right) -> bool
+static SkathIO.Rogue.Jobs.JobLimits.TrimError(string! error) -> string!
+static SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions.AddJobDefinition(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, SkathIO.Rogue.Jobs.JobDefinition! definition) -> void
+static SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions.AddRogueJobs(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<SkathIO.Rogue.Jobs.JobsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+SkathIO.Rogue.Jobs.IJobScheduler.CreateJob<TCommand>(TCommand command) -> SkathIO.Rogue.Jobs.NewJob!
+SkathIO.Rogue.Jobs.IJobStore.ReleaseAsync(SkathIO.Rogue.Jobs.JobLease lease, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.IJobStore.RequeueAsync(System.Collections.Generic.IReadOnlyList<System.Guid>! ids, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.InMemoryJobStore.ReleaseAsync(SkathIO.Rogue.Jobs.JobLease lease, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.InMemoryJobStore.RequeueAsync(System.Collections.Generic.IReadOnlyList<System.Guid>! ids, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.JobSignal
+SkathIO.Rogue.Jobs.JobSignal.Pulse() -> void
+const SkathIO.Rogue.Jobs.DatabaseJobsOptions.MaxSchemaLength = 50 -> int
+static SkathIO.Rogue.Jobs.JobLimits.CheckQueue(string! queue, string! parameter) -> void
+static SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions.AddRogueJobWorker(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+virtual SkathIO.Rogue.Jobs.DatabaseJobsOptions.ValidateStoreOptions() -> void
+abstract SkathIO.Rogue.Jobs.RecurringJob.CommandType.get -> System.Type!
+const SkathIO.Rogue.Jobs.JobLimits.MaxKeyLength = 200 -> int
+override SkathIO.Rogue.Jobs.RecurringJob<TCommand>.CommandType.get -> System.Type!
+SkathIO.Rogue.Jobs.IJobScheduler.Schedule<TCommand>(TCommand command, System.DateTimeOffset at, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Guid>
+SkathIO.Rogue.Jobs.IJobStore.EnqueueOnceAsync(SkathIO.Rogue.Jobs.NewJob! job, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Guid>
+SkathIO.Rogue.Jobs.IJobStore.ReleaseLeadershipAsync(string! name, string! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.IJobStore.TryAcquireLeadershipAsync(string! name, string! owner, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.InMemoryJobStore.EnqueueOnceAsync(SkathIO.Rogue.Jobs.NewJob! job, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Guid>
+SkathIO.Rogue.Jobs.InMemoryJobStore.ReleaseLeadershipAsync(string! name, string! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.InMemoryJobStore.TryAcquireLeadershipAsync(string! name, string! owner, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.JobAttribute.UniqueKey.get -> string?
+SkathIO.Rogue.Jobs.JobAttribute.UniqueKey.set -> void
+SkathIO.Rogue.Jobs.JobDefaults.UniqueKey.get -> string?
+SkathIO.Rogue.Jobs.JobDefaults.UniqueKey.init -> void
+SkathIO.Rogue.Jobs.JobsOptions.LeaderLeaseDuration.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.JobsOptions.LeaderLeaseDuration.set -> void
+SkathIO.Rogue.Jobs.NewJob.RunAt.get -> System.DateTimeOffset?
+SkathIO.Rogue.Jobs.NewJob.RunAt.init -> void
+SkathIO.Rogue.Jobs.NewJob.TaskKey.get -> string?
+SkathIO.Rogue.Jobs.NewJob.TaskKey.init -> void
+SkathIO.Rogue.Jobs.NewJob.UniqueKey.get -> string?
+SkathIO.Rogue.Jobs.NewJob.UniqueKey.init -> void
+SkathIO.Rogue.Jobs.RecurringAttribute
+SkathIO.Rogue.Jobs.RecurringAttribute.Cron.get -> string!
+SkathIO.Rogue.Jobs.RecurringAttribute.RecurringAttribute(string! cron) -> void
+SkathIO.Rogue.Jobs.RecurringJob
+SkathIO.Rogue.Jobs.RecurringJob.Cron.get -> string!
+SkathIO.Rogue.Jobs.RecurringJob<TCommand>
+SkathIO.Rogue.Jobs.RecurringJob<TCommand>.RecurringJob(string! cron, System.Func<TCommand>? create) -> void
+static SkathIO.Rogue.Jobs.JobLimits.CheckKey(string! key, string! parameter) -> void
+static SkathIO.Rogue.Jobs.JobsServiceCollectionExtensions.AddRecurringJob(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, SkathIO.Rogue.Jobs.RecurringJob! job) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+SkathIO.Rogue.Jobs.IJobScheduler.CreateJobs<TCommand>(System.Collections.Generic.IReadOnlyList<TCommand>! commands) -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.NewJob!>!
+SkathIO.Rogue.Jobs.IMessageInboxStore
+SkathIO.Rogue.Jobs.IMessageInboxStore.CompleteMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.IMessageInboxStore.ReleaseMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.IMessageInboxStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaimResult>
+SkathIO.Rogue.Jobs.ITransactionalJobStore
+SkathIO.Rogue.Jobs.ITransactionalJobStore.EnqueueAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.NewJob!>! jobs, System.Data.Common.DbTransaction! transaction, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.InMemoryJobStore.CompleteMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.InMemoryJobStore.ReleaseMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.InMemoryJobStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaimResult>
+SkathIO.Rogue.Jobs.JobDefinition<TCommand>.JobDefinition(string! kind, SkathIO.Rogue.Jobs.JobDefaults! defaults, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TCommand>! typeInfo, System.Func<SkathIO.Rogue.RogueDispatcher!, TCommand, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! invoke) -> void
+SkathIO.Rogue.Jobs.MessageClaim
+SkathIO.Rogue.Jobs.MessageClaim.Busy = 2 -> SkathIO.Rogue.Jobs.MessageClaim
+SkathIO.Rogue.Jobs.MessageClaim.Claimed = 0 -> SkathIO.Rogue.Jobs.MessageClaim
+SkathIO.Rogue.Jobs.MessageClaim.Handled = 1 -> SkathIO.Rogue.Jobs.MessageClaim
+static readonly SkathIO.Rogue.Jobs.JobsOptions.MaxLeaseDuration -> System.TimeSpan
+~override SkathIO.Rogue.Jobs.MessageClaimResult.Equals(object obj) -> bool
+override SkathIO.Rogue.Jobs.MessageClaimResult.GetHashCode() -> int
+~override SkathIO.Rogue.Jobs.MessageClaimResult.ToString() -> string
+SkathIO.Rogue.Jobs.MessageClaimResult
+SkathIO.Rogue.Jobs.MessageClaimResult.Deconstruct(out SkathIO.Rogue.Jobs.MessageClaim Outcome, out long Token) -> void
+SkathIO.Rogue.Jobs.MessageClaimResult.Equals(SkathIO.Rogue.Jobs.MessageClaimResult other) -> bool
+SkathIO.Rogue.Jobs.MessageClaimResult.MessageClaimResult() -> void
+SkathIO.Rogue.Jobs.MessageClaimResult.MessageClaimResult(SkathIO.Rogue.Jobs.MessageClaim Outcome, long Token) -> void
+SkathIO.Rogue.Jobs.MessageClaimResult.Outcome.get -> SkathIO.Rogue.Jobs.MessageClaim
+SkathIO.Rogue.Jobs.MessageClaimResult.Outcome.init -> void
+SkathIO.Rogue.Jobs.MessageClaimResult.Token.get -> long
+SkathIO.Rogue.Jobs.MessageClaimResult.Token.init -> void
+static SkathIO.Rogue.Jobs.MessageClaimResult.operator !=(SkathIO.Rogue.Jobs.MessageClaimResult left, SkathIO.Rogue.Jobs.MessageClaimResult right) -> bool
+static SkathIO.Rogue.Jobs.MessageClaimResult.operator ==(SkathIO.Rogue.Jobs.MessageClaimResult left, SkathIO.Rogue.Jobs.MessageClaimResult right) -> bool

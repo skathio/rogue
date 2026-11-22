@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs.SqlServer\SkathIO.Rogue.Jobs.SqlServer.csproj" />
+    <!-- The core generator emits this project's dispatcher and job definitions, as it would in a
+         consumer's build. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <PackageReference Include="BenchmarkDotNet" />
+    <!-- The baselines. Hangfire is approved for bench use only; see Directory.Packages.props. -->
+    <PackageReference Include="Hangfire.InMemory" />
+    <PackageReference Include="Hangfire.SqlServer" />
+    <!-- Lifts Hangfire.Core's Newtonsoft.Json 11.0.1, which has a known high severity advisory. -->
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+</Project>

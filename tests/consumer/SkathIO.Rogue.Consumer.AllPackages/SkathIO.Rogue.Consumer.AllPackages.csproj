@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Both target frameworks the packages ship. -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Every package in one app: they must restore together with no version conflict or downgrade,
+         and their analyzers must load and stay quiet (warnings fail this build, ROGUE013 among them). -->
+    <PackageReference Include="SkathIO.Rogue" />
+    <PackageReference Include="SkathIO.Rogue.Abstractions" />
+    <PackageReference Include="SkathIO.Rogue.Logging" />
+    <PackageReference Include="SkathIO.Rogue.MediatR" />
+    <PackageReference Include="SkathIO.Rogue.Validation" />
+    <PackageReference Include="SkathIO.Rogue.Validation.FluentValidation" />
+    <PackageReference Include="SkathIO.Rogue.Jobs" />
+    <PackageReference Include="SkathIO.Rogue.Jobs.Postgres" />
+    <PackageReference Include="SkathIO.Rogue.Jobs.SqlServer" />
+    <PackageReference Include="SkathIO.Rogue.Messaging" />
+    <PackageReference Include="SkathIO.Rogue.Messaging.RabbitMQ" />
+    <PackageReference Include="SkathIO.Rogue.Messaging.Outbox" />
+  </ItemGroup>
+</Project>

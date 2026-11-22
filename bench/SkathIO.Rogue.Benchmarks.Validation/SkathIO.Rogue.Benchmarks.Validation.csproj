@@ -25,6 +25,10 @@
          is the only request type here, so the auto-weave is scoped to what this benchmark
          actually wants to measure. -->
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation\SkathIO.Rogue.Validation.FluentValidation.csproj" />
+    <!-- The in-house validation package, measured against FluentValidation in InHouseValidationBenchmarks.
+         It weaves nothing: only [Validate] types get generated checks, so CreateUserCommand above is
+         dispatched exactly as before. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation\SkathIO.Rogue.Validation.csproj" />
     <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="MediatR" />

@@ -9,6 +9,7 @@ using SkathIO.Rogue.Logging;
 using SkathIO.Rogue.Smoke.Application;
 using SkathIO.Rogue.Smoke.Application.Orders;
 using SkathIO.Rogue.Smoke.Infrastructure;
+using SkathIO.Rogue.Validation;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,11 @@ app.Use(async (ctx, next) =>
         ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
         await ctx.Response.WriteAsJsonAsync(new { errors = ex.Errors });
     }
+    catch (RogueValidationException ex)
+    {
+        // SkathIO.Rogue.Validation: the problem dictionary is the shape ValidationProblem takes.
+        await Results.ValidationProblem(ex.ToProblemDictionary()).ExecuteAsync(ctx);
+    }
     catch (OrderNotFoundException)
     {
         ctx.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -47,6 +53,11 @@ app.MapPost("/orders", async (CreateOrderCommand command, ISender sender) =>
     OrderId orderId = await sender.Send(command);
     return Results.Created($"/orders/{orderId.Value}", orderId);
 });
+
+// [Validate] command (SkathIO.Rogue.Validation): rules and an async rule run inside the generated
+// dispatch in SkathIO.Rogue.Smoke.Application, before the handler.
+app.MapPost("/orders/reorder", async (ReorderCommand command, ISender sender) =>
+    Results.Ok(await sender.Send(command)));
 
 // IQuery<T>. A missing order throws OrderNotFoundException, mapped to 404 by the middleware above.
 app.MapGet("/orders/{id:guid}", async (Guid id, ISender sender) =>

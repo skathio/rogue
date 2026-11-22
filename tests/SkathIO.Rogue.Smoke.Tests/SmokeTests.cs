@@ -1,5 +1,7 @@
 using System;
+using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -175,5 +177,67 @@ public sealed class SmokeTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/orders/{created!.Value}")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/orders/{created.Value}/ship", content: null)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/orders/stream")).StatusCode);
+    }
+
+    // ── SkathIO.Rogue.Validation: [Validate] request declared in Application, dispatched from Api ──
+
+    [Fact]
+    public async Task Reorder_WithValidPayload_IsHandled()
+    {
+        var client = _factory.CreateClient();
+        Guid source = await CreateOrderAsync(client, "reorder-source");
+
+        var response = await client.PostAsJsonAsync(
+            "/orders/reorder",
+            new { SourceOrderId = source, Lines = new[] { new { ProductId = "widget-7", Quantity = 2 } } },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, await response.Content.ReadFromJsonAsync<int>(JsonOptions));
+    }
+
+    [Fact]
+    public async Task Reorder_WithBrokenLines_Returns400_KeyedByIndexedPaths()
+    {
+        var client = _factory.CreateClient();
+        Guid source = await CreateOrderAsync(client, "reorder-broken");
+
+        var response = await client.PostAsJsonAsync(
+            "/orders/reorder",
+            new { SourceOrderId = source, Lines = new[] { new { ProductId = "ok", Quantity = 1 }, new { ProductId = "", Quantity = 0 } } },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(new[] { "Lines[1].ProductId", "Lines[1].Quantity" }, await ProblemKeysAsync(response));
+    }
+
+    [Fact]
+    public async Task Reorder_OfAnUnknownOrder_Returns400_FromTheAsyncRuleResolvedFromDi()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/orders/reorder",
+            new { SourceOrderId = Guid.NewGuid(), Lines = new[] { new { ProductId = "widget-8", Quantity = 1 } } },
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(new[] { "SourceOrderId" }, await ProblemKeysAsync(response));
+    }
+
+    private static async Task<Guid> CreateOrderAsync(HttpClient client, string productId)
+    {
+        var response = await client.PostAsJsonAsync("/orders", new { ProductId = productId, Quantity = 1 }, JsonOptions);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<OrderId>(JsonOptions))!.Value;
+    }
+
+    private static async Task<string[]> ProblemKeysAsync(HttpResponseMessage response)
+    {
+        using JsonDocument problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return problem.RootElement.GetProperty("errors").EnumerateObject()
+            .Select(static p => p.Name)
+            .OrderBy(static n => n, StringComparer.Ordinal)
+            .ToArray();
     }
 }

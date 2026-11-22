@@ -1,7 +1,5 @@
 using System;
-#if !NETSTANDARD2_0
 using System.Collections.Generic;
-#endif
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -49,18 +47,11 @@ public class RogueDispatcher
     public virtual ValueTask<object?> SendObject(object request, CancellationToken cancellationToken)
         => throw new NotImplementedException("No generated dispatcher found.");
 
-#if !NETSTANDARD2_0
     /// <summary>Creates a stream. Overridden by the generator.</summary>
     public virtual IAsyncEnumerable<TItem> CreateStream<TItem>(IStreamQuery<TItem> query, CancellationToken cancellationToken)
         => throw new NotImplementedException("No generated dispatcher found.");
-#endif
 
     /// <summary>Publishes an event. Overridden by the generator.</summary>
-#if NETSTANDARD2_0
-    public virtual ValueTask<Unit> Publish(IEvent @event, CancellationToken cancellationToken)
-        => throw new NotImplementedException("No generated dispatcher found.");
-#else
     public virtual ValueTask Publish(IEvent @event, CancellationToken cancellationToken)
         => throw new NotImplementedException("No generated dispatcher found.");
-#endif
 }

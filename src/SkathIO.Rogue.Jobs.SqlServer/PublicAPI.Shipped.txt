@@ -1,0 +1,28 @@
+#nullable enable
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsOptions
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsOptions.MaxPollInterval.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsOptions.MaxPollInterval.set -> void
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsOptions.MinPollInterval.get -> System.TimeSpan
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsOptions.MinPollInterval.set -> void
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsOptions.SqlServerJobsOptions() -> void
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsServiceCollectionExtensions
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.ClaimAsync(string! queue, int maxCount, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.ClaimedJob!>!>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.CompleteAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.JobLease>! leases, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.DeadLetterAsync(SkathIO.Rogue.Jobs.JobLease lease, string! error, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.EnqueueAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.NewJob!>! jobs, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.ExtendLeasesAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Jobs.JobLease>! leases, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.GetAsync(System.Guid id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.JobSnapshot?>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.MigrateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.PruneAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.ReleaseAsync(SkathIO.Rogue.Jobs.JobLease lease, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.RequeueAsync(System.Collections.Generic.IReadOnlyList<System.Guid>! ids, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<int>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.RetryAsync(SkathIO.Rogue.Jobs.JobLease lease, System.TimeSpan delay, string! error, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.SqlServerJobStore(string! connectionString, SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsOptions? options = null, System.TimeProvider? timeProvider = null) -> void
+static SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsServiceCollectionExtensions.AddRogueSqlServerJobs(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, System.Action<SkathIO.Rogue.Jobs.SqlServer.SqlServerJobsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.EnqueueOnceAsync(SkathIO.Rogue.Jobs.NewJob! job, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Guid>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.ReleaseLeadershipAsync(string! name, string! owner, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.TryAcquireLeadershipAsync(string! name, string! owner, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<bool>
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.CompleteMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.ReleaseMessageAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Jobs.SqlServer.SqlServerJobStore.TryClaimMessageAsync(string! messageId, System.TimeSpan lease, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Jobs.MessageClaimResult>

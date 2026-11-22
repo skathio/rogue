@@ -11,16 +11,8 @@ namespace SkathIO.Rogue;
 public sealed class WhenAllPublisher : IEventPublisher
 {
     /// <inheritdoc/>
-#if NETSTANDARD2_0
-    public async ValueTask<Unit> Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
-    {
-        await PublishCore(handlers, ev, cancellationToken).ConfigureAwait(false);
-        return Unit.Value;
-    }
-#else
     public System.Threading.Tasks.ValueTask Publish<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
         => new System.Threading.Tasks.ValueTask(PublishCore(handlers, ev, cancellationToken));
-#endif
 
     private static async Task PublishCore<TEvent>(IReadOnlyList<IEventHandler<TEvent>> handlers, TEvent ev, CancellationToken cancellationToken) where TEvent : IEvent
     {

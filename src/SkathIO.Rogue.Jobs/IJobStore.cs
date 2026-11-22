@@ -1,0 +1,95 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace SkathIO.Rogue.Jobs;
+
+/// <summary>
+/// Durable job storage. A job is one record whose state moves from
+/// <see cref="JobState.Enqueued"/> to <see cref="JobState.Processing"/> when a worker claims it, and on
+/// to <see cref="JobState.Succeeded"/>, back to <see cref="JobState.Enqueued"/> for a retry, or to
+/// <see cref="JobState.DeadLettered"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A claim reserves a job for a lease and counts an attempt. Every later call for the job carries the
+/// <see cref="JobLease"/> from that claim, and applies only while that claim still holds the job: once a
+/// lease runs out the job can be claimed again, and the earlier worker's calls return
+/// <see langword="false"/> instead of overwriting the newer claim.
+/// </para>
+/// <para>
+/// Time is the store's own clock. Implementations must behave the same on every database, which the
+/// shared store contract tests check.
+/// </para>
+/// </remarks>
+public interface IJobStore
+{
+    /// <summary>
+    /// Stores <paramref name="jobs"/>, all or none, each due at its <see cref="NewJob.RunAt"/> or, when it
+    /// has none, now. A job whose id is already stored, or appears twice in the batch, fails the whole
+    /// batch.
+    /// </summary>
+    /// <exception cref="ArgumentException">A job carries a unique key or a task key; store it with <see cref="EnqueueOnceAsync"/>.</exception>
+    ValueTask EnqueueAsync(IReadOnlyList<NewJob> jobs, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stores <paramref name="job"/> unless a key it carries is already held, and returns the id of the
+    /// job that holds it: the new job's own id, or the existing job's. A <see cref="NewJob.TaskKey"/> is
+    /// held by the job stored for that task key and run time, whatever its state, so one recurring run
+    /// is stored once however many hosts store it. A <see cref="NewJob.UniqueKey"/> is held, for its
+    /// kind, by the job that is enqueued or processing with it. A job with neither key is simply stored.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="job"/> is null.</exception>
+    ValueTask<Guid> EnqueueOnceAsync(NewJob job, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Makes <paramref name="owner"/> the holder of the leader lock <paramref name="name"/> for
+    /// <paramref name="lease"/> from now, and returns true, when no one else holds it or another
+    /// holder's lease has run out; renews it when <paramref name="owner"/> already holds it. Returns
+    /// false while another owner's lease holds.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="owner"/> is not a valid key, or <paramref name="lease"/> is not positive.</exception>
+    ValueTask<bool> TryAcquireLeadershipAsync(string name, string owner, TimeSpan lease, CancellationToken cancellationToken);
+
+    /// <summary>Gives up the leader lock <paramref name="name"/> if <paramref name="owner"/> holds it, so another owner can take it at once.</summary>
+    /// <exception cref="ArgumentException"><paramref name="name"/> or <paramref name="owner"/> is not a valid key.</exception>
+    ValueTask ReleaseLeadershipAsync(string name, string owner, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Claims up to <paramref name="maxCount"/> jobs of <paramref name="queue"/> that are due, oldest run
+    /// time first and in enqueue order on a tie, and reserves each for <paramref name="lease"/>. A job
+    /// whose earlier lease ran out is due again; if that claim used its last attempt the job is
+    /// dead-lettered instead of returned. No two concurrent claims return the same job.
+    /// </summary>
+    ValueTask<IReadOnlyList<ClaimedJob>> ClaimAsync(string queue, int maxCount, TimeSpan lease, CancellationToken cancellationToken);
+
+    /// <summary>Marks the claimed jobs succeeded and returns how many claims still held their job.</summary>
+    ValueTask<int> CompleteAsync(IReadOnlyList<JobLease> leases, CancellationToken cancellationToken);
+
+    /// <summary>Puts a claimed job back to run again after <paramref name="delay"/>, recording <paramref name="error"/>.</summary>
+    ValueTask<bool> RetryAsync(JobLease lease, TimeSpan delay, string error, CancellationToken cancellationToken);
+
+    /// <summary>Moves a claimed job to the dead letters, recording <paramref name="error"/>; it is never claimed again.</summary>
+    ValueTask<bool> DeadLetterAsync(JobLease lease, string error, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Puts a claimed job back to run again after <paramref name="delay"/> without counting the attempt:
+    /// for a worker that is shutting down, or one that does not know the job's kind.
+    /// </summary>
+    ValueTask<bool> ReleaseAsync(JobLease lease, TimeSpan delay, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Moves the dead-lettered jobs among <paramref name="ids"/> back to <see cref="JobState.Enqueued"/>,
+    /// ready to be claimed now with all their attempts, and returns how many moved. An id that is not
+    /// stored, or whose job is not dead-lettered, is skipped; so is a job whose unique key another
+    /// pending job holds, and of several with the same kind and unique key only one moves.
+    /// </summary>
+    ValueTask<int> RequeueAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+
+    /// <summary>Extends the leases of running jobs to <paramref name="lease"/> from now and returns how many claims still held their job.</summary>
+    ValueTask<int> ExtendLeasesAsync(IReadOnlyList<JobLease> leases, TimeSpan lease, CancellationToken cancellationToken);
+
+    /// <summary>Returns the job's current state, or <see langword="null"/> when no such job is stored.</summary>
+    ValueTask<JobSnapshot?> GetAsync(Guid id, CancellationToken cancellationToken);
+}

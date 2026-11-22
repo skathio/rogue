@@ -1,0 +1,16 @@
+```
+
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.5 LTS (Noble Numbat)
+Intel Core i7-6700HQ CPU 2.60GHz (Max: 0.80GHz) (Skylake), 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.115
+  [Host]   : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v3
+  ShortRun : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v3
+
+Job=ShortRun  IterationCount=3  LaunchCount=1  
+WarmupCount=3  
+
+```
+| Method                | Mean     | Error    | StdDev  | Ratio | Gen0   | Allocated | Alloc Ratio |
+|---------------------- |---------:|---------:|--------:|------:|-------:|----------:|------------:|
+| Rogue_ValidatedNoOp   | 515.9 ns | 52.68 ns | 2.89 ns |  1.00 | 0.3672 |   1.13 KB |        1.00 |
+| MediatR_ValidatedNoOp | 578.5 ns | 34.51 ns | 1.89 ns |  1.12 | 0.4148 |   1.27 KB |        1.13 |

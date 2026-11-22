@@ -1,0 +1,142 @@
+#nullable enable
+abstract SkathIO.Rogue.Messaging.MessageBinding.CanDispatch.get -> bool
+abstract SkathIO.Rogue.Messaging.MessageBinding.MessageType.get -> System.Type!
+const SkathIO.Rogue.Messaging.MessageEnvelope.JsonContentType = "application/json" -> string!
+const SkathIO.Rogue.Messaging.MessageLimits.MaxNameLength = 200 -> int
+const SkathIO.Rogue.Messaging.MessagingOptions.MaxBatchSize = 10000 -> int
+const SkathIO.Rogue.Messaging.RogueMessagingTelemetry.Name = "SkathIO.Rogue.Messaging" -> string!
+override SkathIO.Rogue.Messaging.DeadLetteredMessage.Equals(object? obj) -> bool
+override SkathIO.Rogue.Messaging.DeadLetteredMessage.GetHashCode() -> int
+override SkathIO.Rogue.Messaging.DeadLetteredMessage.ToString() -> string!
+override SkathIO.Rogue.Messaging.MessageBinding<TMessage>.CanDispatch.get -> bool
+override SkathIO.Rogue.Messaging.MessageBinding<TMessage>.MessageType.get -> System.Type!
+SkathIO.Rogue.Messaging.DeadLetteredMessage
+SkathIO.Rogue.Messaging.DeadLetteredMessage.<Clone>$() -> SkathIO.Rogue.Messaging.DeadLetteredMessage!
+SkathIO.Rogue.Messaging.DeadLetteredMessage.DeadLetteredMessage(SkathIO.Rogue.Messaging.MessageEnvelope! Envelope, string! Reason) -> void
+SkathIO.Rogue.Messaging.DeadLetteredMessage.Deconstruct(out SkathIO.Rogue.Messaging.MessageEnvelope! Envelope, out string! Reason) -> void
+SkathIO.Rogue.Messaging.DeadLetteredMessage.Envelope.get -> SkathIO.Rogue.Messaging.MessageEnvelope!
+SkathIO.Rogue.Messaging.DeadLetteredMessage.Envelope.init -> void
+SkathIO.Rogue.Messaging.DeadLetteredMessage.Equals(SkathIO.Rogue.Messaging.DeadLetteredMessage? other) -> bool
+SkathIO.Rogue.Messaging.DeadLetteredMessage.Reason.get -> string!
+SkathIO.Rogue.Messaging.DeadLetteredMessage.Reason.init -> void
+SkathIO.Rogue.Messaging.IMessageBus
+SkathIO.Rogue.Messaging.IMessageBus.Publish<TMessage>(TMessage message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageTransport
+SkathIO.Rogue.Messaging.IMessageTransport.AckAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageTransport.Capabilities.get -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.IMessageTransport.ServiceName.get -> string?
+SkathIO.Rogue.Messaging.IMessageTransport.UnsettledLimit.get -> int?
+SkathIO.Rogue.Messaging.IMessageTransport.DeadLetterAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageTransport.DeferAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageTransport.NackAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageTransport.ReceiveAsync(int maxCount, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.ReceivedMessage!>!>
+SkathIO.Rogue.Messaging.IMessageTransport.SendAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.MessageEnvelope!>! messages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.InMemoryTransport
+SkathIO.Rogue.Messaging.InMemoryTransport.AckAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.InMemoryTransport.Capabilities.get -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.InMemoryTransport.ServiceName.get -> string!
+SkathIO.Rogue.Messaging.InMemoryTransport.DeadLetterAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.InMemoryTransport.DeferAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.InMemoryTransport.DeadLettered.get -> System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.DeadLetteredMessage!>!
+SkathIO.Rogue.Messaging.InMemoryTransport.InMemoryTransport(System.TimeProvider? timeProvider = null) -> void
+SkathIO.Rogue.Messaging.InMemoryTransport.NackAsync(SkathIO.Rogue.Messaging.ReceivedMessage! message, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.InMemoryTransport.ReceiveAsync(int maxCount, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.ReceivedMessage!>!>
+SkathIO.Rogue.Messaging.InMemoryTransport.SendAsync(System.Collections.Generic.IReadOnlyList<SkathIO.Rogue.Messaging.MessageEnvelope!>! messages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.MessageAttribute
+SkathIO.Rogue.Messaging.MessageAttribute.MessageAttribute(string! name) -> void
+SkathIO.Rogue.Messaging.MessageAttribute.Name.get -> string!
+SkathIO.Rogue.Messaging.MessageBinding
+SkathIO.Rogue.Messaging.MessageBinding.Name.get -> string!
+SkathIO.Rogue.Messaging.MessageBinding<TMessage>
+SkathIO.Rogue.Messaging.MessageBinding<TMessage>.MessageBinding(string! name, System.Func<System.IServiceProvider!, TMessage, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>? dispatch) -> void
+SkathIO.Rogue.Messaging.MessageConsumer
+SkathIO.Rogue.Messaging.MessageConsumer.RunAsync(System.Threading.CancellationToken stoppingToken) -> System.Threading.Tasks.Task!
+SkathIO.Rogue.Messaging.MessageConsumer.RunOnceAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+SkathIO.Rogue.Messaging.MessageEnvelope
+SkathIO.Rogue.Messaging.MessageEnvelope.Body.get -> System.ReadOnlyMemory<byte>
+SkathIO.Rogue.Messaging.MessageEnvelope.Body.set -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.CausationId.get -> string?
+SkathIO.Rogue.Messaging.MessageEnvelope.CausationId.set -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.ContentType.get -> string!
+SkathIO.Rogue.Messaging.MessageEnvelope.ContentType.set -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.CorrelationId.get -> string?
+SkathIO.Rogue.Messaging.MessageEnvelope.CorrelationId.set -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.Id.get -> string!
+SkathIO.Rogue.Messaging.MessageEnvelope.Id.set -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.MessageEnvelope() -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.Name.get -> string!
+SkathIO.Rogue.Messaging.MessageEnvelope.Name.set -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.Origin.get -> string?
+SkathIO.Rogue.Messaging.MessageEnvelope.Origin.set -> void
+SkathIO.Rogue.Messaging.MessageEnvelope.TraceParent.get -> string?
+SkathIO.Rogue.Messaging.MessageEnvelope.TraceParent.set -> void
+SkathIO.Rogue.Messaging.MessageForwarding
+SkathIO.Rogue.Messaging.MessageLimits
+SkathIO.Rogue.Messaging.MessagingOptions
+SkathIO.Rogue.Messaging.MessagingOptions.BatchSize.get -> int
+SkathIO.Rogue.Messaging.MessagingOptions.BatchSize.set -> void
+SkathIO.Rogue.Messaging.MessagingOptions.MaxAttempts.get -> int
+SkathIO.Rogue.Messaging.MessagingOptions.MaxAttempts.set -> void
+SkathIO.Rogue.Messaging.MessagingOptions.MaxConcurrency.get -> int
+SkathIO.Rogue.Messaging.MessagingOptions.MaxConcurrency.set -> void
+SkathIO.Rogue.Messaging.MessagingOptions.MaxJsonDepth.get -> int
+SkathIO.Rogue.Messaging.MessagingOptions.MaxJsonDepth.set -> void
+SkathIO.Rogue.Messaging.MessagingOptions.MaxMessageBytes.get -> int
+SkathIO.Rogue.Messaging.MessagingOptions.MaxMessageBytes.set -> void
+SkathIO.Rogue.Messaging.MessagingOptions.MaxRetryDelay.get -> System.TimeSpan
+SkathIO.Rogue.Messaging.MessagingOptions.MaxRetryDelay.set -> void
+SkathIO.Rogue.Messaging.MessagingOptions.MessagingOptions() -> void
+SkathIO.Rogue.Messaging.MessagingOptions.PollInterval.get -> System.TimeSpan
+SkathIO.Rogue.Messaging.MessagingOptions.PollInterval.set -> void
+SkathIO.Rogue.Messaging.MessagingOptions.RetryDelay.get -> System.TimeSpan
+SkathIO.Rogue.Messaging.MessagingOptions.RetryDelay.set -> void
+SkathIO.Rogue.Messaging.MessagingOptions.SerializerContext.get -> System.Text.Json.Serialization.JsonSerializerContext?
+SkathIO.Rogue.Messaging.MessagingOptions.SerializerContext.set -> void
+SkathIO.Rogue.Messaging.MessagingServiceCollectionExtensions
+SkathIO.Rogue.Messaging.ReceivedMessage
+SkathIO.Rogue.Messaging.ReceivedMessage.DeliveryCount.get -> int
+SkathIO.Rogue.Messaging.ReceivedMessage.Envelope.get -> SkathIO.Rogue.Messaging.MessageEnvelope!
+SkathIO.Rogue.Messaging.ReceivedMessage.ReceivedMessage(SkathIO.Rogue.Messaging.MessageEnvelope! envelope, int deliveryCount) -> void
+SkathIO.Rogue.Messaging.RogueMessagingTelemetry
+SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.TransportCapabilities.BatchSend = 4 -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.TransportCapabilities.NativeDeadLetter = 2 -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.TransportCapabilities.NativeDelay = 1 -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.TransportCapabilities.NativeDeferDelay = 8 -> SkathIO.Rogue.Messaging.TransportCapabilities
+SkathIO.Rogue.Messaging.TransportCapabilities.None = 0 -> SkathIO.Rogue.Messaging.TransportCapabilities
+static SkathIO.Rogue.Messaging.DeadLetteredMessage.operator !=(SkathIO.Rogue.Messaging.DeadLetteredMessage? left, SkathIO.Rogue.Messaging.DeadLetteredMessage? right) -> bool
+static SkathIO.Rogue.Messaging.DeadLetteredMessage.operator ==(SkathIO.Rogue.Messaging.DeadLetteredMessage? left, SkathIO.Rogue.Messaging.DeadLetteredMessage? right) -> bool
+static SkathIO.Rogue.Messaging.MessageBinding.IgnoreResult<TResult>(System.Threading.Tasks.ValueTask<TResult> pending) -> System.Threading.Tasks.ValueTask
+static SkathIO.Rogue.Messaging.MessageForwarding.AfterLocalHandlers(System.IServiceProvider! services, SkathIO.Rogue.IEvent! event, System.Threading.Tasks.ValueTask localHandlers, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+static SkathIO.Rogue.Messaging.MessageLimits.IsValidName(string? name) -> bool
+static SkathIO.Rogue.Messaging.MessagingServiceCollectionExtensions.AddMessageBinding(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, SkathIO.Rogue.Messaging.MessageBinding! binding) -> void
+static SkathIO.Rogue.Messaging.MessagingServiceCollectionExtensions.AddRogueMessageConsumer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static SkathIO.Rogue.Messaging.MessagingServiceCollectionExtensions.AddRogueMessaging(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<SkathIO.Rogue.Messaging.MessagingOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+const SkathIO.Rogue.Messaging.MessageLimits.MaxIdLength = 200 -> int
+SkathIO.Rogue.Messaging.IMessageBus.CreateEnvelope<TMessage>(TMessage message) -> SkathIO.Rogue.Messaging.MessageEnvelope!
+SkathIO.Rogue.Messaging.IMessageInbox
+SkathIO.Rogue.Messaging.IMessageInbox.CompleteAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.ReleaseAsync(string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.TryClaimAsync(string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Messaging.InboxClaimResult>
+SkathIO.Rogue.Messaging.IMessageInbox.CompleteAsync(string! messageName, string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.ReleaseAsync(string! messageName, string! messageId, long claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+SkathIO.Rogue.Messaging.IMessageInbox.TryClaimAsync(string! messageName, string! messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<SkathIO.Rogue.Messaging.InboxClaimResult>
+SkathIO.Rogue.Messaging.InboxClaim
+SkathIO.Rogue.Messaging.InboxClaim.Busy = 2 -> SkathIO.Rogue.Messaging.InboxClaim
+SkathIO.Rogue.Messaging.InboxClaim.Claimed = 0 -> SkathIO.Rogue.Messaging.InboxClaim
+SkathIO.Rogue.Messaging.InboxClaim.Handled = 1 -> SkathIO.Rogue.Messaging.InboxClaim
+static SkathIO.Rogue.Messaging.MessageLimits.IsValidId(string? id) -> bool
+~override SkathIO.Rogue.Messaging.InboxClaimResult.Equals(object obj) -> bool
+override SkathIO.Rogue.Messaging.InboxClaimResult.GetHashCode() -> int
+~override SkathIO.Rogue.Messaging.InboxClaimResult.ToString() -> string
+SkathIO.Rogue.Messaging.InboxClaimResult
+SkathIO.Rogue.Messaging.InboxClaimResult.Deconstruct(out SkathIO.Rogue.Messaging.InboxClaim Outcome, out long Token) -> void
+SkathIO.Rogue.Messaging.InboxClaimResult.Equals(SkathIO.Rogue.Messaging.InboxClaimResult other) -> bool
+SkathIO.Rogue.Messaging.InboxClaimResult.InboxClaimResult() -> void
+SkathIO.Rogue.Messaging.InboxClaimResult.InboxClaimResult(SkathIO.Rogue.Messaging.InboxClaim Outcome, long Token) -> void
+SkathIO.Rogue.Messaging.InboxClaimResult.Outcome.get -> SkathIO.Rogue.Messaging.InboxClaim
+SkathIO.Rogue.Messaging.InboxClaimResult.Outcome.init -> void
+SkathIO.Rogue.Messaging.InboxClaimResult.Token.get -> long
+SkathIO.Rogue.Messaging.InboxClaimResult.Token.init -> void
+static SkathIO.Rogue.Messaging.InboxClaimResult.operator !=(SkathIO.Rogue.Messaging.InboxClaimResult left, SkathIO.Rogue.Messaging.InboxClaimResult right) -> bool
+static SkathIO.Rogue.Messaging.InboxClaimResult.operator ==(SkathIO.Rogue.Messaging.InboxClaimResult left, SkathIO.Rogue.Messaging.InboxClaimResult right) -> bool

@@ -1,4 +1,3 @@
-#if !NETSTANDARD2_0
 namespace SkathIO.Rogue;
 
 /// <summary>
@@ -8,4 +7,3 @@ namespace SkathIO.Rogue;
 /// read-side operation, so there is no command analog.
 /// </summary>
 public interface IStreamQuery<out TItem> { }
-#endif

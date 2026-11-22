@@ -54,7 +54,43 @@ internal sealed record HandlerModel(
     /// constrains the generated D3 extension method's visibility: the method's <c>ValueTask&lt;TResponse&gt;</c>
     /// return type cannot be more accessible than <c>TResponse</c>.
     /// </summary>
-    TypeAccessibility ResponseAccessibility = TypeAccessibility.Public
+    TypeAccessibility ResponseAccessibility = TypeAccessibility.Public,
+    /// <summary>
+    /// Names of the feature modules (<see cref="FeatureModule.Name"/>) whose marker attribute the
+    /// request type carries, in <see cref="FeatureModules.All"/> order. Empty for an unmarked request,
+    /// which is emitted exactly as it was before feature modules existed.
+    /// </summary>
+    EquatableArray<string> MarkedModules = default,
+    /// <summary>
+    /// The <c>[Job]</c> defaults and <c>[Recurring]</c> schedule the command type carries, or null when
+    /// it has neither. Read for command handlers only; the jobs module emits a job definition for every
+    /// command either way.
+    /// </summary>
+    JobOptionsModel? JobOptions = null
+);
+
+/// <summary>
+/// The named arguments of a command's <c>[Job]</c> attribute, where zero or null keeps the default,
+/// and its <c>[Recurring]</c> schedule.
+/// </summary>
+internal sealed record JobOptionsModel(
+    bool IsJob,
+    string? Kind,
+    string? Queue,
+    int MaxAttempts,
+    int BackoffSeconds,
+    int TimeoutSeconds,
+    string? UniqueKey,
+    RecurringModel? Recurring
+);
+
+/// <summary>
+/// A command's <c>[Recurring]</c> attribute: its cron text (null when the attribute was given null),
+/// and whether generated code can create the command with <c>new T()</c>.
+/// </summary>
+internal sealed record RecurringModel(
+    string? Cron,
+    bool CanCreate
 );
 
 /// <summary>Pipeline behavior (IPipelineBehavior&lt;,&gt; or IStreamPipelineBehavior&lt;,&gt;).</summary>
@@ -141,7 +177,57 @@ internal sealed record DiscoveredModels(
     EquatableArray<EventHandlerModel> EventHandlers,
     EquatableArray<ProcessorModel> Processors,
     EquatableArray<StreamHandlerModel> StreamHandlers,
-    EquatableArray<RequestMessageModel> RequestMessages
+    EquatableArray<RequestMessageModel> RequestMessages,
+    /// <summary>
+    /// True when the SkathIO.Rogue.Validation package is referenced, so validated requests get their
+    /// <c>IAsyncRules&lt;T&gt;</c> step. A compilation with the marker attribute alone keeps only the hook.
+    /// </summary>
+    bool ValidationRuntime = false,
+    /// <summary>
+    /// True when the SkathIO.Rogue.Messaging package is referenced, so the generated <c>Publish</c> hands
+    /// each event to the message bus once its local handlers have run.
+    /// </summary>
+    bool MessagingRuntime = false
+);
+
+/// <summary>How a <c>[Message]</c> type reaches its handler when it arrives from the bus.</summary>
+internal enum MessageShape
+{
+    /// <summary>An event, published through <c>IPublisher</c>.</summary>
+    Event,
+    /// <summary>A command without a response, sent through <c>ISender</c>.</summary>
+    Command,
+    /// <summary>A command with a response, sent through <c>ISender</c>; the response is dropped.</summary>
+    CommandWithResponse,
+    /// <summary>Neither: it can be published, but this process has no way to handle it.</summary>
+    PublishOnly,
+}
+
+/// <summary>A type marked <c>[Message("name")]</c>, read for the messaging feature module.</summary>
+internal sealed record MessageTypeModel(
+    string TypeFqn,
+    /// <summary>The stable name from the attribute, or null when the attribute was given null.</summary>
+    string? Name,
+    MessageShape Shape,
+    /// <summary>The response type of a <see cref="MessageShape.CommandWithResponse"/>; null otherwise.</summary>
+    string? ResponseFqn
+);
+
+/// <summary>The version of a referenced SkathIO.Rogue package, read from its assembly (ROGUE013).</summary>
+internal sealed record PackageVersionModel(
+    string AssemblyName,
+    int Major,
+    int Minor,
+    string Display
+);
+
+/// <summary>
+/// The core package version and the versions of the referenced feature packages, compared on
+/// major.minor for ROGUE013. <see cref="Core"/> is null when no core assembly is referenced.
+/// </summary>
+internal sealed record PackageVersionsModel(
+    PackageVersionModel? Core,
+    EquatableArray<PackageVersionModel> Features
 );
 
 /// <summary>

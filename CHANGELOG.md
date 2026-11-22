@@ -6,6 +6,243 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-22
+
+### Added
+
+- **New package: `SkathIO.Rogue.Jobs`**, background jobs on Rogue commands. An `ICommand` or
+  `ICommand<T>` with a handler and a `[Job]` attribute is a job: enqueue it with
+  `IJobScheduler.Enqueue(command)`, or many at once with `IJobScheduler.EnqueueMany(commands)` (one
+  store call), and a `JobWorker` runs its handler through the full pipeline, in a service scope of
+  its own. A command without `[Job]` is never run as a job, so a row written straight into the jobs
+  table cannot send an arbitrary command. `[Job]` can set the kind, queue, attempts, first retry
+  delay and timeout. A failed run is retried after a doubling, capped, jittered backoff, then
+  dead-lettered; an unreadable payload is dead-lettered at once. A job whose kind this process does
+  not know is put back after the default backoff without counting the attempt, so during a rolling
+  deploy an older worker leaves a newer kind for a worker that knows it. `IJobStore.RequeueAsync(ids)`
+  moves dead-lettered jobs back to ready with all their attempts. The error stored with a failed
+  job, and returned by `IJobStore.GetAsync`, names the exception's type but never its message,
+  which can quote the payload or a secret; the retry and dead-letter logs keep the whole exception.
+  Stored errors have NUL characters removed. On shutdown running jobs are put back without counting the attempt.
+  The core source generator emits the kind-to-invoker map, so jobs are found by a stable kind, never
+  by a type name, and requests are dispatched exactly as before. Payloads go through your
+  System.Text.Json `JsonSerializerContext` (`JobsOptions.SerializerContext`), checked at startup
+  for `[Job]` commands, the same commands the build checks (ROGUE019), so adding the package never
+  fails startup without a build warning. Every claimed job keeps its lease,
+  renewed while it waits for a slot or runs, until its outcome is stored, and a lease the store no
+  longer holds is logged as a warning. `JobsOptions.LeaseDuration` and `LeaderLeaseDuration` are at
+  most 30 days (`JobsOptions.MaxLeaseDuration`), so a store adding either to the current time never overflows. `IJobStore` is the storage contract, with `InMemoryJobStore` as the default store; the durable
+  Postgres and SQL Server stores are below. Telemetry comes from its own `SkathIO.Rogue.Jobs` activity source and meter. A job of a kind this process does not
+  know is measured under the kind `(unknown)`, so rows written into the store cannot add a metric
+  series per made-up kind; the warning log names the real kind. Register it
+  with `AddRogueJobs()` next to `AddRogue()`, which is enough to enqueue; add `AddRogueJobWorker()`
+  in each host that should run jobs, which registers a hosted service that runs the worker while the
+  host runs (the package depends on `Microsoft.Extensions.Hosting.Abstractions`). Targets `net8.0` and `net10.0`; no reflection, AOT-safe.
+- **New package: `SkathIO.Rogue.Jobs.Postgres`**, a durable PostgreSQL job store. Register it with
+  `AddRoguePostgresJobs(dataSource)` next to `AddRogueJobs()`. `IPostgresJobScheduler.Enqueue` and
+  `EnqueueMany` take your own `NpgsqlTransaction` or `NpgsqlConnection`, so jobs commit or roll back
+  with your data. A batch is stored with one binary COPY, workers claim batches with
+  `FOR UPDATE SKIP LOCKED`, and each enqueue sends a NOTIFY on commit that wakes idle workers in
+  every process, with the poll interval as the fallback when the LISTEN connection is down. Jobs whose
+  worker stopped are claimed again once their lease runs out. Concurrent completions are written
+  together in one statement, and a pruner deletes finished jobs past their retention
+  (`PostgresJobsOptions`). The store creates and upgrades its own schema (`rogue_jobs` by default)
+  under an advisory lock, or you call `PostgresJobStore.MigrateAsync()` yourself with
+  `AutoMigrate = false`. The store passes the same contract tests as the in-memory store. Targets
+  `net8.0` and `net10.0`; depends on Npgsql; no reflection, AOT-safe.
+- **New package: `SkathIO.Rogue.Jobs.SqlServer`**, a durable SQL Server job store. Register it with
+  `AddRogueSqlServerJobs(connectionString)` next to `AddRogueJobs()`. A batch is stored with one
+  INSERT over a table-valued parameter, and workers claim batches in one statement under `READPAST`
+  and `UPDLOCK`, so they never wait on each other's rows. SQL Server has no LISTEN/NOTIFY, so an
+  adaptive poller probes for newly due jobs and wakes idle workers: it probes again at
+  `MinPollInterval` after a find and backs off to `MaxPollInterval` while idle. Jobs whose worker
+  stopped are claimed again once their lease runs out, dead-lettered jobs can be requeued, and a
+  pruner deletes finished jobs past their retention (`SqlServerJobsOptions`). The store creates and
+  upgrades its own schema (`rogue_jobs` by default) under `sp_getapplock`, or you call
+  `SqlServerJobStore.MigrateAsync()` yourself with `AutoMigrate = false`. The store passes the same
+  contract tests as the other stores. Targets `net8.0` and `net10.0`; depends on
+  `Microsoft.Data.SqlClient`, whose native `Microsoft.Data.SqlClient.SNI.runtime` is under the
+  Microsoft Software License Terms, a documented exception to the permissive-license policy; no
+  reflection, AOT-safe.
+- `DatabaseJobsOptions`, the options both database stores share (`Schema`, `AutoMigrate`,
+  retention, prune interval and batch size), with a public `Validate()`. `PostgresJobsOptions` and
+  `SqlServerJobsOptions` derive from it.
+- `IJobScheduler.CreateJob(command)` serializes a command into a `NewJob` without storing it, for a
+  store's own enqueue; `JobSignal.Pulse()` lets a store wake the worker; `JobLimits.CheckQueue`
+  checks a queue name against the store contract.
+- Job scheduling on every store (in-memory, Postgres, SQL Server):
+  - `IJobScheduler.Schedule(command, at)` stores a delayed job that no worker runs before `at`;
+    a time already past is due at once. `NewJob.RunAt` carries the time for a store's own enqueue.
+  - `[Recurring("30 * * * *")]` on a parameterless `[Job]` command runs it at each occurrence of a
+    five-field cron expression, in UTC, parsed in-house (no cron package). Each host that calls
+    `AddRogueJobWorker()` runs a scheduler; one at a time leads, through a leader lock in the store
+    (`JobsOptions.LeaderLeaseDuration`, default one minute), and stores the next occurrence as a
+    delayed job. Each run is stored once per task key and run time, unique in the store, so two hosts
+    never run one occurrence twice. Occurrences that fall while no host runs are skipped, not caught
+    up. A recurring command that is not a `[Job]`, has no parameterless constructor, or whose cron
+    expression is invalid fails the host at startup, naming it. `AddRecurringJob(new
+    RecurringJob<T>(cron, create))` registers one in code.
+  - `[Job(UniqueKey = "...")]`: while a job of that kind holding the key is enqueued or processing,
+    enqueueing or scheduling the command again stores nothing and returns the pending job's id. The
+    database stores keep it under a partial unique index.
+  - `IJobStore` gains `EnqueueOnceAsync` (a keyed enqueue that returns the id of the job holding
+    the key), `TryAcquireLeadershipAsync` and `ReleaseLeadershipAsync`; a batch `EnqueueAsync`
+    rejects keyed jobs. `RequeueAsync` skips a dead-lettered job whose unique key a pending job
+    holds. Both database stores add these through a second schema migration, applied on startup
+    with `AutoMigrate` or by `MigrateAsync()`.
+  - `IJobScheduler.CreateJobs(commands)` serializes a batch of commands into `NewJob`s without
+    storing them, for a store's own batch enqueue.
+- `JobsOptions.ScopePerBatch`: the jobs of one claimed batch share one service scope, disposed once
+  the last of them has run, instead of a scope each. Off by default, since a scoped service such as
+  a `DbContext` cannot be shared by jobs that run at the same time.
+- New benchmark: Rogue's jobs against Hangfire (`bench/SkathIO.Rogue.Benchmarks.Jobs`): 1k, 10k
+  and 100k small jobs against Hangfire.InMemory, and 1k against Hangfire.SqlServer on the same
+  database as Rogue's SQL Server store. A CI smoke gates Rogue's allocation per job against
+  `.bench/thresholds.json`. Hangfire is bench only and ships in no package. Results for the jobs and
+  validation benchmarks are in `bench/RESULTS.md`.
+- `ROGUE019` warning, with a code fix: a `[Job]` type is not covered by a `[JsonSerializable]`
+  attribute on the project's `JsonSerializerContext`. The fix adds the attribute.
+- **New package: `SkathIO.Rogue.Validation`**, source-generated request validation next to the
+  FluentValidation package (which stays supported). Mark a request `[Validate]` and `partial`, then
+  declare rules as attributes (`[NotEmpty]`, `[MinimumLength]`, `[MaximumLength]`, `[GreaterThan]`,
+  `[LessThan]`, or your own `RuleAttribute`), in a `private static void Rules(T x, ref ValidationErrors
+  errors)` hook, and in `IAsyncRules<T>` classes resolved from DI (registered Scoped by the generator).
+  Nested `[Validate]` objects and collections are checked with ASP.NET-style paths such as
+  `Lines[2].Sku`. The checks run inside the request's generated dispatch, before the handler, and a
+  failure throws `RogueValidationException`, whose `ToProblemDictionary()` feeds
+  `Results.ValidationProblem`. The valid path allocates nothing, and requests without `[Validate]`
+  are generated exactly as before. Targets `net8.0` and `net10.0`; no reflection, AOT-safe. See
+  `docs/validation.md`.
+- Generator diagnostics for validation misuse: `ROGUE014` (a `[Validate]` type is not partial),
+  `ROGUE015` (a rule does not fit its property), `ROGUE016` (a `Rules` method has the wrong
+  signature) and `ROGUE017` (a `[Validate]` type from an assembly built without the generator) are
+  errors; `ROGUE018` warns when rules are declared for a type without `[Validate]`.
+- **`ROGUE013` warning: feature package version mismatch.** The feature packages
+  (`SkathIO.Rogue.Validation`, `SkathIO.Rogue.Jobs`, `SkathIO.Rogue.Messaging`) have no generator of
+  their own; the core source generator emits their code. When one of them is referenced with a
+  different major.minor version than the core `SkathIO.Rogue` package, the build warns. Patch
+  versions may differ. The version is read from each assembly's file version.
+- The core source generator recognises the feature-module marker attributes
+  (`SkathIO.Rogue.Validation.ValidateAttribute`, `SkathIO.Rogue.Jobs.JobAttribute`,
+  `SkathIO.Rogue.Messaging.MessageAttribute`). A request that carries one gets a pre-handler step in
+  its generated `Send_X`, ahead of handler resolution, for that module to fill in. Requests without a
+  marker are generated exactly as before and keep their zero-allocation direct path.
+- **New package: `SkathIO.Rogue.Messaging`**, a message bus between services on Rogue handlers. A
+  type marked `[Message("orders.created")]` travels under that stable name, never its type name. An
+  inbound event is published to its handlers through `IPublisher` and an inbound command sent to its
+  handler through `ISender`, by code the core source generator emits, with no reflection or
+  type-name lookup. `IMessageBus.Publish(message)` sends any marked type, and an event marked
+  `[Message]` that you publish through `IPublisher` is also sent to the bus once its local handlers
+  have succeeded (an event handled because it arrived from the bus is not sent back). Such an event
+  carries the transport's `ServiceName` as its `Origin`, and the consumer drops an event whose origin
+  is its own service, so a service that consumes the events it publishes runs their local handlers
+  once, while other services still receive them; commands are always handled. Each message
+  travels in a `MessageEnvelope` with an id, its name, a content type, correlation and causation ids
+  (taken from the message being handled, if any) and the W3C `traceparent`. `IMessageTransport` is
+  the transport contract: batch send, receive, ack, nack with a delay, defer (put back unhandled,
+  with the same delivery count), dead-letter, and capability
+  flags (`NativeDelay`, `NativeDeferDelay`, `NativeDeadLetter`, `BatchSend`) whose gaps the consumer fills in.
+  `InMemoryTransport` keeps messages in memory, for tests and single-process development. The
+  `MessageConsumer` runs at most `MaxConcurrency` handlers at once, each in its own service scope,
+  redelivers a failed message after a doubling, capped delay until `MaxAttempts` deliveries have
+  failed, then dead-letters it. On a transport without native delay the consumer waits out the
+  retry delay itself, but a message waiting does not hold one of the `MaxConcurrency` slots, so
+  failing messages cannot stall the others. A transport that reports an unsettled window
+  (`IMessageTransport.UnsettledLimit`) lets at most half of it wait out a retry delay this way;
+  a failed message past that is nacked at once, its delivery count still raised. A delivery an inbox
+  turns away because another delivery holds its id is deferred for `RetryDelay`, or `PollInterval`
+  when `RetryDelay` is zero; registration refuses a `RetryDelay` over 24 hours, and a `PollInterval`
+  over 24 hours when `RetryDelay` is zero. A transport with `NativeDelay` or `NativeDeferDelay` holds it for that
+  delay, and the consumer does not wait; on any other transport the consumer waits it out within the
+  same half of the window, and past that half defers it at once, so there duplicates of one id cannot
+  stall the consumer but may come round at the transport's speed. A message whose handlers are stopped by shutdown is
+  deferred with no delay, not nacked, so it keeps its delivery count and is never dead-lettered for
+  being stopped. A message with an unknown name, a body over `MaxMessageBytes`, or a
+  body that is not JSON of its type within `MaxJsonDepth` is dead-lettered at once without running
+  any handler. The reason sent with a dead-lettered message names the exception's type but never its
+  message, which stays in the log. Logs carry a message's id and name, never its body. Bodies go through your
+  System.Text.Json `JsonSerializerContext` (`MessagingOptions.SerializerContext`), checked at
+  startup; a name taken by two types also fails startup. Telemetry comes from its own
+  `SkathIO.Rogue.Messaging` activity source and meter, and the consume activity continues the
+  publisher's trace. Register it with `AddRogueMessaging()` next to `AddRogue()` and an
+  `IMessageTransport`; add `AddRogueMessageConsumer()` in each host that should consume. Targets
+  `net8.0` and `net10.0`; no reflection, AOT-safe.
+- **New package: `SkathIO.Rogue.Messaging.RabbitMQ`**, the RabbitMQ transport for
+  `SkathIO.Rogue.Messaging`. Register it with `AddRogueRabbitMqTransport(options => ...)`. Every
+  message is published to one durable topic exchange (`rogue` by default) under its message name, with
+  publisher confirms. Each consuming service (`ServiceName`) gets its own durable queue bound to the
+  names it handles, and a dead-letter exchange and queue for the messages it gives up on. Messages are
+  taken with a prefetch limit and acked only after their handlers succeed. The connection reconnects
+  and recovers its topology on its own. JSON from systems that do not use Rogue is mapped to a Rogue
+  message by its routing key (`MapRoutingKey`) or by a header (`MapHeader`), never by a type name;
+  a message from another exchange that no map names is dead-lettered unread. A message on the
+  service's own exchange is always named by its routing key, which its queue was bound by: a header
+  map never renames it, and a routing-key map for the own exchange fails registration. The transport's service
+  name is its `ServiceName`, and an event's origin travels in the `rogue-origin` header. On the
+  default exchange, where the transport sends back its retry copies, the AMQP type property names a
+  message only when the service subscribes to that name or a map gives it; any other is
+  dead-lettered unread. The transport reports its `PrefetchCount` as its unsettled window.
+  A message's delivery count is signed by the transport on each copy it sends back for a retry
+  (`rogue-delivery-stamp`, an HMAC-SHA256 under `DeliveryStampKey`), and read only from that
+  signature, never from the `rogue-delivery-count` header, so a sender cannot cut short the retries
+  of its messages by setting a header or reusing an id. The count travels on the copy, so any number
+  of messages can be in retry at once. A delivery the quorum queue redelivers after it was left
+  unsettled also counts the queue's own `x-delivery-count`, held to its range. A deferred delivery
+  (an inbox found its id busy) waits on the broker: the transport reports `NativeDeferDelay` and puts
+  its copy, with the same signed count, on a quorum wait queue of the service's own
+  (`<ServiceName>.wait`, `RabbitMqTransportOptions.WaitQueue`) with the delay as its expiration; the
+  wait queue dead-letters it back to the service's queue through the default exchange
+  (at-least-once). A copy's delay is held to 24 hours, the wait queue's own message TTL, which also
+  bounds how long a message published there with no expiration can stay. So a busy delivery holds no prefetch place, never costs an attempt, and duplicates
+  of one id come round once per delay at any `PrefetchCount`, never at the broker's speed. Failed
+  retries keep their doubling delay in the consumer, since a queue expires messages only from its
+  head, so a long backoff would hold up the busy copies behind it. A delivery deferred with no delay
+  (stopped by shutdown) skips the wait queue and goes straight back to the service's queue with its
+  signed count unchanged, so it comes back at once rather than behind busy copies.
+  A deferred delivery whose copy the wait queue, or for no delay the service's queue, refuses is
+  dead-lettered with its count and a reason, not requeued or handed back to the consumer. `DeliveryStampKey` is
+  a required secret of at least 32 bytes (UTF-8) with no default, and must not start or end with
+  white space: registration fails at startup otherwise. Give every instance of a service
+  the same key, from configuration or user-secrets, so a retry taken by another instance keeps its
+  count and a message that always fails is dead-lettered after exactly `MaxAttempts` deliveries. The
+  key is never logged or put in an exception. See [docs/messaging-rabbitmq.md](docs/messaging-rabbitmq.md).
+  Targets `net8.0` and `net10.0`; depends on `RabbitMQ.Client`; no reflection.
+- **New package: `SkathIO.Rogue.Messaging.Outbox`**, a transactional outbox and inbox on the
+  Postgres and SQL Server job stores. Register it with `AddRogueMessagingOutbox()` next to
+  `AddRogueMessaging()` and `AddRogueJobs()` with a database store.
+  `IMessageOutbox.Publish(message, transaction)` stores the message as a job inside your own
+  `DbTransaction`: once the transaction commits, a job worker relays it to the transport, and if it
+  rolls back nothing is sent. The inbox, kept in the same store, records each message id the consumer
+  handles, so a message delivered twice runs its handlers once (`MessageOutboxOptions.InboxLease`
+  bounds how long one delivery holds the id, at most 30 days: `MessageOutboxOptions.MaxInboxLease`). A delivery put back because another one holds its id
+  does not use up one of its `MaxAttempts`. A claim returns a token that the consumer hands back
+  when it completes or releases the claim. A delivery whose lease ran out while its handlers ran
+  therefore cannot complete or drop the claim of the delivery that took the id over.
+  `IMessageInbox` is the consumer's inbox contract in `SkathIO.Rogue.Messaging`. Targets `net8.0` and `net10.0`; adds no package of its own.
+- A native AOT sample for the jobs and messaging packages
+  (`samples/SkathIO.Rogue.Jobs.Messaging.Aot.Sample`): a job publishes a message that a handler
+  consumes. CI publishes it with native AOT and runs it on every pull request.
+
+### Removed
+
+- **Breaking: `netstandard2.0` is no longer a target.** `SkathIO.Rogue.Abstractions`, `SkathIO.Rogue`,
+  `SkathIO.Rogue.MediatR`, `SkathIO.Rogue.Logging` and `SkathIO.Rogue.Validation.FluentValidation`
+  now target `net8.0` and `net10.0` only. .NET Framework applications and libraries that target
+  `netstandard2.0` can no longer reference them; stay on 1.x for those. The netstandard2.0-only
+  surface is gone with it: the `ValueTask<Unit>`-returning void handler, processor, publisher and
+  `Publish` signatures (net8.0+ always returned bare `ValueTask`), and the
+  `System.Threading.Tasks.Extensions`, `Microsoft.Bcl.AsyncInterfaces` and
+  `System.Diagnostics.DiagnosticSource` package dependencies. The source generators and the
+  migration analyzer still target `netstandard2.0`, because the compiler loads analyzers only from
+  that target. Generated code no longer carries `#if !NETSTANDARD2_0` guards.
+
+### Changed
+
+- **Breaking: `SkathIO.Rogue.Validation.FluentValidation` now depends on FluentValidation 12**
+  (12.2.0, up from 11.12.0). FluentValidation 12 targets net8.0 only and removes some APIs that
+  were obsolete in 11; check FluentValidation's 12.0 upgrade notes if your validators still use
+  them.
+
 ## [1.2.1] - 2026-11-10
 
 ### Changed
@@ -271,7 +508,8 @@ commit to reporting any scenario where Rogue is not fastest, honestly and in the
   linked documentation is unreachable. Confirm visibility in GitHub settings before tagging. See
   [docs/governance.md](docs/governance.md#release-readiness).
 
-[Unreleased]: https://github.com/skathio/rogue/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/skathio/rogue/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/skathio/rogue/compare/v1.2.1...v2.0.0
 [1.2.1]: https://github.com/skathio/rogue/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/skathio/rogue/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/skathio/rogue/compare/v1.1.0...v1.1.1

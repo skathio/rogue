@@ -10,11 +10,7 @@ public interface IRequestExceptionHandler<in TRequest, TResponse, in TException>
     where TException : Exception
 {
     /// <summary>Handles the exception. Set <see cref="RequestExceptionHandlerState{TResponse}.Handled"/> to suppress propagation.</summary>
-#if NETSTANDARD2_0
-    ValueTask<Unit> Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken);
-#else
     ValueTask Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken);
-#endif
 }
 
 /// <summary>Observe-only exception action that cannot suppress propagation (FR-26 Should).</summary>
@@ -23,11 +19,7 @@ public interface IRequestExceptionAction<in TRequest, in TException>
     where TException : Exception
 {
     /// <summary>Observes the exception without altering propagation.</summary>
-#if NETSTANDARD2_0
-    ValueTask<Unit> Execute(TRequest request, TException exception, CancellationToken cancellationToken);
-#else
     ValueTask Execute(TRequest request, TException exception, CancellationToken cancellationToken);
-#endif
 }
 
 /// <summary>State passed to exception handlers; set <see cref="Handled"/> to suppress re-throw.</summary>

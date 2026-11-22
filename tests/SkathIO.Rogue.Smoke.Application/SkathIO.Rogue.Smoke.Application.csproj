@@ -12,6 +12,10 @@
          exactly the shape that let #21's transitive-PackageReference defect leak into the host. -->
     <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation.FluentValidation\SkathIO.Rogue.Validation.FluentValidation.csproj" />
+    <!-- The in-house validation package, kept next to the FluentValidation one: its [Validate] requests
+         are checked by code the core generator emits into this project's dispatcher, and dispatched
+         from the Api host, which sees the package only through this reference. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Validation\SkathIO.Rogue.Validation.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.SourceGenerator\SkathIO.Rogue.SourceGenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />

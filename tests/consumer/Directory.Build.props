@@ -1,0 +1,19 @@
+<Project>
+  <!-- The consumer solution builds as an app outside this repository would. This file and
+       Directory.Packages.props stand in for the repository's own, which MSBuild then does not
+       import, so nothing here comes from the repository build: the SkathIO.Rogue packages are
+       restored from the local feed run.sh packs, never by project reference. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- ROGUE013 warns when a feature package's major.minor differs from the core package's. All
+         packages come from one pack, so the warning would be a false positive: fail on it. -->
+    <WarningsAsErrors>$(WarningsAsErrors);ROGUE013</WarningsAsErrors>
+    <IsPackable>false</IsPackable>
+    <!-- The version run.sh packs the packages at; it passes the same value. -->
+    <RoguePackageVersion Condition="'$(RoguePackageVersion)' == ''">2.0.0-consumer</RoguePackageVersion>
+  </PropertyGroup>
+</Project>

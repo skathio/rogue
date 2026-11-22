@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Services that message each other over RabbitMQ, in a test process of their own: their
+         messages and handlers are the only ones the core generator, which arrives through the
+         packages, wires into this process. The outbox and inbox keep their rows in Postgres. -->
+    <PackageReference Include="SkathIO.Rogue.Messaging.RabbitMQ" />
+    <PackageReference Include="SkathIO.Rogue.Messaging.Outbox" />
+    <PackageReference Include="SkathIO.Rogue.Jobs.Postgres" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.RabbitMq" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>SkathIO.Rogue.Benchmarks.ColdStartBenchmarks-20261122-133710</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.5 LTS (Noble Numbat)
+Intel Core i7-6700HQ CPU 2.60GHz (Max: 0.80GHz) (Skylake), 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.115
+  [Host]     : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.15 (10.0.15, 10.0.1526.53008), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code></code></pre>
+
+<table>
+<thead><tr><th>Method     </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Rogue_ColdStart</td><td>20.02 &mu;s</td><td>0.247 &mu;s</td><td>0.231 &mu;s</td><td>1.00</td><td>0.02</td><td>8.5144</td><td>26.17 KB</td><td>1.00</td>
+</tr><tr><td>MediatR_ColdStart</td><td>414.24 &mu;s</td><td>8.025 &mu;s</td><td>14.055 &mu;s</td><td>20.69</td><td>0.73</td><td>199.2188</td><td>611.51 KB</td><td>23.36</td>
+</tr></tbody></table>
+</body>
+</html>

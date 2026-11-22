@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- samples/SkathIO.Rogue.Aot.Sample built as an app would build it: the same Program.cs, with the
+       packages restored from the local feed instead of project references. The core generator comes
+       from the SkathIO.Rogue package's analyzers/ folder. aot.sh publishes it natively and runs it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <PublishAot>true</PublishAot>
+    <!-- The sample's name, so the sample's trimmer roots, which name its assembly, apply unchanged. -->
+    <AssemblyName>SkathIO.Rogue.Aot.Sample</AssemblyName>
+    <TrimmerRootDescriptor>../../../samples/SkathIO.Rogue.Aot.Sample/TrimmerRoots.xml</TrimmerRootDescriptor>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../samples/SkathIO.Rogue.Aot.Sample/Program.cs" Link="Program.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SkathIO.Rogue" />
+    <PackageReference Include="SkathIO.Rogue.Validation" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+</Project>

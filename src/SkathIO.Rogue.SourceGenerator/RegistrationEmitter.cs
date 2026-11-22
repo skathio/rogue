@@ -104,10 +104,9 @@ internal static class RegistrationEmitter
 
         if (models.EventHandlers.Count > 0) w.Line();
 
-        // ── Stream query handlers (net8+ only — IStreamQueryHandler exists only off ns2.0) ──
+        // ── Stream query handlers ──
         if (models.StreamHandlers.Count > 0)
         {
-            w.Line("#if !NETSTANDARD2_0");
             foreach (var sh in models.StreamHandlers)
             {
                 string requestFqn = DispatcherEmitter.ToGlobalFqn(sh.RequestFqn);
@@ -116,7 +115,6 @@ internal static class RegistrationEmitter
                 string iface      = "global::SkathIO.Rogue.IStreamQueryHandler<" + requestFqn + ", " + elementFqn + ">";
                 EmitDescriptor(w, iface, handlerFqn);
             }
-            w.Line("#endif");
             w.Line();
         }
 
@@ -177,14 +175,13 @@ internal static class RegistrationEmitter
     }
 
     /// <summary>
-    /// Emits a module initializer (net5+) that appends the consumer-compilation's
+    /// Emits a module initializer that appends the consumer-compilation's
     /// <c>RogueGeneratedRegistration.Register</c> to the DLL's append-only
     /// <c>RogueRegistrationBridge</c> registry via <c>RogueRegistrationBridge.Register(...)</c>
     /// (PD-33/PD-38 — the non-obsolete entry point, so freshly-generated consumers never trip the
     /// <c>[Obsolete]</c> <c>GeneratedRegistrar</c> warning under <c>TreatWarningsAsErrors</c>). This is
     /// how the runtime <c>AddRogue</c> in <c>SkathIO.Rogue.dll</c> reaches the registration generated in
-    /// the consumer's compilation without a hard cross-assembly type reference (PD-15). On ns2.0 (no
-    /// <c>ModuleInitializer</c>), the consumer calls <c>RogueGeneratedRegistration.Register</c> explicitly.
+    /// the consumer's compilation without a hard cross-assembly type reference (PD-15).
     /// <para>
     /// PD-38 amendment (see decisions.md PD-45): the module initializer is suppressed for a compilation
     /// that discovered nothing to register. Under PD-33's append-only registry <em>every</em> registrar
@@ -201,13 +198,11 @@ internal static class RegistrationEmitter
     internal static string EmitModuleInit(DiscoveredModels models)
     {
         var w = new CodeWriter();
-        w.Line("#if !NETSTANDARD2_0");
 
         if (HasNothingToRegister(models))
         {
             // Nothing to contribute: do not append an empty registrar (it would only register the empty
             // dispatcher/inspector/publisher and could shadow a populated registrar — PD-45).
-            w.Line("#endif");
             return w.ToString();
         }
 
@@ -223,7 +218,6 @@ internal static class RegistrationEmitter
         w.Close(); // RogueModuleInit
         w.Dedent();
         w.Line("}");
-        w.Line("#endif");
         return w.ToString();
     }
 
@@ -365,10 +359,9 @@ internal static class RegistrationEmitter
             }
         }
 
-        // ── Stream IStreamPipelineBehavior<,> registrations (per stream handler, net8+) ──
+        // ── Stream IStreamPipelineBehavior<,> registrations (per stream handler) ──
         if (models.StreamHandlers.Count > 0)
         {
-            w.Line("#if !NETSTANDARD2_0");
             foreach (var sh in models.StreamHandlers)
             {
                 string requestFqn = DispatcherEmitter.ToGlobalFqn(sh.RequestFqn);
@@ -382,7 +375,6 @@ internal static class RegistrationEmitter
 
                 EmitBehaviorListRegistration(w, behaviorIface, behaviorListType, applicableBehaviors);
             }
-            w.Line("#endif");
             w.Line();
         }
     }

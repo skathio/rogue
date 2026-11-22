@@ -18,16 +18,8 @@ public sealed class ForeachAwaitPublisherTests
 
         public FakeHandler(Func<TestNotification, CancellationToken, ValueTask> handle) => _handle = handle;
 
-#if NETSTANDARD2_0
-        public async ValueTask<Unit> Handle(TestNotification @event, CancellationToken cancellationToken)
-        {
-            await _handle(@event, cancellationToken).ConfigureAwait(false);
-            return Unit.Value;
-        }
-#else
         public ValueTask Handle(TestNotification @event, CancellationToken cancellationToken)
             => _handle(@event, cancellationToken);
-#endif
     }
 
     [Fact]
