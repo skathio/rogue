@@ -182,14 +182,18 @@ background polling.
 The SQL Server class runs 1,000 jobs only. On this disk one Hangfire operation of 1,000 jobs took
 about 3 minutes, so 10,000 and 100,000 would have taken hours to days for each benchmark.
 
-**Exceptions on the one-at-a-time path.** BenchmarkDotNet counted first-chance exceptions during
-Rogue's `Enqueue`-each benchmarks: about one per job on SQL Server and about 0.3 per job in memory
-(none with `EnqueueMany`). They come from the worker's wake-up signal: `JobSignal.Pulse()` catches
-the `SemaphoreFullException` that `SemaphoreSlim.Release()` throws when a wake-up is already
-pending. Each throw costs time, so this path is slower than it needs to be. Rogue is still faster
-than Hangfire here. The committed reports have no exception column: these counts come from separate
-runs with `--exceptions` on the same machine, about 0.26 to 0.32 per job for the in-memory store
-and 956 for 1,000 jobs on SQL Server (one operation, `--job dry`).
+**Exceptions on the one-at-a-time path.** When these results were measured, BenchmarkDotNet
+counted first-chance exceptions during Rogue's `Enqueue`-each benchmarks: about one per job on SQL
+Server and about 0.3 per job in memory (none with `EnqueueMany`). They came from the worker's
+wake-up signal: `JobSignal.Pulse()` caught the `SemaphoreFullException` that
+`SemaphoreSlim.Release()` throws when a wake-up is already pending. The committed reports have no
+exception column: these counts came from separate runs with `--exceptions` on the same machine,
+about 0.26 to 0.32 per job for the in-memory store and 956 for 1,000 jobs on SQL Server (one
+operation, `--job dry`). `Pulse()` now releases only when no wake-up is pending, so it throws
+nothing. A re-run of the in-memory `Enqueue`-each benchmark with `--exceptions` (`--job short`, same
+laptop) counted no exceptions at 1,000, 10,000 and 100,000 jobs, at 3.2 to 3.5 µs and 1.6 KB per
+job. Those runs are not committed, and the tables above still show the earlier times. The SQL
+Server benchmark was not re-run, since one operation takes minutes on this disk.
 
 ### Validation
 
