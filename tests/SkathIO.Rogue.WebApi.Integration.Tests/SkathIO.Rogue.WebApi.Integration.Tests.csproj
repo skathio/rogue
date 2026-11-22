@@ -14,6 +14,8 @@
          EMPTY RogueGeneratedRegistration + a second [ModuleInitializer] that could clobber the host's
          populated registrar (last-writer-wins on the static bridge field). Consuming the host's
          registration is the correct wiring for a no-handler test assembly. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
     <ProjectReference Include="..\..\samples\SkathIO.Rogue.Sample.WebApi\SkathIO.Rogue.Sample.WebApi.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
