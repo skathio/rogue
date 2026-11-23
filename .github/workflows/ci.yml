@@ -1,19 +1,12 @@
 # .github/workflows/ci.yml
 #
-# `ci` job migrated to hashira's v2 contract (work item hashira-v2,
-# iteration 6.3) — a pin update only, per that iteration's explicit scope.
-# No `nuget-package-ci.yml` input/job-graph change required: this repo's
-# `with:` block already only sets `project_path`/`dotnet_version`/
-# `library_ref`, and v2's new `bump`/`seed_version` inputs are optional
-# (empty by default) and correctly left unset here — this file is PR/push
-# CI, not a release dispatch (that's `publish.yml`'s job, iteration 6.4).
-# Existing permission grant re-verified unchanged against the current
-# `scan-suite`/`coverage-report` jobs' actual needs.
-#
-# Pinned to `v2`, hashira's rolling major-version tag, now that hashira has
-# cut a `v2.0.0` release (see hashira's `docs/usage.md` "Pin policy" —
-# "acceptable for most consumers"; auto-advances to future `v2.x.y`
-# releases). Same ref somi's `ci.yml`/`publish.yml` use.
+# The `ci` job calls hashira's nuget-package-ci.yml at `v3`, hashira's rolling
+# major-version tag (same ref as publish.yml). v3 checks its composite actions
+# out at its own commit, so there is no `library_ref` to keep in sync. It also
+# runs SoMi's quality gate on each pull request's change (the `quality-gate`
+# job), at its default level. Releases are cut by publish.yml, not by a
+# dispatch of this workflow, because NuGet trusted publishing needs the push
+# to run in a job of this repository (see publish.yml's header).
 name: ci
 on:
   pull_request:
@@ -32,7 +25,7 @@ jobs:
   # over gating in `publish.yml` because it catches a multi-project wiring
   # regression on the PR that introduces it, not only at release time.
   ci:
-    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@v2 # rolling major tag — same ref as somi's pins
+    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@v3 # rolling major tag, same ref as publish.yml
     permissions:
       contents: read
       pull-requests: write
@@ -40,7 +33,6 @@ jobs:
     with:
       project_path: 'SkathIO.Rogue.sln'
       dotnet_version: '10.0.x'
-      library_ref: 'v2' # MUST match the uses: pin above (dual-pin invariant, D9)
 
   aot-publish:
     name: AOT publish

@@ -81,11 +81,14 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 
 ## CI and release
 
-- `.github/workflows/ci.yml` on every PR: `ci` (hashira's reusable `nuget-package-ci.yml@v2`:
-  build, `dotnet test` on the solution, scans, coverage), `Consumer suite`, `AOT publish`,
+- `.github/workflows/ci.yml` on every PR: `ci` (hashira's reusable `nuget-package-ci.yml@v3`:
+  build, `dotnet test` on the solution, scans, coverage, and SoMi's `quality-gate` on the PR's
+  change at its default `strict` level), `Consumer suite`, `AOT publish`,
   `Benchmark smoke` (fails if the `ISender.Send` path allocates over the ceiling in
   `.bench/thresholds.json`), `License check`, `Public API`.
-- hashira is pinned twice (`uses: …@v2` and `library_ref: 'v2'`); keep the two pins identical.
+- hashira is pinned at `@v3` in `ci.yml` and `publish.yml` (the `nuget-push` action and the two
+  `ref: v3` checkouts); keep every pin on the same ref. v3 has no `library_ref` input: passing it
+  fails the run. `site.yml` pins hashira's Pages actions by the v3.0.0 commit SHA.
 - Releases are manual: the maintainer dispatches `publish.yml` with a `bump`, and the release needs
   approval in the `production` environment. It packs, pushes to nuget.org over OIDC, tags, then
   deploys `site/`. Prep steps are in the `release-prep` skill. Agents never dispatch a release.

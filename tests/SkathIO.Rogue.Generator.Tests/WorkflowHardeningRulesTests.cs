@@ -9,8 +9,8 @@ namespace SkathIO.Rogue.Generator.Tests;
 /// Workflow hardening. A runner's apt package index can be stale, so every step that installs apt
 /// packages refreshes the index first. The release workflow the maintainer dispatches pins
 /// actions/checkout and actions/setup-dotnet by the same commit SHAs ci.yml uses, so a moved tag
-/// cannot change what runs with the release's permissions. hashira's rolling major tag stays as is:
-/// it is pinned twice on purpose, and other rules hold the two pins equal.
+/// cannot change what runs with the release's permissions. hashira stays on its rolling major tag,
+/// and publish.yml checks out and calls hashira at the same ref as ci.yml.
 /// </summary>
 public sealed class WorkflowHardeningRulesTests
 {
@@ -63,13 +63,25 @@ public sealed class WorkflowHardeningRulesTests
     }
 
     [Fact]
-    public void Publish_KeepsHashirasRollingMajorTag()
+    public void Publish_PinsHashiraAtV3_LikeCi()
     {
+        string ci = RepoFiles.Read(CiPath);
         string publish = RepoFiles.Read(PublishPath);
+        string[] ciRefs = HashiraUsesRefs(ci);
+        string[] publishRefs = HashiraUsesRefs(publish)
+            .Concat(Regex.Matches(publish, @"(?m)^\s*ref:\s*'?(?<ref>[^'\s#]+)").Select(static m => m.Groups["ref"].Value))
+            .ToArray();
 
-        Assert.Matches(@"(?m)uses:\s*skathio/hashira/[^\s@]+@v2\b", publish);
-        Assert.Matches(@"(?m)^\s*ref:\s*v2\b", publish);
+        Assert.Equal(new[] { "v3" }, ciRefs.Distinct(StringComparer.Ordinal).ToArray());
+        Assert.Equal(3, publishRefs.Length);
+        Assert.All(publishRefs, static r => Assert.Equal("v3", r));
     }
+
+    // The refs of every skathio/hashira workflow or action a file calls with `uses:`.
+    private static string[] HashiraUsesRefs(string workflow) =>
+        Regex.Matches(workflow, @"(?m)uses:\s*skathio/hashira/[^\s@]+@(?<ref>[^\s#]+)")
+            .Select(static m => m.Groups["ref"].Value)
+            .ToArray();
 
     // The steps of a workflow, split at each list item.
     private static string[] Steps(string path) =>
