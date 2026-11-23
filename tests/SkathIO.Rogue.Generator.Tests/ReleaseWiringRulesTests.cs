@@ -140,14 +140,15 @@ public sealed class ReleaseWiringRulesTests
     }
 
     [Fact]
-    public void Ci_KeepsTheTwoHashiraPinsIdentical()
+    public void Ci_PinsHashiraV3_WithoutLibraryRef()
     {
         string ci = RepoFiles.Read(CiPath);
         Match uses = Regex.Match(ci, @"uses:\s*skathio/hashira/[^@\s]+@(?<ref>[^\s#]+)");
-        Match library = Regex.Match(ci, @"library_ref:\s*'?(?<ref>[^'\s#]+)'?");
 
-        Assert.True(uses.Success && library.Success, "ci.yml lost a hashira pin.");
-        Assert.Equal(uses.Groups["ref"].Value, library.Groups["ref"].Value);
+        Assert.True(uses.Success, "ci.yml lost its hashira pin.");
+        Assert.Equal("v3", uses.Groups["ref"].Value);
+        // hashira v3 checks its actions out at its own commit and fails a run that passes library_ref.
+        Assert.DoesNotMatch(@"(?m)^\s*library_ref:", ci);
     }
 
     [Theory]

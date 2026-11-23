@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: skathio/hashira/.github/actions/pages-upload@e4facc4ca8d8896285931a3b80a1a958584d1a85
+      - uses: skathio/hashira/.github/actions/pages-upload@2c8d52526cbce593a445f7572b599813503160f5 # v3.0.0
         with:
           path: site
 
@@ -69,4 +69,4 @@ jobs:
       id-token: write   # deploy-pages authenticates via OIDC
     steps:
       - id: deploy
-        uses: skathio/hashira/.github/actions/pages-deploy@e4facc4ca8d8896285931a3b80a1a958584d1a85
+        uses: skathio/hashira/.github/actions/pages-deploy@2c8d52526cbce593a445f7572b599813503160f5 # v3.0.0
