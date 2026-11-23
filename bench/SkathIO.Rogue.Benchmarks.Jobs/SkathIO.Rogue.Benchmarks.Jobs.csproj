@@ -6,6 +6,8 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" />
+    <PackageReference Include="Microsoft.Extensions.Logging" VersionOverride="11.0.0" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue\SkathIO.Rogue.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs\SkathIO.Rogue.Jobs.csproj" />
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Jobs.SqlServer\SkathIO.Rogue.Jobs.SqlServer.csproj" />
