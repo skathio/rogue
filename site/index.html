@@ -9,7 +9,7 @@
 *{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.6 var(--sans)}a{color:inherit;text-decoration:none}code{font:.9em var(--mono)}
 nav{position:sticky;top:0;display:flex;align-items:center;gap:24px;padding:12px 18px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--canvas) 85%,transparent);backdrop-filter:blur(8px);font-size:.93rem;z-index:2}
 nav .brand{display:flex;gap:8px;align-items:center;font-weight:800}nav .brand img{width:26px}nav .brand i{font-style:normal;color:var(--accent)}
-nav .muted{color:var(--muted)}nav .sp{flex:1}nav .btn{font:inherit;color:var(--ink);background:none;border:1px solid var(--line);border-radius:8px;padding:4px 12px;cursor:pointer}nav .home{color:var(--muted);font-size:.85rem;white-space:nowrap}
+nav .muted{color:var(--muted)}nav .docs{color:var(--accent);font-weight:700}nav .sp{flex:1}nav .btn{font:inherit;color:var(--ink);background:none;border:1px solid var(--line);border-radius:8px;padding:4px 12px;cursor:pointer}nav .home{color:var(--muted);font-size:.85rem;white-space:nowrap}
 .wrap{max-width:1140px;margin:0 auto;padding:0 40px}
 .hero{display:grid;grid-template-columns:1fr 300px;gap:40px;align-items:center;padding:80px 0 56px}
 .eyebrow{color:var(--accent);font-size:.75rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
@@ -34,7 +34,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
 @media (max-width:960px){.pillars,.grid{grid-template-columns:1fr 1fr}.hero{grid-template-columns:1fr 220px}.emblem{width:220px}h1{font-size:3rem}}
 @media (max-width:760px){.wrap{padding:0 16px}.hero{grid-template-columns:1fr;padding:44px 0 32px}.emblem{width:168px;order:-1}h1{font-size:2.4rem}.stats{grid-template-columns:1fr 1fr}.two,.grid,.pillars{grid-template-columns:1fr}nav{gap:14px}nav .muted{display:none}section{padding:48px 0}table{font-size:.85rem}th,td{padding:9px 10px;white-space:normal;vertical-align:top}}
 </style></head><body>
-<nav><a class=brand href="./"><img src="mark.svg" alt=""><span>Ro<i>gue</i></span></a><a class=muted href="#three">Mediator · Jobs · Messaging</a><a class=muted href="#benchmarks">Benchmarks</a><a class=muted href="#compared">Compared</a><a class=muted href="docs/">Docs</a><span class=sp></span><a class=home href="https://skathio.github.io/">← skathio</a><button type="button" id="theme" class="btn" hidden>Theme</button></nav>
+<nav><a class=brand href="./"><img src="mark.svg" alt=""><span>Ro<i>gue</i></span></a><a class=muted href="#three">Mediator · Jobs · Messaging</a><a class=muted href="#benchmarks">Benchmarks</a><a class=muted href="#compared">Compared</a><a class=docs href="docs/">Docs</a><span class=sp></span><a class=home href="https://skathio.github.io/">← skathio</a><button type="button" id="theme" class="btn" hidden>Theme</button></nav>
 <div class=wrap>
 <header class=hero><div>
 <div class=eyebrow>.NET library · 12 packages · MIT</div>

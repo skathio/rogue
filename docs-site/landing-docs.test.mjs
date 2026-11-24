@@ -105,6 +105,15 @@ describe('landing page Docs links', () => {
     assert.equal(url.origin, new URL(SITE_URL).origin, `the nav "Docs" link leaves the site: ${href}`);
     assert.ok(url.pathname.startsWith(DOCS_BASE), `the nav "Docs" link does not open a ${DOCS_BASE} page: ${href}`);
   });
+
+  // The section links in the nav are `muted`, which the phone layout hides. The docs are the way in
+  // on every width, so the Docs link must not be one of them.
+  test('the nav "Docs" link is not a muted section link, so phones show it too', () => {
+    const nav = now.match(/<nav\b[^>]*>([\s\S]*?)<\/nav>/)[1];
+    const tag = nav.match(/<a\b[^>]*>\s*Docs\s*<\/a>/)?.[0];
+    assert.ok(tag, 'the nav has no "Docs" link');
+    assert.doesNotMatch(tag, /class=["']?[^>"']*\bmuted\b/, `the nav "Docs" link is muted: ${tag}`);
+  });
 });
 
 // ---------------------------------------------------------------- the built pages
