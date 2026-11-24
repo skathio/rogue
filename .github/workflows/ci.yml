@@ -1,10 +1,11 @@
 # .github/workflows/ci.yml
 #
-# The `ci` job calls hashira's nuget-package-ci.yml at the v3.1.0 commit, the
-# same pin as publish.yml and site.yml. Its `passed` job reports as
-# `ci / passed`, the one check the org's `ci-required` ruleset requires, so
-# this job's id must stay `ci`. hashira checks its composite actions out at
-# its own commit, so there is no `library_ref` to keep in sync. It also
+# The `ci` job calls hashira's nuget-package-ci.yml at `v3`, hashira's moving
+# major tag, the same ref as publish.yml: new v3.x releases apply with no PR
+# here, and both files move to `v4` together when it ships. Its `passed` job
+# reports as `ci / passed`, the one check the org's `ci-required` ruleset
+# requires, so this job's id must stay `ci`. hashira checks its composite
+# actions out at its own commit, so there is no `library_ref` to pass. It also
 # runs SoMi's quality gate on each pull request's change (the `quality-gate`
 # job), at its default level. Releases are cut by publish.yml, not by a
 # dispatch of this workflow, because NuGet trusted publishing needs the push
@@ -27,7 +28,7 @@ jobs:
   # over gating in `publish.yml` because it catches a multi-project wiring
   # regression on the PR that introduces it, not only at release time.
   ci:
-    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@1bd415e21fb070c46f07e05bfaa70e42c0531342 # v3.1.0, same pin as publish.yml and site.yml
+    uses: skathio/hashira/.github/workflows/nuget-package-ci.yml@v3 # moving major tag: new v3.x releases apply with no PR
     # A reusable workflow can only narrow these. contents: read for every job; pull-requests: write
     # for the `passed` job, which keeps hashira's one CI summary comment on the pull request;
     # security-events: write for scan-suite's CodeQL upload.
