@@ -1,0 +1,23 @@
+# gitleaks configuration, loaded from the repo root by hashira's scan-suite (no `-c` is passed, so
+# gitleaks reads ./.gitleaks.toml). Every default rule stays on: `useDefault` extends the built-in
+# rule set rather than replacing it.
+[extend]
+useDefault = true
+
+# Test fixtures, not secrets. Each regex is one exact, anchored value, so only that literal string
+# is ignored and the same rules still catch any other value in any file.
+# - The two Jobs values are made-up sentinels: the tests pass them as a job's argument and assert
+#   they never reach the stored error text.
+# - The RabbitMQ value is the 32-byte delivery stamp key the transport tests sign with; it signs
+#   nothing outside a throwaway test broker.
+# A real key never belongs here: remove it from the tree and rotate it instead.
+[allowlist]
+description = "Test fixtures that look like secrets"
+regexes = [
+  # tests/SkathIO.Rogue.Jobs.Tests/JobSignalAndErrorTextRulesTests.cs (SecretKey)
+  '''^s3cret\-token\-7f2c$''',
+  # tests/SkathIO.Rogue.Jobs.Tests/JobSignalAndErrorTextEdgeTests.cs (Secret)
+  '''^s3cret\-token\-91ab$''',
+  # tests/SkathIO.Rogue.Messaging.RabbitMQ.Tests/RabbitMqHost.cs (DeliveryStampKey)
+  '''^test\-delivery\-stamp\-key\-32\-bytes$''',
+]
