@@ -111,12 +111,18 @@ function assertRunsFullDocsBuild(steps) {
   return build;
 }
 
-// Pinned by full commit SHA, with the version in a comment on the line or just above it, as
-// site.yml and ci.yml already write them.
+// Third-party actions are pinned by full commit SHA, with the version in a comment on the line or
+// just above it, as site.yml and ci.yml already write them. hashira is the one exception: every
+// skathio repo tracks its moving major tag, `v3`, whose v* tags hashira protects from being
+// deleted or moved by anyone but its admins.
 function assertThirdPartyPinned(job) {
   job.forEach((line, i) => {
     const uses = line.match(/^\s*-?\s*uses:\s*(\S+)/)?.[1];
     if (!uses || uses.startsWith('./')) { return; }
+    if (uses.startsWith('skathio/hashira/')) {
+      assert.match(uses, /@v3$/, `${uses} must track hashira's v3 tag`);
+      return;
+    }
     assert.match(uses, /@[0-9a-f]{40}$/, `${uses} must be pinned by full commit SHA`);
     const comment = `${line.match(/\s#(.*)$/)?.[1] ?? ''} ${job[i - 1]?.trim().startsWith('#') ? job[i - 1] : ''}`;
     assert.match(comment, VERSION, `${uses} needs a version comment`);
@@ -168,10 +174,11 @@ describe('site.yml', () => {
     assertFailureFails(build, steps[built]);
   });
 
-  test('hashira and the other third-party actions stay pinned on the same commit', () => {
+  test('hashira rides its v3 tag and the other third-party actions stay pinned by SHA', () => {
     assertThirdPartyPinned(build);
-    const hashira = (t) => [...new Set(t.match(/skathio\/hashira\/[^@\s]+@([0-9a-f]{40})/g)?.map((u) => u.split('@')[1]) ?? [])];
-    assert.deepEqual(hashira(now), hashira(then));
+    const hashira = [...now.matchAll(/skathio\/hashira\/[^@\s]+@(\S+)/g)].map((m) => m[1]);
+    assert.equal(hashira.length, 2, 'site.yml uploads and deploys with hashira');
+    assert.deepEqual([...new Set(hashira)], ['v3'], 'every hashira ref in site.yml is v3');
   });
 });
 

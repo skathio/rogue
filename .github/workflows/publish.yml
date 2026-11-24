@@ -85,13 +85,13 @@ jobs:
       # D14 self-checkout: version-resolver is an in-repo hashira composite
       # action; GitHub's `uses:` keyword rejects an expression in the `@ref`
       # position, so the library is checked out locally and invoked via a
-      # literal `./` path instead. Pinned to `v3`, hashira's rolling
-      # major-version tag, the same ref as rogue's own `ci.yml`.
+      # literal `./` path instead. On `v3`, hashira's moving major tag, the
+      # same ref as rogue's own `ci.yml`.
       - name: Checkout hashira library (D14)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: skathio/hashira
-          ref: v3
+          ref: v3 # moving major tag: new v3.x releases apply with no PR
           path: .hashira
           persist-credentials: false
 
@@ -257,7 +257,7 @@ jobs:
         # --target "${GITHUB_SHA}"` step (confirmed directly against
         # nuget-push/action.yml's "Tag + GitHub Release" step before deleting
         # the hand-rolled equivalent here).
-        uses: skathio/hashira/.github/actions/nuget-push@v3 # MUST match the dual pin above (D9) — rolling major tag
+        uses: skathio/hashira/.github/actions/nuget-push@v3 # MUST match the dual pin above (D9) — moving major tag
         with:
           nupkg_path: '${{ runner.temp }}/nupkgs/*.nupkg'
           # Verify this matches your nuget.org account username (the policy creator).

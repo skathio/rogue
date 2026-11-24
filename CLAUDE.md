@@ -90,15 +90,18 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 
 ## CI and release
 
-- `.github/workflows/ci.yml` on every PR: `ci` (hashira's reusable `nuget-package-ci.yml@v3`:
+- `.github/workflows/ci.yml` on every PR: `ci` (hashira's reusable `nuget-package-ci.yml`:
   build, `dotnet test` on the solution, scans, coverage, and SoMi's `quality-gate` on the PR's
   change at its default `strict` level), `Consumer suite`, `AOT publish`,
   `Benchmark smoke` (fails if the `ISender.Send` path allocates over the ceiling in
   `.bench/thresholds.json`), `License check`, `Public API`, `Docs build` (the full docs build;
   a dead link or a build error fails it).
-- hashira is pinned at `@v3` in `ci.yml` and `publish.yml` (the `nuget-push` action and the two
-  `ref: v3` checkouts); keep every pin on the same ref. v3 has no `library_ref` input: passing it
-  fails the run. `site.yml` pins hashira's Pages actions by the v3.0.0 commit SHA.
+- Every `skathio/hashira` ref in `ci.yml`, `publish.yml` (the `nuget-push` action and the two
+  hashira checkouts) and `site.yml` (the Pages actions) tracks the moving `@v3` tag; keep them on
+  the same ref and move them to `@v4` together when it ships. v3 has no `library_ref` input:
+  passing it fails the run.
+- The org's `ci-required` ruleset requires the `ci / passed` check (hashira's aggregate job) with
+  the branch up to date, so the job that calls `nuget-package-ci.yml` must keep the id `ci`.
 - Releases are manual: the maintainer dispatches `publish.yml` with a `bump`, and the release needs
   approval in the `production` environment. It packs, pushes to nuget.org over OIDC, tags, then
   deploys the site. Its `docs` job runs the docs build first, so a broken docs build stops the
