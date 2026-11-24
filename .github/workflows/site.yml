@@ -63,7 +63,7 @@ jobs:
         run: npm ci
       - name: Build the docs and assemble the Pages folder
         run: docs-site/build.sh
-      - uses: skathio/hashira/.github/actions/pages-upload@2c8d52526cbce593a445f7572b599813503160f5 # v3.0.0
+      - uses: skathio/hashira/.github/actions/pages-upload@1bd415e21fb070c46f07e05bfaa70e42c0531342 # v3.1.0
         with:
           path: artifacts/pages
 
@@ -86,4 +86,4 @@ jobs:
       id-token: write   # deploy-pages authenticates via OIDC
     steps:
       - id: deploy
-        uses: skathio/hashira/.github/actions/pages-deploy@2c8d52526cbce593a445f7572b599813503160f5 # v3.0.0
+        uses: skathio/hashira/.github/actions/pages-deploy@1bd415e21fb070c46f07e05bfaa70e42c0531342 # v3.1.0
