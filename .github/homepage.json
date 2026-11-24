@@ -13,6 +13,6 @@
   "image": "site/mark.svg",
   "links": {
     "NuGet": "https://www.nuget.org/packages/SkathIO.Rogue",
-    "Docs": "https://github.com/skathio/rogue/tree/main/docs"
+    "Docs": "https://skathio.github.io/rogue/docs/"
   }
 }
