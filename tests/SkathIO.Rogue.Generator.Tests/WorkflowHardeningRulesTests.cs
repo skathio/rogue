@@ -9,13 +9,15 @@ namespace SkathIO.Rogue.Generator.Tests;
 /// Workflow hardening. A runner's apt package index can be stale, so every step that installs apt
 /// packages refreshes the index first. The release workflow the maintainer dispatches pins
 /// actions/checkout and actions/setup-dotnet by the same commit SHAs ci.yml uses, so a moved tag
-/// cannot change what runs with the release's permissions. hashira stays on its rolling major tag,
-/// and publish.yml checks out and calls hashira at the same ref as ci.yml.
+/// cannot change what runs with the release's permissions. hashira is pinned the same way: ci.yml,
+/// publish.yml and site.yml call and check out hashira at one commit SHA, so the required
+/// `ci / passed` check and the release run the same hashira code until a deliberate bump.
 /// </summary>
 public sealed class WorkflowHardeningRulesTests
 {
     private const string CiPath = ".github/workflows/ci.yml";
     private const string PublishPath = ".github/workflows/publish.yml";
+    private const string SitePath = ".github/workflows/site.yml";
     private const string ShaPin = @"@(?<sha>[0-9a-f]{40})$";
 
     private static readonly string[] _pinnedActions = { "actions/checkout", "actions/setup-dotnet" };
@@ -63,18 +65,21 @@ public sealed class WorkflowHardeningRulesTests
     }
 
     [Fact]
-    public void Publish_PinsHashiraAtV3_LikeCi()
+    public void Workflows_PinHashiraAtOneCommitSha()
     {
-        string ci = RepoFiles.Read(CiPath);
+        string[] ciRefs = HashiraUsesRefs(RepoFiles.Read(CiPath));
         string publish = RepoFiles.Read(PublishPath);
-        string[] ciRefs = HashiraUsesRefs(ci);
         string[] publishRefs = HashiraUsesRefs(publish)
             .Concat(Regex.Matches(publish, @"(?m)^\s*ref:\s*'?(?<ref>[^'\s#]+)").Select(static m => m.Groups["ref"].Value))
             .ToArray();
+        string[] siteRefs = HashiraUsesRefs(RepoFiles.Read(SitePath));
 
-        Assert.Equal(new[] { "v3" }, ciRefs.Distinct(StringComparer.Ordinal).ToArray());
+        Assert.Single(ciRefs);
         Assert.Equal(3, publishRefs.Length);
-        Assert.All(publishRefs, static r => Assert.Equal("v3", r));
+        Assert.Equal(2, siteRefs.Length);
+        string[] all = ciRefs.Concat(publishRefs).Concat(siteRefs).ToArray();
+        Assert.All(all, static r => Assert.Matches("^[0-9a-f]{40}$", r));
+        Assert.Single(all.Distinct(StringComparer.Ordinal));
     }
 
     // The refs of every skathio/hashira workflow or action a file calls with `uses:`.
