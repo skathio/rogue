@@ -28,6 +28,10 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   and runs its binary.
 - Benchmark smoke run, as CI runs it:
   `dotnet run --project bench/SkathIO.Rogue.Benchmarks/SkathIO.Rogue.Benchmarks.csproj -c Release -- --filter '*NoBehavior*' --job short --exporters json`
+- Docs site, as CI runs it (needs Node 24 and the .NET SDK): `npm ci` in `docs-site/`, then
+  `docs-site/build.sh` from the repo root. It generates the API reference with docfx, builds the
+  VitePress site (a dead link fails it) and assembles `artifacts/pages`. `node --test docs-site/`
+  runs the docs tooling tests.
 
 ## Layout
 
@@ -59,6 +63,11 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   consumes the packed packages, never project references.
 - `samples/`, `bench/` (BenchmarkDotNet; committed baselines in `bench/results/<date>-<sha>/`,
   allocation thresholds in `.bench/thresholds.json`), `docs/`, `site/`.
+- `docs-site/`: the VitePress docs served at `/rogue/docs/`. `.vitepress/config.mts` reads
+  `docs/*.md` as they are (no front matter or link edits; `governance.md` and `roadmap.md` are not
+  published), `docfx.json` and `clean-api.mjs` generate the API pages from the `///` comments, and
+  `build.sh` stages it all under `artifacts/`. Nothing generated is committed. Its npm packages are
+  build-only, so `.github/allowed-packages.txt` does not cover them.
 
 ## Conventions
 
@@ -85,25 +94,29 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   build, `dotnet test` on the solution, scans, coverage, and SoMi's `quality-gate` on the PR's
   change at its default `strict` level), `Consumer suite`, `AOT publish`,
   `Benchmark smoke` (fails if the `ISender.Send` path allocates over the ceiling in
-  `.bench/thresholds.json`), `License check`, `Public API`.
+  `.bench/thresholds.json`), `License check`, `Public API`, `Docs build` (the full docs build;
+  a dead link or a build error fails it).
 - hashira is pinned at `@v3` in `ci.yml` and `publish.yml` (the `nuget-push` action and the two
   `ref: v3` checkouts); keep every pin on the same ref. v3 has no `library_ref` input: passing it
   fails the run. `site.yml` pins hashira's Pages actions by the v3.0.0 commit SHA.
 - Releases are manual: the maintainer dispatches `publish.yml` with a `bump`, and the release needs
   approval in the `production` environment. It packs, pushes to nuget.org over OIDC, tags, then
-  deploys `site/`. Prep steps are in the `release-prep` skill. Agents never dispatch a release.
-- `site.yml` deploys the site; `homepage.yml` pings skathio.github.io when `.github/homepage.json`
+  deploys the site. Its `docs` job runs the docs build first, so a broken docs build stops the
+  release before the push. Prep steps are in the `release-prep` skill. Agents never dispatch a release.
+- `site.yml` builds the site with `docs-site/build.sh` and deploys `artifacts/pages`: the `site/`
+  files at the root and the docs under `docs/`. `homepage.yml` pings skathio.github.io when `.github/homepage.json`
   or `site/mark.svg` changes on main.
 
 ## Visual testing (required for anything that renders)
 
 `site/` is the frontend: one static page (`index.html`, `theme.js`, `mark.svg`) with no build
 step. It supports light and dark (`prefers-color-scheme`, plus a toggle that sets `data-theme`).
-Any change that touches `site/`, or changes what the page shows, must be visually tested before
+Any change that touches `site/`, `docs/` or `docs-site/`, or changes what the page shows, must be visually tested before
 it is called done:
 
-1. Run `.claude/skills/visual-test/screenshot.sh <out-dir>`. It serves `site/` on a free port and
-   takes phone (390px) and desktop (1440px) screenshots in light and dark mode.
+1. Run `docs-site/build.sh`, then `.claude/skills/visual-test/screenshot.sh <out-dir>`. It serves
+   `site/` and the docs route on a free port and takes phone (390px) and desktop (1440px)
+   screenshots in light and dark mode of the landing page, Getting started and the `ISender` API page.
 2. Open and inspect every screenshot. A width warning means the page scrolls sideways.
 3. In the PR, attach the screenshots or describe what each one shows.
 

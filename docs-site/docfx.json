@@ -1,0 +1,32 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "../src",
+          "files": [
+            "SkathIO.Rogue.Abstractions/SkathIO.Rogue.Abstractions.csproj",
+            "SkathIO.Rogue/SkathIO.Rogue.csproj",
+            "SkathIO.Rogue.Logging/SkathIO.Rogue.Logging.csproj",
+            "SkathIO.Rogue.MediatR/SkathIO.Rogue.MediatR.csproj",
+            "SkathIO.Rogue.Validation/SkathIO.Rogue.Validation.csproj",
+            "SkathIO.Rogue.Validation.FluentValidation/SkathIO.Rogue.Validation.FluentValidation.csproj",
+            "SkathIO.Rogue.Jobs/SkathIO.Rogue.Jobs.csproj",
+            "SkathIO.Rogue.Jobs.Postgres/SkathIO.Rogue.Jobs.Postgres.csproj",
+            "SkathIO.Rogue.Jobs.SqlServer/SkathIO.Rogue.Jobs.SqlServer.csproj",
+            "SkathIO.Rogue.Messaging/SkathIO.Rogue.Messaging.csproj",
+            "SkathIO.Rogue.Messaging.RabbitMQ/SkathIO.Rogue.Messaging.RabbitMQ.csproj",
+            "SkathIO.Rogue.Messaging.Outbox/SkathIO.Rogue.Messaging.Outbox.csproj"
+          ]
+        }
+      ],
+      "dest": "../artifacts/docs-site/docfx",
+      "outputFormat": "markdown",
+      "noRestore": true,
+      "disableGitFeatures": true,
+      "properties": {
+        "TargetFramework": "net10.0"
+      }
+    }
+  ]
+}

@@ -124,9 +124,35 @@ jobs:
           set -euo pipefail
           echo "publish: resolved version ${RESOLVED_VERSION} (bump=${BUMP})" >> "${GITHUB_STEP_SUMMARY}"
 
+  # The full docs build at the release commit, the one site.yml deploys after the push. It runs
+  # before anything is pushed, so a broken docs build stops the release while it can still be
+  # fixed, instead of failing the site deploy after the packages are on nuget.org. It runs
+  # third-party code (npm packages, docfx), so it holds no token beyond reading the repo.
+  docs:
+    name: docs
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install the docs toolchain from the lockfile
+        working-directory: docs-site
+        run: npm ci
+      - name: Build the docs and assemble the Pages folder
+        run: docs-site/build.sh
+
   publish:
     name: publish
-    needs: version
+    needs: [version, docs]
     # Same gate as `version` (see "## Trigger model" above) — a dispatch with
     # `bump` left empty is a no-op (resolves/publishes nothing).
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''

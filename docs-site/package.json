@@ -1,0 +1,13 @@
+{
+  "name": "rogue-docs-site",
+  "private": true,
+  "type": "module",
+  "main": "run-tests.mjs",
+  "scripts": {
+    "build": "bash build.sh",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  }
+}
