@@ -9,7 +9,7 @@ namespace SkathIO.Rogue.SourceGenerator;
 /// <c>global::SkathIO.Rogue.RogueDispatcher</c> (defined in the runtime DLL) and overrides the
 /// virtual dispatch methods. A subclass — rather than a <c>partial</c> — is required because a
 /// <c>partial class</c> cannot span the assembly boundary between the runtime DLL and the
-/// consumer's compilation (PD-14). Output: <c>RogueDispatcher.g.cs</c>.
+/// consumer's compilation. Output: <c>RogueDispatcher.g.cs</c>.
 /// </summary>
 internal static class DispatcherEmitter
 {
@@ -443,12 +443,12 @@ internal static class DispatcherEmitter
     }
 
     /// <summary>
-    /// PD-48: the handler-service interface the dispatcher resolves and (in lockstep) the registration
+    /// The handler-service interface the dispatcher resolves and (in lockstep) the registration
     /// registers under. For native CQS handlers it is the core <c>ICommandHandler</c>/<c>IQueryHandler</c>
     /// (the void path is always <c>ICommandHandler&lt;TReq&gt;</c>). For MediatR-adapter-mapped handlers
     /// (<see cref="HandlerModel.IsAdapterMapped"/>) it is the adapter's own
     /// <c>SkathIO.Rogue.Compatibility.IRequestHandler&lt;TReq,TResp&gt;</c> / <c>IRequestHandler&lt;TReq&gt;</c>
-    /// — the interface the application type actually implements and DI knows it by. The F8 command-vs-query
+    /// — the interface the application type actually implements and DI knows it by. The command-vs-query
     /// decision (in <see cref="HandlerModel.Kind"/>) does not change the resolved adapter interface.
     /// </summary>
     private static string AdapterHandlerIface(HandlerModel handler, string requestFqn, string responseFqn, bool isVoid)
@@ -467,7 +467,7 @@ internal static class DispatcherEmitter
     }
 
     /// <summary>
-    /// FR-45 / PD-30: the telemetry-on continuation of the no-processor path. Reached only when
+    /// The telemetry-on continuation of the no-processor path. Reached only when
     /// <c>StartDispatch</c> returned a non-null scope (telemetry enabled AND subscribed), so this
     /// path is already allocating an async state machine — the <c>RequestHandlerDelegate</c> closure
     /// inside <c>_WithBehaviors</c> (which itself handles the empty-behavior case via
@@ -525,7 +525,7 @@ internal static class DispatcherEmitter
     }
 
     /// <summary>
-    /// FR-45 / PD-30: the telemetry-on continuation of the D4 bypass path. Reached only when
+    /// The telemetry-on continuation of the behavior-list bypass path. Reached only when
     /// <c>StartDispatch</c> returned a non-null scope (telemetry enabled AND subscribed), so this path
     /// is already allocating an async state machine. Unlike <see cref="EmitSendWithTelemetryMethod"/>
     /// it does NOT thread a behavior list through <c>PipelineExecutor.Execute</c> — there are provably
@@ -558,7 +558,7 @@ internal static class DispatcherEmitter
     }
 
     /// <summary>
-    /// PD-31 (AC-C / NFR-PERF-1 closure elimination): the has-behaviors continuation of the
+    /// Keeps the per-dispatch closure off the fast path. This is the has-behaviors continuation of the
     /// no-processor fast path, factored into its own <c>private static</c> method so that the
     /// <c>() =&gt; handler.Handle(...)</c> closure's captured variables (<c>handler</c>,
     /// <c>request</c>, <c>cancellationToken</c>) are PARAMETERS here — not locals shared with
@@ -630,7 +630,7 @@ internal static class DispatcherEmitter
     }
 
     /// <summary>
-    /// D5 (PD-2): emits the per-request statically-typed behavior chain methods
+    /// Emits the per-request statically-typed behavior chain methods
     /// <c>Send_X_Chain_1 .. Send_X_Chain_{MAX_STATIC_CHAIN_DEPTH}</c>. Each method takes its N behaviors as
     /// explicit, strongly-typed parameters and recursively delegates the <c>next</c> step to
     /// <c>Send_X_Chain_{N-1}</c>. Because the chain threads <c>request</c>/<c>handler</c>/<c>ct</c> as
@@ -640,8 +640,8 @@ internal static class DispatcherEmitter
     /// The innermost step (<c>Chain_1</c>'s <c>next</c>) is still a <c>RequestHandlerDelegate&lt;TResponse&gt;</c>
     /// closure over <c>handler</c>/<c>request</c>/<c>ct</c> (the same shape <see cref="EmitHandlerCallDelegate"/>
     /// builds), and each <c>Chain_N</c> link allocates one <c>() =&gt;</c> delegate — so this reduces, but does
-    /// not eliminate, allocation. The aspirational "0 B" AC is governed by the Phase 5 benchmark, not asserted
-    /// here (NFR-PERF-5 honesty).
+    /// not eliminate, allocation. Whether the chain reaches zero bytes is measured by the benchmarks, not
+    /// asserted here.
     /// </summary>
     private static void EmitChainMethods(
         CodeWriter w, string methodName, string handlerIface, string behaviorIface,
@@ -692,7 +692,7 @@ internal static class DispatcherEmitter
     }
 
     /// <summary>
-    /// D5 (PD-2): emits the innermost <c>next</c> delegate for <c>Send_X_Chain_1</c> — a
+    /// Emits the innermost <c>next</c> delegate for <c>Send_X_Chain_1</c> — a
     /// <c>RequestHandlerDelegate&lt;TResponse&gt; next = () =&gt; handler.Handle(request, ct)</c> with the
     /// SAME void wrapping <see cref="EmitHandlerCallDelegate"/> produces (the chain's handler
     /// parameter is named <c>handler</c> and its cancellation token <c>ct</c>, matching this body). The
@@ -717,7 +717,7 @@ internal static class DispatcherEmitter
     }
 
     /// <summary>
-    /// PD-31 (AC-C / NFR-PERF-1 closure elimination): emits a direct, non-deferred
+    /// Keeps the per-dispatch closure off the fast path: emits a direct, non-deferred
     /// <c>return handler.Handle(...)</c> for the no-behavior fast path — no
     /// <see cref="global::SkathIO.Rogue.RequestHandlerDelegate{TResponse}"/> is constructed, so no
     /// per-dispatch display-class closure is allocated. Mirrors the void-wrapping shape of
@@ -745,7 +745,7 @@ internal static class DispatcherEmitter
     /// declaration that defers the handler invocation — required wherever the call must be threaded
     /// through <see cref="global::SkathIO.Rogue.PipelineExecutor"/> (the has-behaviors path) or the
     /// FR-25/26/27 processor wrap (<see cref="EmitProcessorPath"/>), both of which need an invokable,
-    /// deferred reference rather than an immediate result. This is the allocating shape PD-31
+    /// deferred reference rather than an immediate result. This is the allocating shape the generator
     /// deliberately keeps — and keeps confined to — the paths that genuinely need deferral; the
     /// no-behavior, no-processor fast path bypasses it entirely via
     /// <see cref="EmitDirectHandlerReturn"/>.
@@ -883,7 +883,7 @@ internal static class DispatcherEmitter
     /// <summary>
     /// Emits the catch block(s) for FR-26. Exception actions (observe-only) run first, then exception
     /// handlers, both matched against the thrown exception via a statically-typed <c>is TEx</c> test
-    /// (no reflection — NFR-SEC-1). When a handler marks the exception handled, its fallback response
+    /// (no reflection, so the path stays AOT-safe). When a handler marks the exception handled, its fallback response
     /// is returned via the enclosing <c>RunWithProcessors</c> local function; otherwise the original
     /// exception is re-thrown preserving its stack trace.
     /// </summary>

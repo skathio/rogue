@@ -13,7 +13,7 @@ public interface IRequestExceptionHandler<in TRequest, TResponse, in TException>
     ValueTask Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state, CancellationToken cancellationToken);
 }
 
-/// <summary>Observe-only exception action that cannot suppress propagation (FR-26 Should).</summary>
+/// <summary>Observe-only exception action that cannot suppress propagation: it sees the exception but cannot mark it handled.</summary>
 public interface IRequestExceptionAction<in TRequest, in TException>
     where TRequest : notnull
     where TException : Exception

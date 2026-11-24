@@ -4,8 +4,8 @@ namespace SkathIO.Rogue.SourceGenerator;
 internal enum TypeAccessibility { Public, Internal, Other }
 
 /// <summary>
-/// Whether a discovered request handler handles a command or a query. Under the CQS clean break
-/// (PD-40) command and query are independent contracts (<c>ICommandHandler&lt;,&gt;</c> /
+/// Whether a discovered request handler handles a command or a query. Command and query are
+/// independent contracts (<c>ICommandHandler&lt;,&gt;</c> /
 /// <c>IQueryHandler&lt;,&gt;</c>) with no shared marker; the kind is recorded so the dispatcher can
 /// switch the typed reference (<c>ICommand&lt;T&gt;</c> vs <c>IQuery&lt;T&gt;</c>) it emits per handler.
 /// </summary>
@@ -22,7 +22,7 @@ internal sealed record HandlerModel(
     bool IsAbstract,            // true if the type is abstract (ROGUE005)
     bool HasPublicCtor,         // false if no usable public constructor exists (ROGUE005)
     /// <summary>
-    /// True when this handler was discovered through the MediatR-adapter mapping rule (PD-48): it
+    /// True when this handler was discovered through the MediatR-adapter mapping rule: it
     /// implements the adapter's <c>SkathIO.Rogue.Compatibility.IRequestHandler&lt;,&gt;</c> /
     /// <c>IRequestHandler&lt;&gt;</c> rather than a core <c>ICommandHandler</c>/<c>IQueryHandler</c>.
     /// The F8 convention has already been applied to set <see cref="Kind"/> (default → Command,
@@ -34,8 +34,7 @@ internal sealed record HandlerModel(
     bool IsAdapterMapped = false,
     /// <summary>
     /// True only for a no-response adapter handler (<c>IRequestHandler&lt;TReq&gt;</c>) whose request
-    /// type carries <c>[MapAsQuery]</c> — the ROGUE012 conflict (a query must return a value, PD-43
-    /// amendment / PD-48). The handler is still mapped to a void <c>ICommand</c> (not silently dropped);
+    /// type carries <c>[MapAsQuery]</c> — the ROGUE012 conflict (a query must return a value). The handler is still mapped to a void <c>ICommand</c> (not silently dropped);
     /// <c>EmitDiagnostics</c> reads this flag to raise ROGUE012 for manual review.
     /// </summary>
     bool MapAsQueryConflict = false,
@@ -111,13 +110,13 @@ internal sealed record BehaviorModel(
     /// <summary>Non-null for closed (<see cref="IsOpen"/>==false) non-stream behaviors: the response FQN from the implemented interface.</summary>
     string? ClosedResponseFqn,
     /// <summary>
-    /// The <c>[BehaviorOrder(int)]</c> value (PD-4). Defaults to 0 when the attribute is absent.
-    /// Lower = outermost behavior (woven further out, executed first) per PD-13a.
+    /// The <c>[BehaviorOrder(int)]</c> value. Defaults to 0 when the attribute is absent.
+    /// Lower = outermost behavior (woven further out, executed first).
     /// </summary>
     int Order = 0,
     /// <summary>
-    /// True when discovered from a referenced assembly's metadata (PD-17), false when from the
-    /// current compilation's source. Used as the PD-13a tie-break: source before metadata.
+    /// True when discovered from a referenced assembly's metadata, false when from the
+    /// current compilation's source. Breaks ties between equal orders: source before metadata.
     /// </summary>
     bool IsMetadata = false
 );
@@ -151,8 +150,8 @@ internal sealed record StreamHandlerModel(
 );
 
 /// <summary>
-/// The CQS family a discovered message type belongs to (PD-40 clean break — independent marker
-/// families, no shared root). A message is a command (write), a query (read), an event (zero-or-more
+/// The CQS family a discovered message type belongs to (independent marker families, no shared
+/// root). A message is a command (write), a query (read), an event (zero-or-more
 /// handlers), or a streaming query (read, yields a sequence). <see cref="MultipleCqsContracts"/> marks
 /// a type that implements more than one CQS family — ambiguous under the clean break (ROGUE011).
 /// </summary>

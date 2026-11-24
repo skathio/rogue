@@ -6,7 +6,7 @@ namespace SkathIO.Rogue;
 
 /// <summary>
 /// Publishes events concurrently. All handlers run; exceptions from multiple handlers
-/// are aggregated into an <see cref="System.AggregateException"/> (FR-29 E2).
+/// are aggregated into an <see cref="System.AggregateException"/> after every handler has finished.
 /// </summary>
 public sealed class WhenAllPublisher : IEventPublisher
 {

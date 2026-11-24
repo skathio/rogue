@@ -6,7 +6,7 @@ namespace SkathIO.Rogue;
 
 /// <summary>
 /// Publishes events sequentially. On the first handler exception, enumeration stops
-/// and the exception propagates (first-exception-wins semantics, FR-29 E1).
+/// and the exception propagates (first exception wins; later handlers do not run).
 /// </summary>
 public sealed class ForeachAwaitPublisher : IEventPublisher
 {

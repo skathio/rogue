@@ -78,7 +78,7 @@ internal static class DiagnosticDescriptors
         helpLinkUri: HelpLinkBase + "ROGUE010");
 
     /// <summary>
-    /// ROGUE011 — Type implements multiple CQS contracts (F5). Under the clean break (PD-40) a type
+    /// ROGUE011 — Type implements multiple CQS contracts. With no shared base between the families, a type
     /// that is both a command and a query (or otherwise implements more than one of
     /// ICommand/IQuery/IEvent/IStreamQuery) is ambiguous — there is no shared marker to disambiguate
     /// the dispatch path, so the generator cannot emit one. Error: split the type into separate
@@ -94,7 +94,7 @@ internal static class DiagnosticDescriptors
         helpLinkUri: HelpLinkBase + "ROGUE011");
 
     /// <summary>
-    /// ROGUE012 — MediatR-adapter command-vs-query mapping conflict (PD-43 amendment / PD-48). The
+    /// ROGUE012 — MediatR-adapter command-vs-query mapping conflict. The
     /// adapter-mapping rule maps an adapter <c>IRequest&lt;T&gt;</c> to <c>ICommand&lt;T&gt;</c> by
     /// default and to <c>IQuery&lt;T&gt;</c> when the request carries <c>[MapAsQuery]</c>. Applying
     /// <c>[MapAsQuery]</c> to a <em>no-response</em> adapter <c>IRequest</c> is a conflict — a query must

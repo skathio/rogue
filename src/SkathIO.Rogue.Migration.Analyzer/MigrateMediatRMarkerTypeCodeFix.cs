@@ -12,14 +12,14 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace SkathIO.Rogue.Migration.Analyzer;
 
 /// <summary>
-/// Rewrites a MediatR marker/handler base-type reference (flagged by ROGM006) onto the post-D5
-/// SkathIO.Rogue CQS contract (PD-43/PD-44, FR-13). The migration goes <b>directly to the CQS core</b>
+/// Rewrites a MediatR marker/handler base-type reference (flagged by ROGM006) onto the
+/// SkathIO.Rogue CQS contract. The migration goes <b>directly to the CQS core</b>
 /// (<c>ICommand</c>/<c>IQuery</c>/<c>IEvent</c> + handlers), not to the adapter <c>IRequest</c> shapes;
 /// query intent is therefore expressed by the contract itself and the adapter-only <c>[MapAsQuery]</c>
-/// attribute is not emitted on this path (PD-44 amendment — "migrates directly to <c>IQuery&lt;T&gt;</c>").
+/// attribute is not emitted on this path.
 /// </summary>
 /// <remarks>
-/// Mapping (F8 convention):
+/// Mapping (command by default, query only when the name signals a read):
 /// <list type="bullet">
 /// <item><c>INotification</c> → <c>IEvent</c>; <c>INotificationHandler&lt;T&gt;</c> → <c>IEventHandler&lt;T&gt;</c>.</item>
 /// <item><c>IStreamRequest&lt;T&gt;</c> → <c>IStreamQuery&lt;T&gt;</c>; <c>IStreamRequestHandler&lt;,&gt;</c> → <c>IStreamQueryHandler&lt;,&gt;</c> (streams are always read-side — no ambiguity).</item>

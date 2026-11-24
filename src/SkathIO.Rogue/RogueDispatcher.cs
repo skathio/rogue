@@ -13,12 +13,12 @@ namespace SkathIO.Rogue;
 /// boundary (a generated subclass works where a cross-assembly <c>partial</c> cannot).
 /// </summary>
 /// <remarks>
-/// Under the CQS clean break (PD-40) the dispatch entry points are split by message family — there is
-/// no shared <c>IRequest</c> marker. Commands and queries each get their own virtual <c>Send</c>
+/// Commands and queries are independent contracts, so the dispatch entry points are split by
+/// message family — there is no shared <c>IRequest</c> marker. Commands and queries each get their own virtual <c>Send</c>
 /// overload (plus a void-command overload); the generated subclass overrides them with concrete
-/// per-message <c>switch</c>es. The behavioural override shape (distinct per-marker switches,
-/// register/resolve lockstep, AC-C re-establishment) lands in 11.3; 11.2 establishes the
-/// CQS-shaped <em>signatures</em> so the runtime and generated code compile against the reshaped core.
+/// per-message <c>switch</c>es, and resolves each handler under the same service type it was
+/// registered with. This base declares the CQS-shaped <em>signatures</em> so the runtime and the
+/// generated code compile against the same core.
 /// </remarks>
 public class RogueDispatcher
 {

@@ -8,7 +8,8 @@ namespace SkathIO.Rogue.Logging;
 
 /// <summary>
 /// A pipeline behavior that logs the request type, outcome (success/exception) and elapsed time for
-/// every dispatch. Payloads are <b>never</b> logged by default (NFR-SEC-2); opt in per request type
+/// every dispatch. Payloads are <b>never</b> logged by default, because they may hold
+/// secrets or PII; opt in per request type
 /// with <see cref="LogPayloadAttribute"/> or globally with <see cref="LoggingOptions.LogPayload"/>.
 /// </summary>
 /// <typeparam name="TRequest">The request type.</typeparam>

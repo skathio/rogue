@@ -6,7 +6,7 @@ namespace SkathIO.Rogue;
 /// <summary>
 /// Handles a query of type <typeparamref name="TQuery"/> returning <typeparamref name="TResponse"/>.
 /// Primary CQS handler contract — declares its own <see cref="Handle"/> with no shared
-/// request-handler base (PD-40 clean break).
+/// request-handler base, so query and command handlers stay separate contracts.
 /// </summary>
 public interface IQueryHandler<in TQuery, TResponse>
     where TQuery : IQuery<TResponse>

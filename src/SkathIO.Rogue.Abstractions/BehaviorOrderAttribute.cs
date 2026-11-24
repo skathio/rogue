@@ -6,8 +6,10 @@ namespace SkathIO.Rogue;
 /// Declares the pipeline order of an <see cref="IPipelineBehavior{TRequest,TResponse}"/> or
 /// <see cref="IStreamPipelineBehavior{TRequest,TResponse}"/> implementation. Lower values are
 /// woven further out (executed first); behaviors without this attribute default to
-/// <see cref="Order"/> = 0 (PD-4 / PD-13a). Lives in <c>SkathIO.Rogue.Abstractions</c> so behavior
-/// authors can annotate their types without depending on the full <c>SkathIO.Rogue</c> package.
+/// <see cref="Order"/> = 0. Equal orders put behaviors declared in source before those from
+/// referenced assemblies, then sort by full type name, so the order is deterministic. Lives in
+/// <c>SkathIO.Rogue.Abstractions</c> so behavior authors can annotate their types without depending
+/// on the full <c>SkathIO.Rogue</c> package.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class BehaviorOrderAttribute : Attribute

@@ -3,24 +3,26 @@ namespace SkathIO.Rogue;
 /// <summary>
 /// Bridge between the DLL's <see cref="RogueServiceCollectionExtensions.AddRogue"/> and the
 /// source-generated registration in the consumer's compilation. The generator wires its
-/// registrar via a module initializer (PD-15), calling <see cref="Register"/>.
+/// registrar via a module initializer, calling <see cref="Register"/>, so the runtime needs no
+/// type reference into the consumer's assembly.
 /// <para>
 /// This type and its <see cref="Register"/> method are <c>public</c> by necessity: the module
 /// initializer that calls <see cref="Register"/> is emitted into the <em>consumer's</em>
 /// compilation, which has no <c>InternalsVisibleTo</c> grant from this assembly. An
 /// <c>internal</c> entry point would produce a CS0122 compile error in every real consumer — the
-/// exact cross-assembly access failure PD-14/PD-15 exist to eliminate. It is not intended for
+/// exact cross-assembly access failure this bridge exists to avoid. It is not intended for
 /// application code to call directly.
 /// </para>
 /// <para>
-/// <b>Append-only registry (PD-33/PD-38).</b> Registrars are kept in an append-only,
+/// <b>Append-only registry.</b> Registrars are kept in an append-only,
 /// order-preserving list rather than a single last-writer-wins slot. If multiple consuming
 /// compilations in the same process each carry a generator-emitted module initializer, every
 /// initializer's registrar is retained and <see cref="RogueServiceCollectionExtensions.AddRogue"/>
 /// invokes them <em>all</em>, in append order, so no compilation's registrations are silently
 /// clobbered. The single-compilation-per-process model Rogue targets is unaffected (one registrar,
 /// invoked once). Appends are deduplicated by delegate identity and the list cannot be cleared or
-/// redirected, only added to (PD-33 trust-boundary note).
+/// redirected, only added to, so no code in the process can remove or replace another compilation's
+/// registrations.
 /// </para>
 /// </summary>
 public static class RogueRegistrationBridge
@@ -40,7 +42,7 @@ public static class RogueRegistrationBridge
 
     /// <summary>
     /// Appends a generator-wired registrar to the append-only registry. Called once by each
-    /// consumer-compilation module initializer (PD-15). <see cref="RogueServiceCollectionExtensions.AddRogue"/>
+    /// consumer-compilation module initializer. <see cref="RogueServiceCollectionExtensions.AddRogue"/>
     /// invokes every registered registrar, in append order. A <c>null</c> <paramref name="registrar"/>
     /// is ignored, and a registrar already present (by delegate identity) is not appended again
     /// (deduplication — a re-entrant or duplicate module-init append is a no-op). Not for direct

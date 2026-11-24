@@ -10,7 +10,7 @@ namespace SkathIO.Rogue;
 /// Prefer injecting <see cref="ISender"/> or <see cref="IPublisher"/> over this type directly.
 /// </summary>
 /// <remarks>
-/// D2 (rogue-perf): the <see cref="RogueDispatcher"/> is constructor-injected and cached, rather than
+/// The <see cref="RogueDispatcher"/> is constructor-injected and cached, rather than
 /// resolved via <c>IServiceProvider.GetRequiredService&lt;RogueDispatcher&gt;()</c> on every dispatch.
 /// This removes one DI lookup from the warm Send/Publish path. Because the dispatcher is registered
 /// <c>Scoped</c> (it binds to the resolving scope so scoped handler dependencies resolve correctly),

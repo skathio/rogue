@@ -12,8 +12,8 @@ public static class PipelineExecutor
 {
     /// <summary>
     /// Executes the pipeline. When <paramref name="behaviors"/> is empty, calls the handler
-    /// directly with zero allocation (NFR-PERF-1). With behaviors, builds a struct-index fold
-    /// that avoids per-link heap allocations (PD-2).
+    /// directly with zero allocation, keeping the common no-behavior path free of garbage. With
+    /// behaviors, builds a struct-index fold that avoids a heap allocation per pipeline link.
     /// </summary>
     public static ValueTask<TResponse> Execute<TRequest, TResponse>(
         TRequest request,
