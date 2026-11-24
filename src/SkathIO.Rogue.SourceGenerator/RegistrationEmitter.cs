@@ -9,7 +9,7 @@ namespace SkathIO.Rogue.SourceGenerator;
 /// (<c>RogueDispatcherImpl</c>) as the <c>RogueDispatcher</c> singleton. This class is ALWAYS
 /// emitted (even with an empty body for zero-handler compilations) so that
 /// <c>RogueServiceCollectionExtensions.AddRogue</c> in the runtime DLL can always reference it
-/// (PD-14 — replaces the cross-assembly <c>partial</c> method). Output:
+/// (a <c>partial</c> method cannot span the assembly boundary). Output:
 /// <c>RogueServiceCollectionExtensions.g.cs</c>.
 /// </summary>
 internal static class RegistrationEmitter
@@ -142,7 +142,7 @@ internal static class RegistrationEmitter
     /// conflicting with a populated registrar (its empty <c>RogueDispatcherImpl</c> would shadow the
     /// real one under <c>TryAdd</c>'s first-wins — see <see cref="EmitModuleInit"/>).
     /// <para>
-    /// GitHub issue #21: a behavior discovered only via the PD-17 metadata scan
+    /// GitHub issue #21: a behavior discovered only via the referenced-assembly metadata scan
     /// (<see cref="BehaviorModel.IsMetadata"/> == true) does NOT, by itself, count as "something to
     /// register" here. NuGet propagates a <c>PackageReference</c> transitively across a sibling
     /// <c>ProjectReference</c> — e.g. a host project with zero source-level Rogue declarations that
@@ -178,14 +178,14 @@ internal static class RegistrationEmitter
     /// Emits a module initializer that appends the consumer-compilation's
     /// <c>RogueGeneratedRegistration.Register</c> to the DLL's append-only
     /// <c>RogueRegistrationBridge</c> registry via <c>RogueRegistrationBridge.Register(...)</c>
-    /// (PD-33/PD-38 — the non-obsolete entry point, so freshly-generated consumers never trip the
+    /// (the non-obsolete entry point, so freshly-generated consumers never trip the
     /// <c>[Obsolete]</c> <c>GeneratedRegistrar</c> warning under <c>TreatWarningsAsErrors</c>). This is
     /// how the runtime <c>AddRogue</c> in <c>SkathIO.Rogue.dll</c> reaches the registration generated in
-    /// the consumer's compilation without a hard cross-assembly type reference (PD-15).
+    /// the consumer's compilation without a hard cross-assembly type reference.
     /// <para>
-    /// PD-38 amendment (see decisions.md PD-45): the module initializer is suppressed for a compilation
-    /// that discovered nothing to register. Under PD-33's append-only registry <em>every</em> registrar
-    /// runs, and under PD-38's idempotent <c>TryAddScoped&lt;RogueDispatcher, RogueDispatcherImpl&gt;</c>
+    /// The module initializer is suppressed for a compilation
+    /// that discovered nothing to register. Under the append-only registry <em>every</em> registrar
+    /// runs, and under the idempotent <c>TryAddScoped&lt;RogueDispatcher, RogueDispatcherImpl&gt;</c>
     /// the <em>first</em> dispatcher registration wins. <c>SkathIO.Rogue.dll</c> itself runs the generator
     /// over its own (handler-less) source and would otherwise emit a module initializer that appends an
     /// <em>empty</em> registrar — present in <em>every</em> real consumer's process — whose empty
@@ -237,7 +237,7 @@ internal static class RegistrationEmitter
         "global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient";
 
     /// <summary>
-    /// Emits an idempotent single-registration (PD-38): <c>ServiceCollectionDescriptorExtensions.TryAdd(
+    /// Emits an idempotent single-registration: <c>ServiceCollectionDescriptorExtensions.TryAdd(
     /// services, new ServiceDescriptor(serviceType, implType, options.Lifetime))</c>. <c>TryAdd</c>
     /// no-ops if the <em>service type</em> is already registered, so re-invoking the registrar (a
     /// double-<c>AddRogue()</c> or a duplicate append) does not double-register. The consumer's
@@ -245,7 +245,8 @@ internal static class RegistrationEmitter
     /// kinds the dispatcher resolves via singular <c>GetService&lt;&gt;</c> — exactly one implementation
     /// per service type is correct: request handlers (ROGUE002 forbids duplicates) and stream handlers.
     /// Multi-registration kinds the dispatcher resolves via <c>GetServices&lt;&gt;</c> (notification
-    /// handlers and all four processor kinds) use <see cref="EmitEnumerableDescriptor"/> instead (PD-45).
+    /// handlers and all four processor kinds) use <see cref="EmitEnumerableDescriptor"/> instead, so each
+    /// implementation is registered.
     /// D3 carve-out: behavior self-registration and the <c>IReadOnlyList&lt;IPipelineBehavior&lt;,&gt;&gt;</c>
     /// factory do NOT go through this helper for their lifetime — see
     /// <see cref="EmitBehaviorListRegistration"/>, which hard-codes <see cref="TransientLifetimeFqn"/>
@@ -263,7 +264,7 @@ internal static class RegistrationEmitter
     private static void EmitDescriptor(CodeWriter w, string typeFqn) => EmitDescriptor(w, typeFqn, typeFqn);
 
     /// <summary>
-    /// Emits an idempotent multi-registration (PD-38/PD-45): <c>ServiceCollectionDescriptorExtensions.TryAddEnumerable(
+    /// Emits an idempotent multi-registration: <c>ServiceCollectionDescriptorExtensions.TryAddEnumerable(
     /// services, ServiceDescriptor.Describe(serviceType, implType, options.Lifetime))</c>. Used for every
     /// kind the dispatcher resolves via <c>GetServices&lt;&gt;</c> and fans out across: notification
     /// handlers (<c>Publish</c> calls all <c>INotificationHandler&lt;T&gt;</c>) and all four processor
@@ -380,7 +381,7 @@ internal static class RegistrationEmitter
     }
 
     /// <summary>
-    /// PD-13a comparison: <c>[BehaviorOrder]</c> ascending, then source-before-metadata, then FQN
+    /// Behavior order comparison: <c>[BehaviorOrder]</c> ascending, then source-before-metadata, then FQN
     /// lexicographic order for determinism.
     /// </summary>
     internal static int CompareBehaviorOrder(BehaviorModel a, BehaviorModel b)
@@ -423,7 +424,7 @@ internal static class RegistrationEmitter
     }
 
     /// <summary>
-    /// Orders <paramref name="models"/>' behaviors (PD-13a) and projects them onto a single
+    /// Orders <paramref name="models"/>' behaviors by <c>[BehaviorOrder]</c> and projects them onto a single
     /// request/response pair, returning the closed behavior FQNs that apply. This is the
     /// emitter-facing entry point that <see cref="DispatcherEmitter"/> uses to decide the D4 bypass:
     /// it performs the SAME ordering + matching <see cref="EmitBehaviorRegistrations"/> performs, so

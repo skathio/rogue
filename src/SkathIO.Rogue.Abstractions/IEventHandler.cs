@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace SkathIO.Rogue;
 
-/// <summary>Handles an event of type <typeparamref name="TEvent"/> (D5/FR-2, PD-42).</summary>
+/// <summary>Handles an event of type <typeparamref name="TEvent"/>; an event may have any number of handlers.</summary>
 public interface IEventHandler<in TEvent>
     where TEvent : IEvent
 {

@@ -10,13 +10,13 @@ namespace SkathIO.Rogue.Migration.Analyzer;
 /// Reports each type declaration whose base list references a MediatR marker/handler interface
 /// (<c>IRequest</c>/<c>IRequestHandler</c>/<c>INotification</c>/<c>INotificationHandler</c>/
 /// <c>IStreamRequest</c>/<c>IStreamRequestHandler</c>), so <see cref="MigrateMediatRMarkerTypeCodeFix"/>
-/// can rewrite it onto the post-D5 SkathIO.Rogue CQS contract (ROGM006). When a response-bearing
+/// can rewrite it onto the SkathIO.Rogue CQS contract (ROGM006). When a response-bearing
 /// request's command-vs-query intent cannot be inferred from its name it additionally emits ROGM005
 /// (manual-review) — it is still migrated to the safe-default <c>ICommand&lt;T&gt;</c>, never silently
-/// mis-mapped as a query (F8 E1, PD-44 amendment).
+/// mis-mapped as a query, because a query that mutates state is the more dangerous mistake.
 /// </summary>
 /// <remarks>
-/// Syntax-driven (base-list scan) rather than symbol-driven: the AC-F migration gate compiles the
+/// Syntax-driven (base-list scan) rather than symbol-driven: the migration test compiles its
 /// sample against in-source MediatR stubs, and a base-list name scan fires identically whether or not
 /// the MediatR symbols resolve, which keeps the analyzer robust across the fixed-point apply loop.
 /// </remarks>

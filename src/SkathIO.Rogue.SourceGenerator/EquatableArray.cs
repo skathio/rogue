@@ -9,7 +9,7 @@ namespace SkathIO.Rogue.SourceGenerator;
 /// An immutable array wrapper with element-wise value equality, safe for use in
 /// incremental generator model records. Plain <see cref="ImmutableArray{T}"/> uses
 /// reference equality in record <c>==</c> comparisons, which defeats the incremental
-/// generator cache (NFR-MAINT-4).
+/// generator cache and makes every run regenerate.
 /// </summary>
 internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnumerable<T>
     where T : IEquatable<T>

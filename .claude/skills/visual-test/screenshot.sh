@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Serve site/ on a free loopback port and screenshot it at phone and desktop
-# widths in light and dark mode. Usage: screenshot.sh <output-dir>
+# Serve site/ and the built docs on a free loopback port, laid out as GitHub Pages serves them
+# (/rogue/ and /rogue/docs/), and screenshot the landing page, the Getting started docs page and
+# the ISender API page at phone and desktop widths in light and dark mode.
+# Usage: screenshot.sh <output-dir>
+# The docs come from the last docs-site/build.sh run (artifacts/pages/docs); run it first.
 # Playwright is fetched by npx at a pinned version; nothing is added to the repo.
 set -euo pipefail
 
@@ -9,16 +12,34 @@ root="$(git rev-parse --show-toplevel)"
 pw_version="1.61.1"
 mkdir -p "$out"
 
+docs="$root/artifacts/pages/docs"
+if [ ! -f "$docs/index.html" ] || [ ! -f "$docs/api/skathio-rogue-isender.html" ]; then
+  echo "FAIL: no built docs in $docs: run docs-site/build.sh first" >&2
+  exit 1
+fi
+
+# The landing page is served from site/ as it is now, the docs from the last build. Both sit
+# under /rogue/ because the docs' asset links are absolute to that base.
+serve="$out/serve"
+rm -rf "$serve"
+mkdir -p "$serve/rogue"
+for f in "$root"/site/*; do
+  ln -s "$f" "$serve/rogue/$(basename "$f")"
+done
+ln -s "$docs" "$serve/rogue/docs"
+
 # The server binds port 0 itself, so the OS gives it a free port with no
 # window for another process to take it, and a server another session left on
 # a fixed port can never be screenshotted by mistake. The port is read back
 # from the server's own startup line.
-python3 -u -m http.server 0 --bind 127.0.0.1 --directory "$root/site" >"$out/http.log" 2>&1 &
+python3 -u -m http.server 0 --bind 127.0.0.1 --directory "$serve" >"$out/http.log" 2>&1 &
 server=$!
 trap 'kill "$server" 2>/dev/null || true' EXIT
 
+# The wait ends as soon as the port is printed; the long ceiling is for a machine busy with
+# builds, where the server can take several seconds to start.
 port=""
-for _ in $(seq 1 50); do
+for _ in $(seq 1 300); do
   port="$(sed -n 's/^Serving HTTP on .* port \([0-9][0-9]*\) .*/\1/p' "$out/http.log")"
   [ -n "$port" ] && break
   sleep 0.1
@@ -27,47 +48,64 @@ if [ -z "$port" ]; then
   echo "FAIL: http.server did not start; see $out/http.log" >&2
   exit 1
 fi
-url="http://127.0.0.1:${port}/"
-# Fail closed if the page served is not this repo's site.
-if ! curl -fsS "$url" | grep -q '<title>Rogue</title>'; then
-  echo "FAIL: $url did not serve site/index.html (title is not 'Rogue')" >&2
-  exit 1
-fi
+base="http://127.0.0.1:${port}/rogue/"
 
-for size in "phone:390,844" "desktop:1440,900"; do
-  name="${size%%:*}"; viewport="${size#*:}"
-  for scheme in light dark; do
-    # Chromium's capture intermittently fails with "Unable to capture
-    # screenshot" when other Chromium instances load the machine; retry with a
-    # backoff, and fail if every attempt fails.
-    for attempt in 1 2 3 4 5; do
-      if npx -y "playwright@${pw_version}" screenshot --browser chromium \
-          --viewport-size="$viewport" --color-scheme="$scheme" --full-page \
-          --wait-for-timeout=500 "$url" "$out/site-${name}-${scheme}.png"; then
-        break
-      fi
-      if [ "$attempt" = 5 ]; then
-        echo "FAIL: could not capture site-${name}-${scheme}.png" >&2
-        exit 1
-      fi
-      sleep "$attempt"
+# Each page: shot name prefix, URL, and a title the served page must have, so a wrong page
+# fails closed instead of being screenshotted.
+pages=(
+  "site|${base}|<title>Rogue</title>"
+  "docs-getting-started|${base}docs/|<title>Getting started[ |<]"
+  "docs-isender|${base}docs/api/skathio-rogue-isender.html|<title>[^<]*ISender[ |<]"
+)
+for page in "${pages[@]}"; do
+  IFS='|' read -r prefix url title <<<"$page"
+  # Read the whole page before matching: grep -q stopping early would fail curl under pipefail.
+  if ! html="$(curl -fsS "$url")" || ! grep -q "$title" <<<"$html"; then
+    echo "FAIL: $url did not serve the expected page (title does not match '$title')" >&2
+    exit 1
+  fi
+done
+
+for page in "${pages[@]}"; do
+  IFS='|' read -r prefix url _ <<<"$page"
+  for size in "phone:390,844" "desktop:1440,900"; do
+    name="${size%%:*}"; viewport="${size#*:}"
+    for scheme in light dark; do
+      # Chromium's capture intermittently fails with "Unable to capture
+      # screenshot" when other Chromium instances load the machine; retry with a
+      # backoff, and fail if every attempt fails.
+      for attempt in 1 2 3 4 5; do
+        if npx -y "playwright@${pw_version}" screenshot --browser chromium \
+            --viewport-size="$viewport" --color-scheme="$scheme" --full-page \
+            --wait-for-timeout=500 "$url" "$out/${prefix}-${name}-${scheme}.png"; then
+          break
+        fi
+        if [ "$attempt" = 5 ]; then
+          echo "FAIL: could not capture ${prefix}-${name}-${scheme}.png" >&2
+          exit 1
+        fi
+        sleep "$attempt"
+      done
     done
   done
 done
 echo "Screenshots in $out:"
-ls -1 "$out"/site-*.png
+ls -1 "$out"/*.png
 
 # A full-page shot wider than its viewport means the page scrolls sideways.
 status=0
-for size in "phone:390" "desktop:1440"; do
-  name="${size%%:*}"; want="${size#*:}"
-  for scheme in light dark; do
-    png="$out/site-${name}-${scheme}.png"
-    got="$(python3 -c 'import struct,sys; f=open(sys.argv[1],"rb"); f.seek(16); print(struct.unpack(">I", f.read(4))[0])' "$png")"
-    if [ "$got" != "$want" ]; then
-      echo "WARN: $png is ${got}px wide for a ${want}px viewport: horizontal overflow" >&2
-      status=2
-    fi
+for page in "${pages[@]}"; do
+  prefix="${page%%|*}"
+  for size in "phone:390" "desktop:1440"; do
+    name="${size%%:*}"; want="${size#*:}"
+    for scheme in light dark; do
+      png="$out/${prefix}-${name}-${scheme}.png"
+      got="$(python3 -c 'import struct,sys; f=open(sys.argv[1],"rb"); f.seek(16); print(struct.unpack(">I", f.read(4))[0])' "$png")"
+      if [ "$got" != "$want" ]; then
+        echo "WARN: $png is ${got}px wide for a ${want}px viewport: horizontal overflow" >&2
+        status=2
+      fi
+    done
   done
 done
 exit "$status"

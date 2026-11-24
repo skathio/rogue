@@ -2,8 +2,8 @@ namespace SkathIO.Rogue.Logging;
 
 /// <summary>
 /// Configuration for <see cref="LoggingBehavior{TRequest,TResponse}"/>. Resolved from DI; register
-/// a singleton instance to override the defaults. The default instance keeps payload logging off
-/// (NFR-SEC-2).
+/// a singleton instance to override the defaults. The default instance keeps payload logging off,
+/// because payloads may hold secrets or PII.
 /// </summary>
 public sealed class LoggingOptions
 {

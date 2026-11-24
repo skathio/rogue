@@ -7,12 +7,12 @@ namespace SkathIO.Rogue.Migration.Analyzer;
 
 /// <summary>
 /// Maps the MediatR marker/handler interface names onto the post-D5 SkathIO.Rogue CQS contracts
-/// (PD-43/PD-44, FR-13). The migration target is the <b>CQS core</b>
+/// so migrated code uses them directly. The migration target is the <b>CQS core</b>
 /// (<c>ICommand</c>/<c>IQuery</c>/<c>IEvent</c> + handlers), <b>not</b> the adapter
 /// <c>SkathIO.Rogue.Compatibility.IRequest</c> shapes — those are an opt-in transitional aid, not the
-/// migration target (PD-32a). Because the migration goes directly to <c>IQuery&lt;T&gt;</c>, the
+/// migration target. Because the migration goes directly to <c>IQuery&lt;T&gt;</c>, the
 /// adapter-only <c>[MapAsQuery]</c> attribute is not emitted on this path: query intent is expressed by
-/// the contract itself (PD-44 amendment — "migrates directly to <c>IQuery&lt;T&gt;</c>").
+/// the contract itself.
 /// </summary>
 internal static class MediatRTypeMapping
 {
@@ -34,7 +34,8 @@ internal static class MediatRTypeMapping
     /// The intent a response-bearing MediatR <c>IRequest&lt;T&gt;</c> / <c>IRequestHandler&lt;,&gt;</c>
     /// is migrated under. <see cref="Ambiguous"/> means the name signalled neither read nor write; the
     /// type is migrated to the safe-default command and a manual-review diagnostic (ROGM005) is raised —
-    /// never silently mis-mapped as a query (F8 E1, PD-44 amendment).
+    /// never silently mis-mapped as a query, because a query that mutates state is the more dangerous
+    /// mistake.
     /// </summary>
     public enum RequestIntent
     {

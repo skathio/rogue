@@ -8,7 +8,7 @@ internal sealed class RogueEmitOptions
 {
     /// <summary>
     /// Historical static gate for the object-typed <c>SendObject</c> dispatch switch.
-    /// As of Fix 2 (PD-3) the <c>SendObject</c> switch is ALWAYS emitted when handlers exist —
+    /// The <c>SendObject</c> switch is ALWAYS emitted when handlers exist —
     /// the runtime <c>RogueOptions.EnableObjectDispatch</c> flag controls whether the object path
     /// is used, not whether it is generated. This flag is retained for a future Phase 8 packaging
     /// gate (linker trim/substitution) and is currently unused by the emitters.

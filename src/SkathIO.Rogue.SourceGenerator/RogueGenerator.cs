@@ -497,7 +497,7 @@ public sealed class RogueGenerator : IIncrementalGenerator
     /// <summary>
     /// Builds the combined model from source-discovered items and metadata-discovered behaviors.
     /// Source-discovered behaviors are added first; a metadata-discovered behavior is added only
-    /// if its FQN was not already seen (PD-17 deduplication: a behavior present in both the
+    /// if its FQN was not already seen (deduplication: a behavior present in both the
     /// project's own source and a referenced assembly is counted once, source winning).
     /// </summary>
     internal static DiscoveredModels BuildDiscoveredModels(
@@ -697,7 +697,7 @@ public sealed class RogueGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Reads the <c>[BehaviorOrder(int)]</c> value from a behavior type symbol (PD-4). Returns 0
+    /// Reads the <c>[BehaviorOrder(int)]</c> value from a behavior type symbol. Returns 0
     /// when the attribute is absent or malformed. Works for both source-declared symbols and
     /// referenced-assembly metadata symbols (both expose <see cref="ISymbol.GetAttributes"/>).
     /// </summary>
@@ -720,8 +720,8 @@ public sealed class RogueGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Returns true when the given type carries <c>[SkathIO.Rogue.MediatR.MapAsQuery]</c> (PD-43
-    /// amendment / PD-48 — the F8 query-override marker on an adapter request type). Uses the same
+    /// Returns true when the given type carries <c>[SkathIO.Rogue.MediatR.MapAsQuery]</c>, the marker that
+    /// maps an adapter request type to a query instead of the default command. Uses the same
     /// <see cref="ISymbol.GetAttributes"/> presence scan as <see cref="GetBehaviorOrder"/>. The argument
     /// is the request type from the adapter handler interface (<c>iface.TypeArguments[0]</c>); only a
     /// named type can carry the class-targeted attribute, so a non-named type symbol returns false.

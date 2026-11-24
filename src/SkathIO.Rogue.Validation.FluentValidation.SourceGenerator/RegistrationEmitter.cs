@@ -85,7 +85,7 @@ internal static class RegistrationEmitter
     /// a supported, safe shape — confirmed by Iteration 1.1's review.
     /// <para>
     /// Suppressed (empty output) when <see cref="HasNothingToRegister"/> is true — mirrors the core
-    /// generator's PD-45 suppression intent, simplified per D2: a zero-validator compilation has
+    /// generator's suppression of empty registrars, simplified: a zero-validator compilation has
     /// nothing to contribute, so no empty registrar is appended.
     /// </para>
     /// Output: <c>RogueFluentValidationModuleInit.g.cs</c> (empty when suppressed).

@@ -74,6 +74,32 @@ jobs:
       - name: Pack the packages and run the consumer solution against them
         run: tests/consumer/run.sh
 
+  # The full docs build, the same script site.yml deploys from: the API reference generated from
+  # the /// comments by docfx, its cleanup, and the VitePress build, whose dead-link check stays
+  # on. A dead link or a build error fails the pull request.
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install the docs toolchain from the lockfile
+        working-directory: docs-site
+        run: npm ci
+      - name: Build the docs and assemble the Pages folder
+        run: docs-site/build.sh
+      - name: Run the docs tooling tests
+        run: node --test docs-site/
+
   bench-smoke:
     name: Benchmark smoke
     runs-on: ubuntu-latest

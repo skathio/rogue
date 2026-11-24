@@ -33,8 +33,9 @@ public sealed class RogueOptions
     /// <summary>
     /// Runtime behavior registrations contributed via <see cref="AddOpenBehavior"/> /
     /// <see cref="AddBehavior{TBehavior}"/>. Read by the generated <c>Register</c> method (in the
-    /// consumer's compilation) to apply the PD-13a ordering sort key, so it must be <c>public</c> —
-    /// an <c>internal</c> property produces CS0122 in every real consumer (PD-19).
+    /// consumer's compilation) to sort behaviors by their order, so it must be <c>public</c> —
+    /// an <c>internal</c> property produces CS0122 in every real consumer, whose compilation cannot see
+    /// this assembly's internals.
     /// </summary>
     public List<BehaviorRegistration> BehaviorRegistrations { get; } = new List<BehaviorRegistration>();
 
@@ -55,6 +56,7 @@ public sealed class RogueOptions
 
 /// <summary>
 /// A single runtime behavior registration. Public because the generated <c>Register</c> method
-/// reads <see cref="RogueOptions.BehaviorRegistrations"/> from the consumer's compilation (PD-19).
+/// reads <see cref="RogueOptions.BehaviorRegistrations"/> from the consumer's compilation, which cannot
+/// see this assembly's internals.
 /// </summary>
 public sealed record BehaviorRegistration(Type BehaviorType, int Order, bool IsOpen);

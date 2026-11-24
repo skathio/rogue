@@ -25,6 +25,13 @@
          they load from the package's own output, so this builds it without referencing its assembly. -->
     <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging\SkathIO.Rogue.Messaging.csproj"
                       ReferenceOutputAssembly="false" />
+    <!-- MessagingRabbitMqRulesTests and MessagingOutboxInboxRulesTests read these packages' built DLLs
+         from their own output. Without a reference, `dotnet test` on the solution can run these tests
+         before those projects finish building, and the rules then find no DLL to read. -->
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging.RabbitMQ\SkathIO.Rogue.Messaging.RabbitMQ.csproj"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\SkathIO.Rogue.Messaging.Outbox\SkathIO.Rogue.Messaging.Outbox.csproj"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

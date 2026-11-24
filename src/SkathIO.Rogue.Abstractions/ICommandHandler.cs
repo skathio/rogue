@@ -6,7 +6,8 @@ namespace SkathIO.Rogue;
 /// <summary>
 /// Handles a command of type <typeparamref name="TCommand"/> returning
 /// <typeparamref name="TResponse"/>. Primary CQS handler contract — declares its own
-/// <see cref="Handle"/> with no shared request-handler base (PD-40 clean break).
+/// <see cref="Handle"/> with no shared request-handler base, so command and query handlers stay
+/// separate contracts.
 /// </summary>
 public interface ICommandHandler<in TCommand, TResponse>
     where TCommand : ICommand<TResponse>
@@ -18,7 +19,7 @@ public interface ICommandHandler<in TCommand, TResponse>
 /// <summary>
 /// Handles a command of type <typeparamref name="TCommand"/> that produces no return value.
 /// Primary CQS handler contract — declares its own <see cref="Handle"/> with no shared
-/// request-handler base (PD-40 clean break).
+/// request-handler base, so command and query handlers stay separate contracts.
 /// </summary>
 public interface ICommandHandler<in TCommand>
     where TCommand : ICommand

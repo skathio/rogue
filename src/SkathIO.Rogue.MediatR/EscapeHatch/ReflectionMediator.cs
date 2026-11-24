@@ -19,15 +19,16 @@ namespace SkathIO.Rogue.Compatibility;
 /// commands/queries/events and is <b>not AOT-safe</b> — avoid in published AOT or trimmed applications.
 /// Migrate callers to the generated <c>RogueDispatcher</c> or <c>ISender</c> path as soon as possible.
 /// <para>
-/// PD-46/PD-48: dispatches against the CQS core (PD-40 clean break) by <b>closed runtime type</b> — for
+/// Dispatches against the CQS core, where commands and queries share no base, by
+/// <b>closed runtime type</b> — for
 /// each call it constructs the closed handler interface from the message's concrete type and resolves it.
 /// Commands resolve <c>ICommandHandler&lt;TCommand[, TResponse]&gt;</c>, queries
 /// <c>IQueryHandler&lt;TQuery, TResponse&gt;</c>, events <c>IEventHandler&lt;TEvent&gt;</c>. Adapter
-/// (<c>SkathIO.Rogue.Compatibility</c>) message types need no special handling here: under PD-48,
+/// (<c>SkathIO.Rogue.Compatibility</c>) message types need no special handling here: the adapter's
 /// <c>INotification</c>/<c>IStreamRequest&lt;T&gt;</c> ARE core <c>IEvent</c>/<c>IStreamQuery&lt;T&gt;</c>
 /// (IS-A), so <c>Publish(object)</c>'s <c>is IEvent</c> guard accepts an adapter notification directly;
 /// adapter <c>IRequest&lt;T&gt;</c> command/query dispatch is the source generator's responsibility
-/// (the F8 + <c>[MapAsQuery]</c> mapping), not this reflective fallback, whose object-dispatch entry
+/// (command by default, query with <c>[MapAsQuery]</c>), not this reflective fallback, whose object-dispatch entry
 /// points (<c>Send(object)</c>) deliberately throw — use the generated object-dispatch path instead.
 /// </para>
 /// </remarks>

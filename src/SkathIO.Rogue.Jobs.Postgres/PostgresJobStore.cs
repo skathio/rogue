@@ -18,7 +18,7 @@ namespace SkathIO.Rogue.Jobs.Postgres;
 /// <remarks>
 /// Time is the store's <see cref="TimeProvider"/>, sent with each command, not the database clock, so
 /// every process sharing the database must keep its clock in sync. The store creates or upgrades its
-/// schema before its first command unless <see cref="PostgresJobsOptions.AutoMigrate"/> is off.
+/// schema before its first command unless <see cref="DatabaseJobsOptions.AutoMigrate"/> is off.
 /// </remarks>
 public sealed partial class PostgresJobStore : IJobStore, IDatabaseJobStore
 {
@@ -275,7 +275,7 @@ public sealed partial class PostgresJobStore : IJobStore, IDatabaseJobStore
 
     /// <summary>
     /// Deletes succeeded and dead-lettered jobs older than their retention, a batch per statement, and
-    /// returns how many it deleted. The pruner calls it every <see cref="PostgresJobsOptions.PruneInterval"/>.
+    /// returns how many it deleted. The pruner calls it every <see cref="DatabaseJobsOptions.PruneInterval"/>.
     /// </summary>
     public async Task<int> PruneAsync(CancellationToken cancellationToken = default)
     {

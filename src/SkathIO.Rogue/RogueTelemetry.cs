@@ -6,9 +6,9 @@ using System.Diagnostics.Metrics;
 namespace SkathIO.Rogue;
 
 /// <summary>
-/// Observability shim (FR-45). Emits an <see cref="Activity"/> per dispatch plus a dispatch count
+/// Observability shim. Emits an <see cref="Activity"/> per dispatch plus a dispatch count
 /// and duration histogram, all under the <c>SkathIO.Rogue</c> source/meter name. Built only on
-/// <c>System.Diagnostics.DiagnosticSource</c> (NFR-DEP-2 — no third-party deps on core).
+/// <c>System.Diagnostics.DiagnosticSource</c>, so the core package takes no third-party dependency.
 /// </summary>
 /// <remarks>
 /// Telemetry is gated twice: once at registration via <see cref="RogueOptions.EnableTelemetry"/>
@@ -42,7 +42,7 @@ public static class RogueTelemetry
     /// Begins a dispatch scope. Returns <c>null</c> when telemetry is disabled or unsubscribed —
     /// callers must null-check and pass whatever they get back to <see cref="StopDispatch"/>.
     /// </summary>
-    /// <typeparam name="TRequest">The request type; its <see cref="Type.Name"/> tags the activity.</typeparam>
+    /// <typeparam name="TRequest">The request type; <c>typeof(TRequest).Name</c> tags the activity.</typeparam>
     public static DispatchScope? StartDispatch<TRequest>()
         where TRequest : notnull
     {
