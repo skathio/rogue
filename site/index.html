@@ -1,16 +1,18 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Rogue</title>
 <meta name="description" content="SkathIO.Rogue: an AOT-safe, source-generated mediator, background jobs and messaging for .NET. Meets or beats MediatR and Hangfire in every measured benchmark. MIT, for good.">
-<link rel="icon" href="mark.svg" type="image/svg+xml"><script src="theme.js"></script>
+<link rel="icon" href="mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="_kit/tokens.css"><script src="_kit/theme.js"></script><script src="_kit/site-nav.js" defer></script>
 <style>
-:root{--canvas:#f7f6f2;--surface:#fff;--line:#dedbd2;--ink:#1b1d22;--muted:#5b606b;--accent:#6d28d9;--accent-soft:#ede5fb;--code:#efece4;--glow:rgba(109,40,217,.25);--win:#047857;--sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--canvas:#101216;--surface:#171a20;--line:#2b3039;--ink:#e8e9ec;--muted:#a0a6b1;--accent:#a78bfa;--accent-soft:#241a3d;--code:#1f232b;--glow:rgba(140,90,255,.45);--win:#6ee7b7;color-scheme:dark}}
-:root[data-theme=dark]{--canvas:#101216;--surface:#171a20;--line:#2b3039;--ink:#e8e9ec;--muted:#a0a6b1;--accent:#a78bfa;--accent-soft:#241a3d;--code:#1f232b;--glow:rgba(140,90,255,.45);--win:#6ee7b7;color-scheme:dark}
+/* Colours, type, spacing and the light/dark switch come from _kit/tokens.css (hashira's site kit).
+   Rogue's accent matches the docs (.github/pages-theme.css): the darker violet in light mode,
+   the lavender of the mark in dark mode. --win is the landing's own colour for rival results. */
+:root{--site-accent:#6d28d9;--site-accent-dark:#a78bfa;--site-accent-soft:#ede5fb;--site-accent-soft-dark:#241a3d;--win:#047857}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--win:#6ee7b7}}
+:root[data-theme=dark]{--win:#6ee7b7}
+site-nav:not(:defined){display:block;min-height:50px}
 
-*{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.6 var(--sans)}a{color:inherit;text-decoration:none}code{font:.9em var(--mono)}
-nav{position:sticky;top:0;display:flex;align-items:center;gap:24px;padding:12px 18px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--canvas) 85%,transparent);backdrop-filter:blur(8px);font-size:.93rem;z-index:2}
-nav .brand{display:flex;gap:8px;align-items:center;font-weight:800}nav .brand img{width:26px}nav .brand i{font-style:normal;color:var(--accent)}
-nav .muted{color:var(--muted)}nav .docs{color:var(--accent);font-weight:700}nav .sp{flex:1}nav .btn{font:inherit;color:var(--ink);background:none;border:1px solid var(--line);border-radius:8px;padding:4px 12px;cursor:pointer}nav .home{color:var(--muted);font-size:.85rem;white-space:nowrap}
-.wrap{max-width:1140px;margin:0 auto;padding:0 40px}
+*{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font:var(--text)/var(--leading) var(--sans)}a{color:inherit;text-decoration:none}code{font:.9em var(--mono)}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--gutter)}
 .hero{display:grid;grid-template-columns:1fr 300px;gap:40px;align-items:center;padding:80px 0 56px}
 .eyebrow{color:var(--accent);font-size:.75rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
 h1{font-size:3.6rem;line-height:1.05;letter-spacing:-.035em;margin:12px 0 20px}h1 i{font-style:normal;color:var(--accent)}
@@ -32,9 +34,9 @@ th,td{text-align:left;padding:10px 16px;border-bottom:1px solid var(--line);whit
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]) .links a.p{color:#14101f}}:root[data-theme=dark] .links a.p{color:#14101f}
 footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:.85rem}
 @media (max-width:960px){.pillars,.grid{grid-template-columns:1fr 1fr}.hero{grid-template-columns:1fr 220px}.emblem{width:220px}h1{font-size:3rem}}
-@media (max-width:760px){.wrap{padding:0 16px}.hero{grid-template-columns:1fr;padding:44px 0 32px}.emblem{width:168px;order:-1}h1{font-size:2.4rem}.stats{grid-template-columns:1fr 1fr}.two,.grid,.pillars{grid-template-columns:1fr}nav{gap:14px}nav .muted{display:none}section{padding:48px 0}table{font-size:.85rem}th,td{padding:9px 10px;white-space:normal;vertical-align:top}}
+@media (max-width:760px){.hero{grid-template-columns:1fr;padding:44px 0 32px}.emblem{width:168px;order:-1}h1{font-size:2.4rem}.stats{grid-template-columns:1fr 1fr}.two,.grid,.pillars{grid-template-columns:1fr}section{padding:48px 0}table{font-size:.85rem}th,td{padding:9px 10px;white-space:normal;vertical-align:top}}
 </style></head><body>
-<nav><a class=brand href="./"><img src="mark.svg" alt=""><span>Ro<i>gue</i></span></a><a class=muted href="#three">Mediator · Jobs · Messaging</a><a class=muted href="#benchmarks">Benchmarks</a><a class=muted href="#compared">Compared</a><a class=docs href="docs/">Docs</a><span class=sp></span><a class=home href="https://skathio.github.io/">← skathio</a><button type="button" id="theme" class="btn" hidden>Theme</button></nav>
+<site-nav name="Rogue" logo="mark.svg" root="./" docs="docs/"><script type="application/json">{"nav":[{"label":"Mediator · Jobs · Messaging","href":"#three"},{"label":"Benchmarks","href":"#benchmarks"},{"label":"Compared","href":"#compared"},{"label":"API","href":"./docs/api/skathio-rogue"}],"home_link":{"label":"← skathio","href":"https://skathio.github.io/"}}</script></site-nav>
 <div class=wrap>
 <header class=hero><div>
 <div class=eyebrow>.NET library · 12 packages · MIT</div>

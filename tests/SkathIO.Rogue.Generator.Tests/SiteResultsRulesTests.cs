@@ -113,7 +113,8 @@ public sealed class SiteResultsRulesTests
 
         Assert.Contains("prefers-color-scheme:dark", Regex.Replace(html, @"\s+", string.Empty), StringComparison.Ordinal);
         Assert.Matches(@"\[data-theme=""?dark""?\]", html);
-        Assert.Matches(@"<script[^>]*src=""?theme\.js""?", html);
+        // The theme switch is the site kit's theme.js, which the Pages build copies into _kit/.
+        Assert.Matches(@"<script[^>]*src=""?_kit/theme\.js""?", html);
     }
 
     // ── Committed ─────────────────────────────────────────────────────────────────────

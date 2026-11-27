@@ -80,9 +80,10 @@ jobs:
       - name: Pack the packages and run the consumer solution against them
         run: tests/consumer/run.sh
 
-  # The full docs build, the same script site.yml deploys from: the API reference generated from
-  # the /// comments by docfx, its cleanup, and the VitePress build, whose dead-link check stays
-  # on. A dead link or a build error fails the pull request.
+  # The full docs build, the one site.yml deploys through hashira's pages-site.yml: the API
+  # reference generated from the /// comments by docfx, its cleanup by tools/docs-api/clean-api.mjs,
+  # and hashira's docs-build (pages.json checks and VitePress, whose dead-link check stays on). A
+  # dead link or a build error fails the pull request.
   docs:
     name: Docs build
     runs-on: ubuntu-latest
@@ -98,13 +99,18 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
-      - name: Install the docs toolchain from the lockfile
-        working-directory: docs-site
-        run: npm ci
-      - name: Build the docs and assemble the Pages folder
-        run: docs-site/build.sh
+      - uses: skathio/hashira/.github/actions/docs-build@v3 # moving major tag: new v3.x releases apply with no PR
+        with:
+          # Trusted input: the same command as site.yml's docs_pre_build_command; keep them equal.
+          pre_build_command: |
+            dotnet tool restore
+            dotnet restore SkathIO.Rogue.sln
+            docfx_out="$(mktemp -d)"
+            dotnet docfx metadata tools/docs-api/docfx.json --output "$docfx_out"
+            node tools/docs-api/clean-api.mjs "$docfx_out/docfx" "$DOCS_STAGE/api"
+            rm -rf "$docfx_out"
       - name: Run the docs tooling tests
-        run: node --test docs-site/
+        run: node --test tools/docs-api/
 
   bench-smoke:
     name: Benchmark smoke

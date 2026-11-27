@@ -126,8 +126,9 @@ jobs:
 
   # The full docs build at the release commit, the one site.yml deploys after the push. It runs
   # before anything is pushed, so a broken docs build stops the release while it can still be
-  # fixed, instead of failing the site deploy after the packages are on nuget.org. It runs
-  # third-party code (npm packages, docfx), so it holds no token beyond reading the repo.
+  # fixed, instead of failing the site deploy after the packages are on nuget.org. It uses
+  # hashira's docs-build with site.yml's pre-build command. It runs third-party code (npm
+  # packages, docfx), so it holds no token beyond reading the repo.
   docs:
     name: docs
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
@@ -144,11 +145,16 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
-      - name: Install the docs toolchain from the lockfile
-        working-directory: docs-site
-        run: npm ci
-      - name: Build the docs and assemble the Pages folder
-        run: docs-site/build.sh
+      - uses: skathio/hashira/.github/actions/docs-build@v3 # moving major tag: new v3.x releases apply with no PR
+        with:
+          # Trusted input: the same command as site.yml's docs_pre_build_command; keep them equal.
+          pre_build_command: |
+            dotnet tool restore
+            dotnet restore SkathIO.Rogue.sln
+            docfx_out="$(mktemp -d)"
+            dotnet docfx metadata tools/docs-api/docfx.json --output "$docfx_out"
+            node tools/docs-api/clean-api.mjs "$docfx_out/docfx" "$DOCS_STAGE/api"
+            rm -rf "$docfx_out"
 
   publish:
     name: publish
@@ -273,11 +279,12 @@ jobs:
           version: ${{ needs.version.outputs.resolved_version }}
 
   # Deploys the project page from the released ref, after `publish` and behind its approval
-  # (`released: true` tells site.yml not to ask again). Same gate as `publish`.
+  # (`released: true` tells site.yml not to ask again). Same gate as `publish`, and main only, as
+  # site.yml admits `released` from publish.yml on main alone.
   site:
     name: site
     needs: publish
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != '' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/site.yml
     permissions:
       contents: read

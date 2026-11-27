@@ -3,7 +3,7 @@
     {
       "src": [
         {
-          "src": "../src",
+          "src": "../../src",
           "files": [
             "SkathIO.Rogue.Abstractions/SkathIO.Rogue.Abstractions.csproj",
             "SkathIO.Rogue/SkathIO.Rogue.csproj",
@@ -20,7 +20,7 @@
           ]
         }
       ],
-      "dest": "../artifacts/docs-site/docfx",
+      "dest": "docfx",
       "outputFormat": "markdown",
       "noRestore": true,
       "disableGitFeatures": true,

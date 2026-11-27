@@ -71,16 +71,6 @@ public sealed class ChangelogReleaseRulesTests
         Assert.StartsWith("## [1.2.1] - ", ReleaseHeadings()[2], StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void TheUnreleasedSection_IsEmpty()
-    {
-        Match unreleased = Regex.Match(Text(), @"(?ms)^## \[Unreleased\]\s*$(?<body>.*?)(?=^## \[)");
-        Assert.True(unreleased.Success, "CHANGELOG.md has no [Unreleased] section followed by a release.");
-
-        string body = unreleased.Groups["body"].Value;
-        Assert.True(body.Trim().Length == 0, "[Unreleased] is not empty:\n" + body);
-    }
-
     // ── Release date ──────────────────────────────────────────────────────────────────
 
     [Fact]

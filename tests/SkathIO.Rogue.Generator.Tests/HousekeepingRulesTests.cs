@@ -28,6 +28,7 @@ public sealed class HousekeepingRulesTests : IClassFixture<HousekeepingRulesTest
     private const string AllowListPath = ".github/allowed-packages.txt";
     private const string SiteWorkflowPath = ".github/workflows/site.yml";
     private const string CiPath = ".github/workflows/ci.yml";
+    private const string PublishWorkflowPath = ".github/workflows/publish.yml";
 
     private static readonly string[] _netStandardOnlyEntries =
     {
@@ -154,14 +155,16 @@ public sealed class HousekeepingRulesTests : IClassFixture<HousekeepingRulesTest
 
     // ── Site workflow ─────────────────────────────────────────────────────────────────
 
+    // site.yml checks nothing out since hashira's pages-site.yml builds the site; publish.yml
+    // checks out the repo and hashira, so its pins carry the version comments to check.
     [Fact]
-    public void SiteWorkflow_CheckoutComment_NamesTheVersionOfItsPin()
+    public void PublishWorkflow_CheckoutComment_NamesTheVersionOfItsPin()
     {
         Dictionary<string, string> known = CheckoutPinVersions(RepoFiles.Read(CiPath));
-        Dictionary<string, string> site = CheckoutPinVersions(RepoFiles.Read(SiteWorkflowPath));
+        Dictionary<string, string> publish = CheckoutPinVersions(RepoFiles.Read(PublishWorkflowPath));
 
-        Assert.NotEmpty(site);
-        Assert.All(site, pin =>
+        Assert.NotEmpty(publish);
+        Assert.All(publish, pin =>
         {
             Assert.True(known.TryGetValue(pin.Key, out string? version), "ci.yml does not pin actions/checkout at " + pin.Key + ", so its version cannot be checked.");
             Assert.Equal(version, pin.Value);

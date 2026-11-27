@@ -1,22 +1,32 @@
-# Deploys the project page in site/ to GitHub Pages (https://skathio.github.io/<repo>/).
+# Deploys the project page in site/ and its docs to GitHub Pages (https://skathio.github.io/rogue/)
+# through hashira's pages-site.yml, the shared Pages flow of the skathio project sites.
 #
 # One release, one approval. publish.yml calls this after `publish`, which already passed the
 # `production` Environment's owner approval, so the page goes out after the package with no second
-# approval (`released: true` skips `gate`). Run by hand, for a page-only fix, it waits at `gate` for
-# that same approval. There is no push trigger: a deploy is always a release or an approved run.
-# The build job runs docs-site/build.sh, which builds the VitePress docs (guides and the API
-# reference generated from the /// comments) and assembles artifacts/pages: the site/ files at
-# its root and the docs under docs/. That folder is uploaded with hashira's pages-upload and
-# deployed with pages-deploy, both at hashira's moving `v3` tag like the other skathio sites (hashira's
-# v* tags are protected: only its admins can move one). The docs go out with
-# each release, so they match the version on NuGet. Deploys only from main; the github-pages environment's branch policy enforces that too.
-# publish.yml runs the same docs build in its `docs` job before the NuGet push, so a broken docs
-# build stops the release. A deploy that still fails after the push (a network error in npm ci,
-# restore or docfx) is not retried here: re-run this workflow by hand, approved in `production`.
+# approval (`released: true` skips pages-site's `gate`). Run by hand, for a page-only fix, it waits
+# at that gate for the same approval. There is no push trigger: a deploy is always a release or an
+# approved run, so the docs match the version on NuGet.
+#
+# pages-site.yml does the rest: it refuses any ref but main before the approval, copies site/ (the
+# landing page), adds the site kit in `_kit/`, builds the docs from docs/ and .github/pages.json
+# into `docs/`, uploads, and deploys; a released run deploys only while its commit holds the
+# highest vX.Y.Z tag. The docs_pre_build_command below writes the API reference into the staged
+# docs before VitePress runs: docfx reads the /// comments of the 12 packages and
+# tools/docs-api/clean-api.mjs turns its Markdown into pages under api/ (served at
+# /rogue/docs/api/). ci.yml and publish.yml run the same command through hashira's docs-build, so
+# keep the three copies equal. A deploy that fails after the push (a network error in restore or
+# docfx) is not retried here: re-run this workflow by hand, approved in `production`.
 name: site
 
 on:
   workflow_dispatch:
+    inputs:
+      # A boolean here too, so `inputs.released` is false, not null, on a hand run when it is
+      # passed to pages-site.yml's boolean input. `check` refuses true on a hand run.
+      released:
+        description: "Leave unchecked. Only publish.yml deploys without the approval; a hand run with this set is refused."
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       released:
@@ -26,65 +36,46 @@ on:
 
 permissions: {}
 
-
 jobs:
-  # One release, one approval: this job waits for the `production` Environment's owner approval.
-  gate:
-    if: ${{ !inputs.released }}
+  # `released: true` skips the approval, so only publish.yml run from main may pass it. A called
+  # workflow sees the caller's github context: github.workflow_ref names publish.yml on a release
+  # run and site.yml on a hand run. The comparison is exact: a prefix would admit publish.yml run
+  # from any branch.
+  check:
     runs-on: ubuntu-latest
-    environment: production
     permissions: {}
     steps:
-      - name: Owner approval
-        run: echo "Approved in the production environment."
+      - name: Refuse released on anything but a release run
+        env:
+          RELEASED: ${{ inputs.released }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          RELEASE_WORKFLOW: ${{ github.repository }}/.github/workflows/publish.yml@refs/heads/main
+        run: |
+          if [ "${RELEASED}" = "true" ] && [ "${WORKFLOW_REF}" != "${RELEASE_WORKFLOW}" ]; then
+            echo "::error::site: released is for publish.yml only; this run is ${WORKFLOW_REF}." >&2
+            exit 1
+          fi
 
-  build:
-    needs: gate
-    # After the approval at `gate`, or from publish.yml with `gate` skipped.
-    if: ${{ !cancelled() && (needs.gate.result == 'success' || (needs.gate.result == 'skipped' && inputs.released)) }}
-    runs-on: ubuntu-latest
-    # Read only: this job runs npm packages, VitePress and docfx. pages-upload does not need the
-    # OIDC token or Pages write (upload-pages-artifact v3.0.1 is a tar plus actions/upload-artifact,
-    # which uses the runner's own token); only `deploy` holds those grants.
+  site:
+    needs: check
+    # pages-site.yml's build job reads the repo; its deploy job publishes to Pages and proves
+    # itself with OIDC. A called workflow's jobs get no more than this.
     permissions:
-      contents: read
-    steps:
-      # actions/checkout v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: '10.0.x'
-      - name: Install the docs toolchain from the lockfile
-        working-directory: docs-site
-        run: npm ci
-      - name: Build the docs and assemble the Pages folder
-        run: docs-site/build.sh
-      - uses: skathio/hashira/.github/actions/pages-upload@v3 # moving major tag: new v3.x releases apply with no PR
-        with:
-          path: artifacts/pages
-
-  deploy:
-    needs: build
-    # One Pages deploy at a time. On this job only, so a run waiting at `gate` never holds the
-    # queue for the others.
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    # `!cancelled()` because a skipped `gate` upstream would otherwise skip this job too; unlike
-    # `always()` it still stops on a cancelled run.
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    permissions:
-      pages: write      # deploy-pages
-      id-token: write   # deploy-pages authenticates via OIDC
-    steps:
-      - id: deploy
-        uses: skathio/hashira/.github/actions/pages-deploy@v3 # moving major tag: new v3.x releases apply with no PR
+      contents: read   # pages-site build: checkout
+      pages: write     # pages-site deploy: deploy-pages
+      id-token: write  # pages-site deploy: deploy-pages authenticates via OIDC
+    uses: skathio/hashira/.github/workflows/pages-site.yml@v3 # moving major tag: new v3.x releases apply with no PR
+    with:
+      released: ${{ inputs.released }}
+      dotnet_version: '10.0.x'
+      # Trusted input, written here and never from PR or event text. One solution restore up front
+      # is much faster than docfx restoring each of the 12 projects (docfx.json sets noRestore).
+      # docfx writes into a new temporary folder (docfx.json's `dest` under --output), so no page
+      # of a removed type survives from an earlier run and two runs never share a folder.
+      docs_pre_build_command: |
+        dotnet tool restore
+        dotnet restore SkathIO.Rogue.sln
+        docfx_out="$(mktemp -d)"
+        dotnet docfx metadata tools/docs-api/docfx.json --output "$docfx_out"
+        node tools/docs-api/clean-api.mjs "$docfx_out/docfx" "$DOCS_STAGE/api"
+        rm -rf "$docfx_out"
