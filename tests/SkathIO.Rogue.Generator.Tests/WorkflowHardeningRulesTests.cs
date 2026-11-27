@@ -75,9 +75,11 @@ public sealed class WorkflowHardeningRulesTests
             .ToArray();
         string[] siteRefs = HashiraUsesRefs(RepoFiles.Read(SitePath));
 
-        Assert.Single(ciRefs);
-        Assert.Equal(3, publishRefs.Length);
-        Assert.Equal(2, siteRefs.Length);
+        // ci.yml: nuget-package-ci and docs-build. publish.yml: nuget-push, docs-build and the two
+        // hashira checkouts. site.yml: pages-site.
+        Assert.Equal(2, ciRefs.Length);
+        Assert.Equal(4, publishRefs.Length);
+        Assert.Single(siteRefs);
         Assert.All(ciRefs.Concat(publishRefs).Concat(siteRefs), static r => Assert.Equal("v3", r));
     }
 

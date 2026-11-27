@@ -6,6 +6,20 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- The project page at https://skathio.github.io/rogue/ now uses hashira's site kit: its colours
+  come from `_kit/tokens.css`, the theme toggle from `_kit/theme.js`, and its header is the shared
+  `<site-nav>` with the same links, in the same order, as the docs header (Mediator · Jobs ·
+  Messaging, Benchmarks, Compared, API, Docs, ← skathio). Its address and section anchors are
+  unchanged; `/rogue/theme.js` is gone, replaced by `/rogue/_kit/theme.js`.
+- The docs at `/rogue/docs/` are now built by the shared hashira Pages build (`@v3`) instead of
+  this repo's own VitePress setup in `docs-site/`, which is removed. Page URLs, including the API
+  reference under `/rogue/docs/api/`, are unchanged. The API pages are now listed in a flat
+  sidebar, and an "API" header link opens the namespace index.
+- The project page is deployed only from `main`: a hand-run deploy from another branch is refused,
+  and a release deploys it only from `main` and only while its commit holds the highest version tag.
+
 ## [2.0.0] - 2026-11-22
 
 ### Added

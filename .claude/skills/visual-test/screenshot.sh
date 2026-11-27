@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Serve site/ and the built docs on a free loopback port, laid out as GitHub Pages serves them
-# (/rogue/ and /rogue/docs/), and screenshot the landing page, the Getting started docs page and
-# the ISender API page at phone and desktop widths in light and dark mode.
+# Serve site/, the site kit and the built docs on a free loopback port, laid out as GitHub Pages
+# serves them (/rogue/, /rogue/_kit/ and /rogue/docs/), and screenshot the landing page, the Getting
+# started docs page and the ISender API page at phone (390x844) and desktop (1280x800) size in light
+# and dark mode, the sizes the shared <site-nav> header is compared at across the skathio sites.
 # Usage: screenshot.sh <output-dir>
-# The docs come from the last docs-site/build.sh run (artifacts/pages/docs); run it first.
+# The docs and the kit come from the last tools/docs-api/build-pages.sh run (artifacts/pages/docs and
+# artifacts/pages/_kit); run it first.
 # Playwright is fetched by npx at a pinned version; nothing is added to the repo.
 set -euo pipefail
 
@@ -13,19 +15,29 @@ pw_version="1.61.1"
 mkdir -p "$out"
 
 docs="$root/artifacts/pages/docs"
+kit="$root/artifacts/pages/_kit"
 if [ ! -f "$docs/index.html" ] || [ ! -f "$docs/api/skathio-rogue-isender.html" ]; then
-  echo "FAIL: no built docs in $docs: run docs-site/build.sh first" >&2
+  echo "FAIL: no built docs in $docs: run tools/docs-api/build-pages.sh first" >&2
   exit 1
 fi
+# Without the kit the landing has no tokens and no <site-nav>, so its shots would mislead.
+for f in tokens.css theme.js site-nav.js; do
+  if [ ! -f "$kit/$f" ]; then
+    echo "FAIL: no site kit file $kit/$f: run tools/docs-api/build-pages.sh first" >&2
+    exit 1
+  fi
+done
 
-# The landing page is served from site/ as it is now, the docs from the last build. Both sit
-# under /rogue/ because the docs' asset links are absolute to that base.
+# The landing page is served from site/ as it is now, the kit and the docs from the last build. All
+# sit under /rogue/ because the docs' asset links are absolute to that base, and the landing loads
+# the kit by the relative path _kit/.
 serve="$out/serve"
 rm -rf "$serve"
 mkdir -p "$serve/rogue"
 for f in "$root"/site/*; do
   ln -s "$f" "$serve/rogue/$(basename "$f")"
 done
+ln -s "$kit" "$serve/rogue/_kit"
 ln -s "$docs" "$serve/rogue/docs"
 
 # The server binds port 0 itself, so the OS gives it a free port with no
@@ -68,7 +80,7 @@ done
 
 for page in "${pages[@]}"; do
   IFS='|' read -r prefix url _ <<<"$page"
-  for size in "phone:390,844" "desktop:1440,900"; do
+  for size in "phone:390,844" "desktop:1280,800"; do
     name="${size%%:*}"; viewport="${size#*:}"
     for scheme in light dark; do
       # Chromium's capture intermittently fails with "Unable to capture
@@ -96,7 +108,7 @@ ls -1 "$out"/*.png
 status=0
 for page in "${pages[@]}"; do
   prefix="${page%%|*}"
-  for size in "phone:390" "desktop:1440"; do
+  for size in "phone:390" "desktop:1280"; do
     name="${size%%:*}"; want="${size#*:}"
     for scheme in light dark; do
       png="$out/${prefix}-${name}-${scheme}.png"

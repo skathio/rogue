@@ -28,10 +28,12 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   and runs its binary.
 - Benchmark smoke run, as CI runs it:
   `dotnet run --project bench/SkathIO.Rogue.Benchmarks/SkathIO.Rogue.Benchmarks.csproj -c Release -- --filter '*NoBehavior*' --job short --exporters json`
-- Docs site, as CI runs it (needs Node 24 and the .NET SDK): `npm ci` in `docs-site/`, then
-  `docs-site/build.sh` from the repo root. It generates the API reference with docfx, builds the
-  VitePress site (a dead link fails it) and assembles `artifacts/pages`. `node --test docs-site/`
-  runs the docs tooling tests.
+- Docs site: CI builds it with hashira's `docs-build` action (`@v3`), whose pre-build command
+  (in `site.yml`, `ci.yml` and `publish.yml`, kept equal) generates the API reference with docfx
+  and `tools/docs-api/clean-api.mjs`; a dead link fails it. Locally, `tools/docs-api/build-pages.sh`
+  (needs Node 24, the .NET SDK and network, or `HASHIRA_DIR` set to a hashira clone) runs the same
+  steps and assembles `artifacts/pages`. `node --test tools/docs-api/` runs the docs tooling tests
+  (it runs docfx, ~3 min).
 
 ## Layout
 
@@ -63,11 +65,12 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   consumes the packed packages, never project references.
 - `samples/`, `bench/` (BenchmarkDotNet; committed baselines in `bench/results/<date>-<sha>/`,
   allocation thresholds in `.bench/thresholds.json`), `docs/`, `site/`.
-- `docs-site/`: the VitePress docs served at `/rogue/docs/`. `.vitepress/config.mts` reads
-  `docs/*.md` as they are (no front matter or link edits; `governance.md` and `roadmap.md` are not
-  published), `docfx.json` and `clean-api.mjs` generate the API pages from the `///` comments, and
-  `build.sh` stages it all under `artifacts/`. Nothing generated is committed. Its npm packages are
-  build-only, so `.github/allowed-packages.txt` does not cover them.
+- Docs at `/rogue/docs/`: hashira builds them from `docs/*.md` as they are (no front matter or
+  link edits) and `.github/pages.json` (sidebar labels, header links, `governance.md` and
+  `roadmap.md` unpublished; `.github/pages-theme.css` keeps the light and dark brand colours).
+  `tools/docs-api/` holds `docfx.json` and `clean-api.mjs`, which generate the API pages under
+  `/rogue/docs/api/` from the `///` comments, and their tests. Nothing generated is committed; the
+  docs packages live in hashira, so `.github/allowed-packages.txt` does not cover them.
 
 ## Conventions
 
@@ -106,20 +109,25 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   approval in the `production` environment. It packs, pushes to nuget.org over OIDC, tags, then
   deploys the site. Its `docs` job runs the docs build first, so a broken docs build stops the
   release before the push. Prep steps are in the `release-prep` skill. Agents never dispatch a release.
-- `site.yml` builds the site with `docs-site/build.sh` and deploys `artifacts/pages`: the `site/`
-  files at the root and the docs under `docs/`. `homepage.yml` pings skathio.github.io when `.github/homepage.json`
+- `site.yml` calls hashira's `pages-site.yml@v3`, which copies `site/` to the root, adds the site
+  kit in `_kit/`, builds the docs under `docs/` and deploys; only `publish.yml` may pass
+  `released: true`. `homepage.yml` pings skathio.github.io when `.github/homepage.json`
   or `site/mark.svg` changes on main.
 
 ## Visual testing (required for anything that renders)
 
-`site/` is the frontend: one static page (`index.html`, `theme.js`, `mark.svg`) with no build
-step. It supports light and dark (`prefers-color-scheme`, plus a toggle that sets `data-theme`).
-Any change that touches `site/`, `docs/` or `docs-site/`, or changes what the page shows, must be visually tested before
+`site/` is the frontend: one static page (`index.html`, `mark.svg`) with no build step. It uses
+hashira's site kit from `_kit/` (added by the Pages build): `tokens.css` for colours and light and
+dark, `theme.js` for the toggle that sets `data-theme`, and the `<site-nav>` header from
+`site-nav.js`, which carries the same name, logo, nav and `home_link` as `.github/pages.json` so
+the landing and the docs show one header. Rogue's accent is `--site-accent` (light) and
+`--site-accent-dark` on `:root`; the page never restyles the nav.
+Any change that touches `site/`, `docs/`, `tools/docs-api/` or `.github/pages*`, or changes what the page shows, must be visually tested before
 it is called done:
 
-1. Run `docs-site/build.sh`, then `.claude/skills/visual-test/screenshot.sh <out-dir>`. It serves
-   `site/` and the docs route on a free port and takes phone (390px) and desktop (1440px)
-   screenshots in light and dark mode of the landing page, Getting started and the `ISender` API page.
+1. Run `tools/docs-api/build-pages.sh`, then `.claude/skills/visual-test/screenshot.sh <out-dir>`. It serves
+   `site/`, the kit and the docs route on a free port and takes phone (390×844) and desktop
+   (1280×800) screenshots in light and dark mode of the landing page, Getting started and the `ISender` API page.
 2. Open and inspect every screenshot. A width warning means the page scrolls sideways.
 3. In the PR, attach the screenshots or describe what each one shows.
 

@@ -1,7 +1,9 @@
-// Turns the Markdown that `docfx metadata` writes (outputFormat: markdown) into pages VitePress
-// renders as they are, plus a sidebar.json in docfx's toc order.
+// Turns the Markdown that `docfx metadata` writes (outputFormat: markdown) into pages that
+// hashira's docs-build publishes as they are. The docs_pre_build_command in site.yml (and the
+// same command in ci.yml and publish.yml) runs it with <out-dir> set to $DOCS_STAGE/api, so the
+// pages are served under /rogue/docs/api/.
 //
-// Usage: node docs-site/clean-api.mjs <docfx-md-dir> <out-dir>
+// Usage: node tools/docs-api/clean-api.mjs <docfx-md-dir> <out-dir>
 //
 // - File names become lowercase slugs (SkathIO.Rogue.ICommand-1.md -> skathio-rogue-icommand-1.md).
 // - <xref> becomes a link to the page of the type it names (or declares the member it names),
@@ -9,10 +11,11 @@
 //   code too: types outside our packages are named, not linked.
 // - The HTML that docfx keeps from the /// comments (<p>, <b>, <em>, <code>, <ul>/<li>) becomes
 //   Markdown, because CommonMark parses no Markdown inside an HTML block.
-// - The H1 loses its <a id> anchor and is copied into a `title` field, without Markdown escapes
-//   and with `<` written as &lt;, because VitePress reads the title as inline Markdown.
-// - sidebar.json groups the pages by namespace, then by kind, as toc.yml lists them, with `<`
-//   escaped in labels: VitePress renders sidebar labels as HTML.
+// - The H1 loses its <a id> anchor and docfx's `\>` escape, and starts the page: docs-build takes
+//   a page's title and its sidebar label from that first heading as written, and adds nothing
+//   for front matter.
+// - Only Markdown pages are written: docs-build refuses any other file in the docs stage, so
+//   docfx's toc.yml is not carried over. Each namespace page lists its types by kind.
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -131,47 +134,10 @@ function writePage({ srcDir, outDir, byUid, written }, file) {
   if (!h1) {
     fail(`${file} has no H1 heading: every docfx page should start with "# <kind> <name>".`)
   }
-  // VitePress reads the title as inline Markdown, where a raw `<T>` would be an HTML tag.
-  const title = unescapeMd(h1[1].trim()).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-  const page = `---\ntitle: ${JSON.stringify(title)}\n---\n\n${body.slice(h1.index).trimEnd()}\n`
-  writeFileSync(join(outDir, `${slug(file)}.md`), page)
-}
-
-function yamlValue(raw) {
-  const value = raw.trim()
-  if (value.startsWith('"')) {
-    return JSON.parse(value)
-  }
-  return value.startsWith("'") ? value.slice(1, -1).replace(/''/g, "'") : value
-}
-
-// docfx's toc.yml: a namespace at the top level, then under it a kind label (no href)
-// followed by the types of that kind.
-function sidebar(toc, written) {
-  const groups = []
-  const lines = toc.split('\n')
-  lines.forEach((line, i) => {
-    const m = line.match(/^(\s*)- name: (.+)$/)
-    if (!m) {
-      return
-    }
-    const text = yamlValue(m[2]).replace(/</g, '&lt;')
-    const href = lines[i + 1]?.match(/^\s+href: (.+)$/)?.[1]
-    const file = href ? yamlValue(href) : null
-    if (file && !written.has(file)) {
-      fail(`toc.yml lists ${file}, which is not in the docfx output.`)
-    }
-    if (m[1] === '') {
-      groups.push({ text, slug: file ? slug(file) : null, items: [] })
-    } else if (!file) {
-      groups.at(-1)?.items.push({ text, items: [] })
-    } else {
-      const parent = groups.at(-1)
-      const kind = parent?.items.at(-1)
-      ;(kind ?? parent)?.items.push({ text, slug: slug(file) })
-    }
-  })
-  return groups
+  // docs-build labels the sidebar entry with the H1 as written, so docfx's `\>` escape would
+  // show there; a `>` needs no escape in a heading.
+  const page = `# ${h1[1].replace(/\\>/g, '>')}${body.slice(h1.index + h1[0].length)}`
+  writeFileSync(join(outDir, `${slug(file)}.md`), `${page.trimEnd()}\n`)
 }
 
 // Reads through `read`, and on a file-system error names what was being read instead of
@@ -191,18 +157,14 @@ function main([srcDir, outDir]) {
   const files = reading(`read the docfx output folder ${srcDir}`, () => readdirSync(srcDir)).filter((f) => f.endsWith('.md')).sort()
   // No pages means docfx wrote nothing: stop, or the site would be built without its API reference.
   if (files.length === 0) {
-    fail(`${srcDir} holds no docfx Markdown pages: run "dotnet docfx metadata docs-site/docfx.json" first.`)
+    fail(`${srcDir} holds no docfx Markdown pages: run "dotnet docfx metadata tools/docs-api/docfx.json" first.`)
   }
-  const toc = reading(`read docfx's toc.yml in ${srcDir}`, () => readFileSync(join(srcDir, 'toc.yml'), 'utf8'))
-  const written = new Set(files)
-  const run = { srcDir, outDir, byUid: pagesByUid(files), written }
+  const run = { srcDir, outDir, byUid: pagesByUid(files), written: new Set(files) }
   reading(`create the output folder ${outDir}`, () => mkdirSync(outDir, { recursive: true }))
   for (const file of files) {
     writePage(run, file)
   }
-  const groups = sidebar(toc, written)
-  writeFileSync(join(outDir, 'sidebar.json'), `${JSON.stringify(groups, null, 1)}\n`)
-  process.stdout.write(`clean-api: ${files.length} pages, ${groups.length} namespaces\n`)
+  process.stdout.write(`clean-api: ${files.length} pages\n`)
 }
 
 main(process.argv.slice(2))

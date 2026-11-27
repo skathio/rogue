@@ -43,12 +43,3 @@ updates:
       # these NuGet packages, and the grouped update kept proposing 5.9.0 (#32, #36).
       - dependency-name: "Microsoft.CodeAnalysis.CSharp"
       - dependency-name: "Microsoft.CodeAnalysis.CSharp.Workspaces"
-
-  # The docs site's build-only npm tooling (VitePress), never in a shipped package.
-  - package-ecosystem: "npm"
-    directory: "/docs-site"
-    schedule:
-      interval: "weekly"
-    groups:
-      docs-site:
-        patterns: ["*"]

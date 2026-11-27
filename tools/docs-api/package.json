@@ -1,0 +1,9 @@
+{
+  "name": "rogue-docs-api",
+  "private": true,
+  "type": "module",
+  "main": "run-tests.mjs",
+  "scripts": {
+    "test": "node --test --test-concurrency=1"
+  }
+}

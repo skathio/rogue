@@ -1,0 +1,29 @@
+{
+  "name": "Rogue",
+  "description": "Guides for SkathIO.Rogue: an AOT-safe, source-generated mediator, background jobs and messaging for .NET.",
+  "base": "/rogue/docs/",
+  "home_page": "getting-started.md",
+  "sidebar": [
+    { "file": "getting-started.md", "label": "Getting started" },
+    { "file": "behaviors.md", "label": "Behaviors" },
+    { "file": "jobs.md", "label": "Jobs" },
+    { "file": "messaging.md", "label": "Messaging" },
+    { "file": "messaging-rabbitmq.md", "label": "RabbitMQ" },
+    { "file": "outbox.md", "label": "Outbox and inbox" },
+    { "file": "validation.md", "label": "Validation" },
+    { "file": "api-reference.md", "label": "API reference" },
+    { "file": "migration-guide.md", "label": "Migrating from MediatR" },
+    { "file": "benchmarks.md", "label": "Benchmarks" }
+  ],
+  "unpublished": ["governance.md", "roadmap.md"],
+  "nav": [
+    { "label": "Mediator · Jobs · Messaging", "href": "#three" },
+    { "label": "Benchmarks", "href": "#benchmarks" },
+    { "label": "Compared", "href": "#compared" },
+    { "label": "API", "href": "./docs/api/skathio-rogue" }
+  ],
+  "home_link": { "label": "← skathio", "href": "https://skathio.github.io/" },
+  "accent": "#a78bfa",
+  "logo": "site/mark.svg",
+  "theme_css": ".github/pages-theme.css"
+}
