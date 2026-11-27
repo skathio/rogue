@@ -15,10 +15,13 @@ All notable changes to SkathIO.Rogue are documented here. The format is based on
   unchanged; `/rogue/theme.js` is gone, replaced by `/rogue/_kit/theme.js`.
 - The docs at `/rogue/docs/` are now built by the shared hashira Pages build (`@v3`) instead of
   this repo's own VitePress setup in `docs-site/`, which is removed. Page URLs, including the API
-  reference under `/rogue/docs/api/`, are unchanged. The API pages are now listed in a flat
-  sidebar, and an "API" header link opens the namespace index.
+  reference under `/rogue/docs/api/`, are unchanged. The docs sidebar lists the guides, then the
+  API pages grouped by namespace and kind as before, under short type names, and an "API"
+  header link opens the namespace index.
 - The project page is deployed only from `main`: a hand-run deploy from another branch is refused,
   and a release deploys it only from `main` and only while its commit holds the highest version tag.
+- A release builds and scans the project page and its docs once, before it pushes the packages and
+  the tag, and deploys that same build after the approval.
 
 ## [2.0.0] - 2026-11-22
 

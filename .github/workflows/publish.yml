@@ -124,41 +124,32 @@ jobs:
           set -euo pipefail
           echo "publish: resolved version ${RESOLVED_VERSION} (bump=${BUMP})" >> "${GITHUB_STEP_SUMMARY}"
 
-  # The full docs build at the release commit, the one site.yml deploys after the push. It runs
-  # before anything is pushed, so a broken docs build stops the release while it can still be
-  # fixed, instead of failing the site deploy after the packages are on nuget.org. It uses
-  # hashira's docs-build with site.yml's pre-build command. It runs third-party code (npm
-  # packages, docfx), so it holds no token beyond reading the repo.
-  docs:
-    name: docs
+  # The Pages site at the release commit, built, scanned and uploaded by hashira's pages-site.yml
+  # with `deploy: false` (no main-only check, no gate, no deploy), before anything is pushed: a
+  # broken docs build or a scan finding stops the release while it can still be fixed, instead of
+  # failing the site deploy after the packages are on nuget.org and the tag exists. `site` below
+  # deploys this artifact (pages-site.yml's default name, github-pages) after the approval, so the
+  # release builds the site once. The build runs third-party code (npm packages, docfx) in
+  # pages-site's `build` job, which holds `contents: read` only. pages and id-token are here only
+  # because GitHub checks a called workflow's grants, its skipped deploy job included, before the
+  # run starts; no job of this call that holds them runs.
+  site-check:
+    name: site-check
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
-    runs-on: ubuntu-latest
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: '10.0.x'
-      - uses: skathio/hashira/.github/actions/docs-build@v3 # moving major tag: new v3.x releases apply with no PR
-        with:
-          # Trusted input: the same command as site.yml's docs_pre_build_command; keep them equal.
-          pre_build_command: |
-            dotnet tool restore
-            dotnet restore SkathIO.Rogue.sln
-            docfx_out="$(mktemp -d)"
-            dotnet docfx metadata tools/docs-api/docfx.json --output "$docfx_out"
-            node tools/docs-api/clean-api.mjs "$docfx_out/docfx" "$DOCS_STAGE/api"
-            rm -rf "$docfx_out"
+      pages: write    # for pages-site's skipped deploy job
+      id-token: write # for pages-site's skipped deploy job
+    uses: skathio/hashira/.github/workflows/pages-site.yml@v3 # moving major tag: new v3.x releases apply with no PR
+    with:
+      deploy: false
+      dotnet_version: '10.0.x'
+      # Trusted input: the same command as site.yml's docs_pre_build_command; keep them equal.
+      docs_pre_build_command: bash tools/docs-api/pre-build.sh
 
   publish:
     name: publish
-    needs: [version, docs]
+    needs: [version, site-check]
     # Same gate as `version` (see "## Trigger model" above) — a dispatch with
     # `bump` left empty is a no-op (resolves/publishes nothing).
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
@@ -278,9 +269,11 @@ jobs:
           auth: oidc
           version: ${{ needs.version.outputs.resolved_version }}
 
-  # Deploys the project page from the released ref, after `publish` and behind its approval
-  # (`released: true` tells site.yml not to ask again). Same gate as `publish`, and main only, as
-  # site.yml admits `released` from publish.yml on main alone.
+  # Deploys the site `site-check` built, after `publish` and behind its approval (`released: true`
+  # tells pages-site.yml not to ask again; it checks that this run holds the approved
+  # `production` review). site.yml passes `prebuilt: true` and the default artifact name with
+  # `released`, so nothing is built twice. Same gate as `publish`, and main only, as pages-site.yml
+  # deploys main alone.
   site:
     name: site
     needs: publish

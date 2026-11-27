@@ -29,10 +29,12 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 - Benchmark smoke run, as CI runs it:
   `dotnet run --project bench/SkathIO.Rogue.Benchmarks/SkathIO.Rogue.Benchmarks.csproj -c Release -- --filter '*NoBehavior*' --job short --exporters json`
 - Docs site: CI builds it with hashira's `docs-build` action (`@v3`), whose pre-build command
-  (in `site.yml`, `ci.yml` and `publish.yml`, kept equal) generates the API reference with docfx
-  and `tools/docs-api/clean-api.mjs`; a dead link fails it. Locally, `tools/docs-api/build-pages.sh`
-  (needs Node 24, the .NET SDK and network, or `HASHIRA_DIR` set to a hashira clone) runs the same
-  steps and assembles `artifacts/pages`. `node --test tools/docs-api/` runs the docs tooling tests
+  (`bash tools/docs-api/pre-build.sh` in `site.yml`, `ci.yml` and `publish.yml`, kept equal)
+  generates the API reference and its grouped sidebar with docfx and `tools/docs-api/clean-api.mjs`;
+  a dead link fails it. Locally, `tools/docs-api/build-pages.sh` (needs Node 24, the .NET SDK and
+  network, or `HASHIRA_DIR` set to a hashira clone) builds through docs-build's `lib/cli.js` and
+  assembles `artifacts/pages`; `node <hashira>/.github/actions/docs-build/lib/cli.js --check` checks
+  `.github/pages.json` and `docs/` alone. `node --test tools/docs-api/` runs the docs tooling tests
   (it runs docfx, ~3 min).
 
 ## Layout
@@ -67,9 +69,11 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   allocation thresholds in `.bench/thresholds.json`), `docs/`, `site/`.
 - Docs at `/rogue/docs/`: hashira builds them from `docs/*.md` as they are (no front matter or
   link edits) and `.github/pages.json` (sidebar labels, header links, `governance.md` and
-  `roadmap.md` unpublished; `.github/pages-theme.css` keeps the light and dark brand colours).
-  `tools/docs-api/` holds `docfx.json` and `clean-api.mjs`, which generate the API pages under
-  `/rogue/docs/api/` from the `///` comments, and their tests. Nothing generated is committed; the
+  `roadmap.md` unpublished, `accent` and `accent_dark` the light and dark brand colours).
+  `tools/docs-api/` holds `docfx.json`, `pre-build.sh` and `clean-api.mjs`, which generate the API
+  pages under `/rogue/docs/api/` from the `///` comments and the sidebar that groups them by
+  namespace and kind (`$DOCS_STAGE/.sidebar.json`: the guides of `pages.json`'s `sidebar` first),
+  and their tests. Nothing generated is committed; the
   docs packages live in hashira, so `.github/allowed-packages.txt` does not cover them.
 
 ## Conventions
@@ -106,12 +110,14 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
 - The org's `ci-required` ruleset requires the `ci / passed` check (hashira's aggregate job) with
   the branch up to date, so the job that calls `nuget-package-ci.yml` must keep the id `ci`.
 - Releases are manual: the maintainer dispatches `publish.yml` with a `bump`, and the release needs
-  approval in the `production` environment. It packs, pushes to nuget.org over OIDC, tags, then
-  deploys the site. Its `docs` job runs the docs build first, so a broken docs build stops the
-  release before the push. Prep steps are in the `release-prep` skill. Agents never dispatch a release.
+  approval in the `production` environment. Its `site-check` job first builds and scans the Pages
+  site (`pages-site.yml` with `deploy: false`), so a broken docs build stops the release before the
+  push; it then packs, pushes to nuget.org over OIDC, tags, and deploys that same build (`site.yml`
+  with `released: true`, which passes `prebuilt: true`). Prep steps are in the `release-prep` skill. Agents never dispatch a release.
 - `site.yml` calls hashira's `pages-site.yml@v3`, which copies `site/` to the root, adds the site
   kit in `_kit/`, builds the docs under `docs/` and deploys; only `publish.yml` may pass
-  `released: true`. `homepage.yml` pings skathio.github.io when `.github/homepage.json`
+  `released: true`, and `pages-site.yml` refuses it unless the run holds an approved `production`
+  review. `homepage.yml` pings skathio.github.io when `.github/homepage.json`
   or `site/mark.svg` changes on main.
 
 ## Visual testing (required for anything that renders)

@@ -233,3 +233,121 @@ test('an output path that is a file fails and names it', () => {
   assert.match(result.stderr, /^clean-api: cannot create the output folder .*out/)
   assert.doesNotMatch(result.stderr, /\n\s+at /)
 })
+
+// ---------------------------------------------------------------- --sidebar
+
+const GUIDES = { sidebar: [{ file: 'getting-started.md', label: 'Getting started' }] }
+const TOC = [
+  '### YamlMime:TableOfContent',
+  '- name: SkathIO.Rogue',
+  '  href: SkathIO.Rogue.md',
+  '  items:',
+  '  - name: Classes',
+  '  - name: RequestState<TResponse>',
+  '    href: SkathIO.Rogue.RequestState-1.md',
+  '  - name: Structs',
+  '  - name: Interfaces',
+  '  - name: ICommand<TResponse>',
+  '    href: SkathIO.Rogue.ICommand-1.md',
+  '  - name: ISender',
+  '    href: SkathIO.Rogue.ISender.md',
+  '',
+].join('\n')
+
+// Runs the cleanup with --sidebar on `files` (FIXTURE's pages with `toc` as toc.yml, left out
+// when null) and `pages` as pages.json (left out when null, written as is when a string). Returns the run and the
+// sidebar it wrote, parsed, or null.
+function runSidebar({ toc = TOC, pages = GUIDES, files = FIXTURE, extra = [] } = {}) {
+  return inTemp((dir) => {
+    mkdirSync(join(dir, 'in'))
+    for (const [name, body] of Object.entries({ ...files, 'toc.yml': toc })) {
+      if (body !== null) {
+        writeFileSync(join(dir, 'in', name), body)
+      }
+    }
+    if (pages !== null) {
+      writeFileSync(join(dir, 'pages.json'), typeof pages === 'string' ? pages : JSON.stringify(pages))
+    }
+    const args = [join(dir, 'in'), join(dir, 'out'), '--sidebar', join(dir, '.sidebar.json'), join(dir, 'pages.json'), ...extra]
+    const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', timeout: 60_000 })
+    const file = join(dir, '.sidebar.json')
+    return { result, sidebar: existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null }
+  })
+}
+
+test('--sidebar writes the guides, then one folded group per namespace with its page and a group per kind', () => {
+  const { result, sidebar } = runSidebar()
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /4 pages, 1 namespaces in the sidebar/)
+  assert.deepEqual(sidebar, [
+    { file: 'getting-started.md', label: 'Getting started' },
+    {
+      label: 'SkathIO.Rogue',
+      collapsed: true,
+      items: [
+        { file: 'out/skathio-rogue.md', label: 'Overview' },
+        { label: 'Classes', items: [{ file: 'out/skathio-rogue-requeststate-1.md', label: 'RequestState<TResponse>' }] },
+        {
+          label: 'Interfaces',
+          items: [
+            { file: 'out/skathio-rogue-icommand-1.md', label: 'ICommand<TResponse>' },
+            { file: 'out/skathio-rogue-isender.md', label: 'ISender' },
+          ],
+        },
+      ],
+    },
+  ])
+})
+
+test('--sidebar keeps a 60-character label and shortens a longer one to 60 with an ellipsis', () => {
+  const at = 'A'.repeat(60)
+  const past = 'B'.repeat(61)
+  const toc = `- name: SkathIO.Rogue\n  href: SkathIO.Rogue.md\n  items:\n  - name: ${at}\n    href: SkathIO.Rogue.ISender.md\n  - name: ${past}\n    href: SkathIO.Rogue.ICommand-1.md\n`
+  const { result, sidebar } = runSidebar({ toc })
+  assert.equal(result.status, 0, result.stderr)
+  const labels = sidebar[1].items.map((e) => e.label)
+  assert.deepEqual(labels, ['Overview', at, `${'B'.repeat(59)}…`])
+})
+
+test('--sidebar with a pages.json that has no sidebar writes the API groups alone', () => {
+  const { result, sidebar } = runSidebar({ pages: { name: 'Rogue' } })
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(sidebar.map((e) => e.label), ['SkathIO.Rogue'])
+})
+
+test('--sidebar fails and names the file when toc.yml lists a page docfx did not write', () => {
+  const toc = '- name: SkathIO.Rogue\n  href: SkathIO.Rogue.Gone.md\n'
+  const { result, sidebar } = runSidebar({ toc })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /^clean-api: toc\.yml lists SkathIO\.Rogue\.Gone\.md, which is not in the docfx output/)
+  assert.equal(sidebar, null)
+})
+
+test('--sidebar fails when toc.yml lists a type before any namespace', () => {
+  const { result } = runSidebar({ toc: '  - name: ISender\n    href: SkathIO.Rogue.ISender.md\n' })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /^clean-api: toc\.yml lists ISender before any namespace/)
+})
+
+test('--sidebar fails and names what it could not read: no toc.yml, no pages.json, or pages.json that is not JSON', () => {
+  const noToc = runSidebar({ toc: null })
+  assert.match(noToc.result.stderr, /^clean-api: cannot read docfx's toc\.yml in /)
+  const noPages = runSidebar({ pages: null })
+  assert.match(noPages.result.stderr, /^clean-api: cannot read .*pages\.json/)
+  const badPages = runSidebar({ pages: '{ not json' })
+  assert.match(badPages.result.stderr, /^clean-api: cannot read .*pages\.json/)
+  for (const { result, sidebar } of [noToc, noPages, badPages]) {
+    assert.notEqual(result.status, 0)
+    assert.doesNotMatch(result.stderr, /\n\s+at /)
+    assert.equal(sidebar, null)
+  }
+})
+
+test('--sidebar without both its values, or another flag, fails with the usage', () => {
+  const usage = /usage: node clean-api\.mjs <docfx-md-dir> <out-dir> \[--sidebar <file> <pages\.json>\]/
+  assertClearFailure(runWith((dir) => [join(dir, 'in'), join(dir, 'out'), '--sidebar', join(dir, 's.json')]), usage)
+  assertClearFailure(runWith((dir) => [join(dir, 'in'), join(dir, 'out'), '--toc', 'a', 'b']), usage)
+  const extra = runSidebar({ extra: ['more'] })
+  assert.match(extra.result.stderr, usage)
+  assert.equal(extra.sidebar, null)
+})

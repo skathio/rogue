@@ -81,9 +81,9 @@ jobs:
         run: tests/consumer/run.sh
 
   # The full docs build, the one site.yml deploys through hashira's pages-site.yml: the API
-  # reference generated from the /// comments by docfx, its cleanup by tools/docs-api/clean-api.mjs,
-  # and hashira's docs-build (pages.json checks and VitePress, whose dead-link check stays on). A
-  # dead link or a build error fails the pull request.
+  # reference generated from the /// comments by docfx, its cleanup and grouped sidebar by
+  # tools/docs-api/pre-build.sh and clean-api.mjs, and hashira's docs-build (pages.json checks and
+  # VitePress, whose dead-link check stays on). A dead link or a build error fails the pull request.
   docs:
     name: Docs build
     runs-on: ubuntu-latest
@@ -102,13 +102,7 @@ jobs:
       - uses: skathio/hashira/.github/actions/docs-build@v3 # moving major tag: new v3.x releases apply with no PR
         with:
           # Trusted input: the same command as site.yml's docs_pre_build_command; keep them equal.
-          pre_build_command: |
-            dotnet tool restore
-            dotnet restore SkathIO.Rogue.sln
-            docfx_out="$(mktemp -d)"
-            dotnet docfx metadata tools/docs-api/docfx.json --output "$docfx_out"
-            node tools/docs-api/clean-api.mjs "$docfx_out/docfx" "$DOCS_STAGE/api"
-            rm -rf "$docfx_out"
+          pre_build_command: bash tools/docs-api/pre-build.sh
       - name: Run the docs tooling tests
         run: node --test tools/docs-api/
 

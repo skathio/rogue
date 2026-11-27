@@ -2,7 +2,8 @@
 # Serve site/, the site kit and the built docs on a free loopback port, laid out as GitHub Pages
 # serves them (/rogue/, /rogue/_kit/ and /rogue/docs/), and screenshot the landing page, the Getting
 # started docs page and the ISender API page at phone (390x844) and desktop (1280x800) size in light
-# and dark mode, the sizes the shared <site-nav> header is compared at across the skathio sites.
+# and dark mode, the sizes the shared <site-nav> header is compared at across the skathio sites, and
+# at tablet (1024x768) size, a width at which the docs header once ran off the page.
 # Usage: screenshot.sh <output-dir>
 # The docs and the kit come from the last tools/docs-api/build-pages.sh run (artifacts/pages/docs and
 # artifacts/pages/_kit); run it first.
@@ -80,7 +81,7 @@ done
 
 for page in "${pages[@]}"; do
   IFS='|' read -r prefix url _ <<<"$page"
-  for size in "phone:390,844" "desktop:1280,800"; do
+  for size in "phone:390,844" "tablet:1024,768" "desktop:1280,800"; do
     name="${size%%:*}"; viewport="${size#*:}"
     for scheme in light dark; do
       # Chromium's capture intermittently fails with "Unable to capture
@@ -108,7 +109,7 @@ ls -1 "$out"/*.png
 status=0
 for page in "${pages[@]}"; do
   prefix="${page%%|*}"
-  for size in "phone:390" "desktop:1280"; do
+  for size in "phone:390" "tablet:1024" "desktop:1280"; do
     name="${size%%:*}"; want="${size#*:}"
     for scheme in light dark; do
       png="$out/${prefix}-${name}-${scheme}.png"

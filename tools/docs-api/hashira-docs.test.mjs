@@ -1,18 +1,22 @@
 // Rules for building and deploying the docs with hashira's shared Pages flow: site.yml calls
-// pages-site.yml@v3 with .NET 10 and a docs_pre_build_command that runs docfx and clean-api.mjs
-// into $DOCS_STAGE/api; ci.yml and publish.yml build the docs with the same docs-build action and
-// the same command; the API tooling lives in tools/docs-api/ and the old docs folder is gone;
-// .github/pages.json keeps /rogue/docs/ and /rogue/docs/api/ where they are; and the workflows
-// keep the repo's conventions (deny-all permissions, hashira at the moving v3 tag, every other
-// action pinned by SHA, shell commands written in the workflow file).
+// pages-site.yml@v3 with .NET 10 and a docs_pre_build_command, tools/docs-api/pre-build.sh, that
+// runs docfx and clean-api.mjs into $DOCS_STAGE/api; ci.yml builds the docs with docs-build and
+// publish.yml with a deploy: false pages-site.yml call, both with the same command; the API
+// tooling lives in tools/docs-api/ and the old docs folder is gone; .github/pages.json keeps
+// /rogue/docs/ and /rogue/docs/api/ where they are and passes hashira's own `cli.js --check`; and
+// the workflows keep the repo's conventions (deny-all permissions, hashira at the moving v3 tag,
+// every other action pinned by SHA, shell commands written in the workflow file).
 //
-// The workflow cases read the YAML as text, by indentation. One case runs the pre-build command
-// from site.yml the way docs-build does (bash -eo pipefail from the repo root, DOCS_STAGE set to
-// an empty folder) and checks what it writes, so it restores the solution and runs docfx.
-import { test, describe } from 'node:test'
+// hashira's checks run from a hashira checkout: HASHIRA_DIR when set, else the v3 tag, cloned
+// into a temporary folder. The workflow cases read the YAML as text, by indentation. One case runs
+// the pre-build command from site.yml the way docs-build does (bash -eo pipefail from the repo
+// root, DOCS_STAGE set to an empty folder) and checks what it writes, so it restores the solution
+// and runs docfx.
+import { test, describe, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 
@@ -25,13 +29,29 @@ const PAGES_JSON = '.github/pages.json'
 const PAGES_SITE = 'skathio/hashira/.github/workflows/pages-site.yml@v3'
 const DOCS_BUILD = 'skathio/hashira/.github/actions/docs-build@v3'
 const OLD_DOCS_DIR = ['docs', 'site'].join('-')
-// hashira's staged-file rule: only Markdown pages and static files may sit in the docs stage.
-const STATIC_FILE = /\.(?:md|png|jpe?g|gif|webp|avif|svg|ico|bmp|woff2?|ttf|otf|pdf|txt|csv)$/i
-const PAGES_FIELDS = ['name', 'description', 'base', 'home_page', 'sidebar', 'unpublished', 'nav',
-  'home_link', 'accent', 'logo', 'theme_css']
-const HREF = /^(?:https:\/\/|http:\/\/|\/|\.\/|\.\.\/|#)/
+const PRE_BUILD = 'tools/docs-api/pre-build.sh'
 
 const read = (rel) => readFileSync(join(root, rel), 'utf8')
+
+// ---------------------------------------------------------------- hashira checkout
+
+let cloned = null
+function hashiraDir() {
+  if (process.env.HASHIRA_DIR) {
+    return resolve(process.env.HASHIRA_DIR)
+  }
+  if (!cloned) {
+    cloned = mkdtempSync(join(tmpdir(), 'rogue-hashira-'))
+    const run = spawnSync('git', ['clone', '--quiet', '--depth', '1', '--branch', 'v3',
+      'https://github.com/skathio/hashira.git', cloned], { encoding: 'utf8' })
+    assert.equal(run.status, 0, `cloning hashira v3 failed: ${run.stderr}`)
+  }
+  return cloned
+}
+after(() => cloned && rmSync(cloned, { recursive: true, force: true }))
+
+const docsBuildLib = (file) => join(hashiraDir(), '.github/actions/docs-build/lib', file)
+const hashiraModule = (file) => createRequire(import.meta.url)(docsBuildLib(file))
 
 // ---------------------------------------------------------------- YAML by indentation
 
@@ -167,16 +187,22 @@ describe('site.yml deploys through hashira pages-site.yml@v3', () => {
     assert.equal(scalar(keyBlock(withOf(siteCaller()), 'dotnet_version')), '10.0.x')
   })
 
-  test('its docs_pre_build_command runs docfx metadata on tools/docs-api/docfx.json', () => {
-    const cmd = sitePreBuild()
-    assert.ok(cmd, 'site.yml must pass docs_pre_build_command')
-    assert.match(cmd, /docfx metadata\s+(?:\.\/)?tools\/docs-api\/docfx\.json/)
+  test(`its docs_pre_build_command runs ${PRE_BUILD}`, () => {
+    assert.equal(norm(sitePreBuild()), `bash ${PRE_BUILD}`)
   })
 
-  test('its docs_pre_build_command runs tools/docs-api/clean-api.mjs into $DOCS_STAGE/api', () => {
-    const cmd = sitePreBuild() ?? ''
-    assert.match(cmd, /tools\/docs-api\/clean-api\.mjs/)
-    assert.match(cmd, /\$\{?DOCS_STAGE\}?"?\/api\b/)
+  test(`${PRE_BUILD} runs docfx metadata on tools/docs-api/docfx.json`, () => {
+    assert.match(read(PRE_BUILD), /docfx metadata\s+(?:\.\/)?tools\/docs-api\/docfx\.json/)
+  })
+
+  test(`${PRE_BUILD} runs clean-api.mjs into $DOCS_STAGE/api, with the sidebar in $DOCS_STAGE/.sidebar.json`, () => {
+    const cmd = read(PRE_BUILD).split('\n').find((l) => l.includes('tools/docs-api/clean-api.mjs')) ?? ''
+    assert.match(cmd, /"\$DOCS_STAGE\/api" --sidebar "\$DOCS_STAGE\/\.sidebar\.json" \.github\/pages\.json$/)
+  })
+
+  test('a released run deploys the prebuilt site under pages-site.yml\'s default artifact name', () => {
+    assert.match(scalar(keyBlock(withOf(siteCaller()), 'prebuilt')) ?? '', /^\$\{\{\s*inputs\.released\s*\}\}$/)
+    assert.equal(scalar(keyBlock(withOf(siteCaller()), 'artifact_name')), 'github-pages')
   })
 
   test('it forwards inputs.released, so a release run passes no second approval', () => {
@@ -199,16 +225,18 @@ describe('site.yml deploys through hashira pages-site.yml@v3', () => {
 
   test('the build, upload and deploy are left to pages-site.yml', () => {
     const text = read(SITE_YML)
-    for (const gone of ['actions/pages-upload', 'actions/pages-deploy', 'npm ci', 'build.sh']) {
-      assert.ok(!text.split('\n').some((l) => !isBlank(l) && l.includes(gone)), `site.yml still runs ${gone}`)
+    // The old docs folder's build.sh, not tools/docs-api/pre-build.sh.
+    for (const gone of ['actions/pages-upload', 'actions/pages-deploy', 'npm ci', /(?<![\w-])build\.sh/]) {
+      assert.ok(!text.split('\n').some((l) => !isBlank(l) && l.search(gone) >= 0), `site.yml still runs ${gone}`)
     }
   })
 })
 
 // ---------------------------------------------------------------- the same docs build in CI and release
 
-describe('ci.yml and publish.yml build the docs with the same docs-build path', () => {
-  const cases = [[CI_YML, 'docs'], [PUBLISH_YML, 'docs']]
+describe('ci.yml and publish.yml build the docs with the same pre-build command', () => {
+  const cases = [[CI_YML, 'docs']]
+  const siteCheck = () => jobs(read(PUBLISH_YML))['site-check']
 
   for (const [file, jobId] of cases) {
     test(`${file} ${jobId} uses ${DOCS_BUILD} with site.yml's pre-build command`, () => {
@@ -231,7 +259,7 @@ describe('ci.yml and publish.yml build the docs with the same docs-build path', 
       const { job } = docsBuildStep(file, jobId)
       const live = job.filter((l) => !isBlank(l)).join('\n')
       assert.ok(!live.includes('npm ci'), `${file} ${jobId} still runs npm ci`)
-      assert.ok(!live.includes('build.sh'), `${file} ${jobId} still runs build.sh`)
+      assert.ok(!/(?<![\w-])build\.sh/.test(live), `${file} ${jobId} still runs build.sh`)
     })
 
     test(`${file} ${jobId} holds only contents: read`, () => {
@@ -240,9 +268,21 @@ describe('ci.yml and publish.yml build the docs with the same docs-build path', 
     })
   }
 
-  test('publish.yml pushes only after its docs check passed', () => {
+  test('publish.yml site-check builds the site with pages-site.yml, deploy: false and the same command', () => {
+    const job = siteCheck()
+    assert.ok(job, 'publish.yml has no site-check job')
+    assert.equal(scalar(keyBlock(job, 'uses', 4)), PAGES_SITE)
+    assert.equal(scalar(keyBlock(withOf(job), 'deploy')), 'false')
+    assert.equal(norm(scalar(keyBlock(withOf(job), 'docs_pre_build_command'))), norm(sitePreBuild()))
+  })
+
+  test('publish.yml site-check grants only what GitHub checks for pages-site.yml\'s skipped deploy', () => {
+    assert.deepEqual(permissions(siteCheck(), 4), { contents: 'read', pages: 'write', 'id-token': 'write' })
+  })
+
+  test('publish.yml pushes only after site-check passed', () => {
     const needs = scalar(keyBlock(jobs(read(PUBLISH_YML)).publish, 'needs', 4)) ?? ''
-    assert.ok(/\bdocs\b/.test(needs), `publish needs ${needs}`)
+    assert.ok(/\bsite-check\b/.test(needs), `publish needs ${needs}`)
   })
 
   test('released: true is passed only by publish.yml site, after the approved publish job', () => {
@@ -257,7 +297,8 @@ describe('ci.yml and publish.yml build the docs with the same docs-build path', 
   })
 
   test('the pre-build commands are written in the workflow file, with no ${{ }} expression', () => {
-    const cmds = [sitePreBuild(), ...cases.map(([f, j]) => scalar(keyBlock(withOf(docsBuildStep(f, j).step), 'pre_build_command')))]
+    const cmds = [sitePreBuild(), scalar(keyBlock(withOf(siteCheck()), 'docs_pre_build_command')),
+      ...cases.map(([f, j]) => scalar(keyBlock(withOf(docsBuildStep(f, j).step), 'pre_build_command')))]
     for (const cmd of cmds) {
       assert.ok(cmd && !cmd.includes('${{'), `pre-build command takes an expression: ${cmd}`)
     }
@@ -342,12 +383,10 @@ describe('the API tooling lives in tools/docs-api and the old docs folder is gon
 // ---------------------------------------------------------------- .github/pages.json
 
 describe('.github/pages.json keeps the docs URLs and passes hashira checks', () => {
-  test('it is valid JSON of at most 64 KB with only the fields hashira accepts', () => {
-    assert.ok(statSync(join(root, PAGES_JSON)).size <= 64 * 1024)
-    const config = pagesConfig()
-    for (const key of Object.keys(config)) {
-      assert.ok(PAGES_FIELDS.includes(key), `unknown pages.json field ${key}`)
-    }
+  test('hashira\'s cli.js --check passes on it and on docs/', () => {
+    const run = spawnSync(process.execPath, [docsBuildLib('cli.js'), '--check'], { cwd: root, encoding: 'utf8' })
+    assert.equal(run.status, 0, `cli.js --check failed:\n${run.stdout}${run.stderr}`)
+    assert.doesNotMatch(run.stdout + run.stderr, /::warning::/, 'cli.js --check warns')
   })
 
   test('the docs stay at /rogue/docs/', () => {
@@ -369,43 +408,18 @@ describe('.github/pages.json keeps the docs URLs and passes hashira checks', () 
       assert.equal(isUnpublished(guide, unpublished), hidden, `docs/${guide}`)
     }
   })
-
-  test('sidebar entries exist, are published and are within hashira limits', () => {
-    const { sidebar = [], unpublished = [] } = pagesConfig()
-    assert.ok(sidebar.length <= 100)
-    for (const { file, label, ...rest } of sidebar) {
-      assert.deepEqual(Object.keys(rest), [])
-      assert.ok(existsSync(join(root, 'docs', file)), `sidebar file docs/${file} is missing`)
-      assert.ok(!isUnpublished(file, unpublished), `sidebar file ${file} is unpublished`)
-      assert.ok(label.length >= 1 && label.length <= 60, `sidebar label ${label}`)
-    }
-  })
-
-  test('name, description, nav, home_link and accent are within hashira limits', () => {
-    const config = pagesConfig()
-    assert.ok(config.name === undefined || (config.name.length >= 1 && config.name.length <= 40))
-    assert.ok(config.description === undefined || config.description.length <= 200)
-    assert.ok(config.accent === undefined || /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(config.accent))
-    const links = [...(config.nav ?? []), ...(config.home_link ? [config.home_link] : [])]
-    assert.ok((config.nav ?? []).length <= 8)
-    for (const { label, href, ...rest } of links) {
-      assert.deepEqual(Object.keys(rest), [])
-      assert.ok(label.length >= 1 && label.length <= 30, `link label ${label}`)
-      assert.match(href, HREF)
-    }
-  })
 })
 
 // ---------------------------------------------------------------- the pre-build, run
 
 describe('the pre-build writes the API reference into the docs stage', { timeout: 15 * 60 * 1000 }, () => {
-  test('it writes api/*.md pages that are published at /rogue/docs/api/ and no file hashira refuses', () => {
+  test('it writes published api/*.md pages, a sidebar hashira accepts and no file hashira refuses', () => {
     const cmd = sitePreBuild()
     assert.ok(cmd, 'site.yml has no docs_pre_build_command')
     const stage = mkdtempSync(join(tmpdir(), 'rogue-docs-stage-'))
     try {
       const run = spawnSync('bash', ['-eo', 'pipefail', '-c', cmd], {
-        cwd: root, env: { ...process.env, DOCS_STAGE: stage }, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+        cwd: root, env: { ...process.env, DOCS_STAGE: stage }, encoding: 'utf8', maxBuffer: 1 << 26,
       })
       assert.equal(run.status, 0, `pre-build failed:\n${run.stdout.slice(-4000)}\n${run.stderr.slice(-4000)}`)
       const unpublished = pagesConfig().unpublished ?? []
@@ -414,8 +428,10 @@ describe('the pre-build writes the API reference into the docs stage', { timeout
         assert.ok(files.includes(page), `${page} was not written`)
         assert.ok(!isUnpublished(page, unpublished), `${page} is unpublished`)
       }
-      const refused = files.filter((f) => !STATIC_FILE.test(f) && !isUnpublished(f, unpublished))
-      assert.deepEqual(refused, [], 'hashira refuses non-static files in the docs stage')
+      const { loadGeneratedSidebar, GENERATED_SIDEBAR } = hashiraModule('pages-config.js')
+      assert.ok(loadGeneratedSidebar(stage), `the pre-build wrote no ${GENERATED_SIDEBAR}`)
+      const { checkStagedFiles } = hashiraModule('site-config.js')
+      assert.doesNotThrow(() => checkStagedFiles(files.filter((f) => f !== GENERATED_SIDEBAR), 'DOCS_STAGE/'))
     } finally {
       rmSync(stage, { recursive: true, force: true })
     }
