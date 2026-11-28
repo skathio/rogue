@@ -23,7 +23,8 @@
     { "label": "API", "href": "./docs/api/skathio-rogue" }
   ],
   "home_link": { "label": "← skathio", "href": "https://skathio.github.io/" },
-  "accent": "#a78bfa",
+  "accent": "#6d28d9",
+  "accent_dark": "#a78bfa",
   "logo": "site/mark.svg",
-  "theme_css": ".github/pages-theme.css"
+  "theme_css": ".github/docs-sidebar.css"
 }

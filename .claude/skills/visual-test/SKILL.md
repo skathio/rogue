@@ -42,20 +42,24 @@ docs under `docs/`). It clones hashira's `v3` tag unless `HASHIRA_DIR` names a l
      screenshot" when other Chromium instances are loading the machine;
    - takes full-page shots with `npx -y playwright@1.61.1 screenshot`, which is fetched by npx and
      never added to the repo, at phone (390×844) and desktop (1280×800) size in light and dark,
-     the sizes the shared header is compared at across the skathio sites:
-     `site-{phone,desktop}-{light,dark}.png` for the landing page,
-     `docs-getting-started-{phone,desktop}-{light,dark}.png` for Getting started and
-     `docs-isender-{phone,desktop}-{light,dark}.png` for the `ISender` API page;
+     the sizes the shared header is compared at across the skathio sites, and at tablet
+     (1024×768), a width at which the docs header once ran off the page:
+     `site-{phone,tablet,desktop}-{light,dark}.png` for the landing page,
+     `docs-getting-started-{phone,tablet,desktop}-{light,dark}.png` for Getting started and
+     `docs-isender-{phone,tablet,desktop}-{light,dark}.png` for the `ISender` API page;
    - exits 2 and prints `WARN` when a shot is wider than its viewport, which means the page
      scrolls sideways.
 
    If Chromium is missing, run `npx -y playwright@1.61.1 install chromium` once.
 
-2. Read all twelve PNGs. Check that:
+2. Read all eighteen PNGs. Check that:
    - the landing and the docs show the same `<site-nav>` header: the Rogue mark and name, then
      "Mediator · Jobs · Messaging", "Benchmarks", "Compared", "API" (hidden below 760px), "Docs",
      "← skathio" and the theme button, in that order, with the same spacing and the violet accent
-     (#6d28d9 in light, #a78bfa in dark);
+     (#6d28d9 in light, #a78bfa in dark). The docs header holds the four landing links in one
+     "Rogue" dropdown before "Docs", as hashira's docs-build does for 3 or more `nav` entries;
+   - the docs sidebar lists the guides, then one folded group per API namespace (the current
+     page's group open), with a group per kind and short type names;
    - the hero, stats, code blocks, comparison table and docs links render;
    - the docs pages show the nav, sidebar (or the phone "Menu" bar), outline and code blocks in
      the landing page's palette, and the `ISender` page lists its methods with generic names;
@@ -71,6 +75,5 @@ docs under `docs/`). It clones hashira's `v3` tag unless `HASHIRA_DIR` names a l
 
 5. In the PR, attach the screenshots (or describe each one) and list any warnings.
 
-Known baseline: on `main` the comparison table already makes the phone page 647px wide, so the
-script warns for both phone shots. Report that warning as existing unless your change fixes or
-worsens it.
+No width warning is expected: on `main` every shot is as wide as its viewport (the landing's
+tables scroll inside their own box). Report any warning as a regression of your change.

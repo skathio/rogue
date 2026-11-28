@@ -1,0 +1,9 @@
+/* The docs' only style override, published by hashira's docs-build as site-theme.css after its
+   shared theme (pages.json theme_css). The API sidebar nests type names two levels deep, and a
+   name with no space in it, such as SqlServerJobsServiceCollectionExtensions, is wider than that
+   column: without this rule it runs past the sidebar's edge and is cut off. Only page links wrap:
+   a namespace header breaking mid-word reads worse than its chevron sitting a little to the right.
+   Brand colours stay in pages.json (accent, accent_dark), not here. */
+.VPSidebarItem.is-link .text {
+  overflow-wrap: anywhere;
+}

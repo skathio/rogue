@@ -1,63 +1,45 @@
 # Deploys the project page in site/ and its docs to GitHub Pages (https://skathio.github.io/rogue/)
 # through hashira's pages-site.yml, the shared Pages flow of the skathio project sites.
 #
-# One release, one approval. publish.yml calls this after `publish`, which already passed the
-# `production` Environment's owner approval, so the page goes out after the package with no second
-# approval (`released: true` skips pages-site's `gate`). Run by hand, for a page-only fix, it waits
-# at that gate for the same approval. There is no push trigger: a deploy is always a release or an
-# approved run, so the docs match the version on NuGet.
+# One release, one approval. publish.yml builds the site before it tags (a `deploy: false` call of
+# pages-site.yml) and calls this after `publish`, which already passed the `production`
+# Environment's owner approval, so the page goes out after the package with no second approval
+# (`released: true` skips pages-site's `gate`) and deploys that build (`prebuilt: true`). Run by
+# hand, for a page-only fix, it builds and waits at that gate for the same approval. pages-site.yml
+# itself refuses `released: true` unless the run already holds an approved `production` review,
+# so a hand run that sets it is refused there. There is no push trigger: a deploy is always a
+# release or an approved run, so the docs match the version on NuGet.
 #
 # pages-site.yml does the rest: it refuses any ref but main before the approval, copies site/ (the
 # landing page), adds the site kit in `_kit/`, builds the docs from docs/ and .github/pages.json
 # into `docs/`, uploads, and deploys; a released run deploys only while its commit holds the
-# highest vX.Y.Z tag. The docs_pre_build_command below writes the API reference into the staged
-# docs before VitePress runs: docfx reads the /// comments of the 12 packages and
-# tools/docs-api/clean-api.mjs turns its Markdown into pages under api/ (served at
-# /rogue/docs/api/). ci.yml and publish.yml run the same command through hashira's docs-build, so
-# keep the three copies equal. A deploy that fails after the push (a network error in restore or
-# docfx) is not retried here: re-run this workflow by hand, approved in `production`.
+# highest vX.Y.Z tag. The docs_pre_build_command below, tools/docs-api/pre-build.sh, writes the
+# API reference and its grouped sidebar into the staged docs before VitePress runs. ci.yml and
+# publish.yml pass the same command, so keep the three copies equal. A deploy that fails after the
+# push (a network error in restore or docfx) is not retried here: re-run this workflow by hand,
+# approved in `production`.
 name: site
 
 on:
   workflow_dispatch:
     inputs:
       # A boolean here too, so `inputs.released` is false, not null, on a hand run when it is
-      # passed to pages-site.yml's boolean input. `check` refuses true on a hand run.
+      # passed to pages-site.yml's boolean input. pages-site.yml refuses true on a hand run.
       released:
-        description: "Leave unchecked. Only publish.yml deploys without the approval; a hand run with this set is refused."
+        description: "Leave unchecked. Only a release deploys without the approval; a hand run with this set is refused."
         type: boolean
         default: false
   workflow_call:
     inputs:
       released:
-        description: "true only from publish.yml's `site` job, whose `publish` job already passed the production approval."
+        description: "true only from a release job that already passed the production approval in the same run, after a deploy: false call of pages-site.yml uploaded the site (released deploys that build)."
         type: boolean
         default: false
 
 permissions: {}
 
 jobs:
-  # `released: true` skips the approval, so only publish.yml run from main may pass it. A called
-  # workflow sees the caller's github context: github.workflow_ref names publish.yml on a release
-  # run and site.yml on a hand run. The comparison is exact: a prefix would admit publish.yml run
-  # from any branch.
-  check:
-    runs-on: ubuntu-latest
-    permissions: {}
-    steps:
-      - name: Refuse released on anything but a release run
-        env:
-          RELEASED: ${{ inputs.released }}
-          WORKFLOW_REF: ${{ github.workflow_ref }}
-          RELEASE_WORKFLOW: ${{ github.repository }}/.github/workflows/publish.yml@refs/heads/main
-        run: |
-          if [ "${RELEASED}" = "true" ] && [ "${WORKFLOW_REF}" != "${RELEASE_WORKFLOW}" ]; then
-            echo "::error::site: released is for publish.yml only; this run is ${WORKFLOW_REF}." >&2
-            exit 1
-          fi
-
   site:
-    needs: check
     # pages-site.yml's build job reads the repo; its deploy job publishes to Pages and proves
     # itself with OIDC. A called workflow's jobs get no more than this.
     permissions:
@@ -67,15 +49,11 @@ jobs:
     uses: skathio/hashira/.github/workflows/pages-site.yml@v3 # moving major tag: new v3.x releases apply with no PR
     with:
       released: ${{ inputs.released }}
+      # A released run deploys the site publish.yml's `site-check` job built in the same run
+      # (pages-site.yml's default artifact name), so a release builds and scans it once, before
+      # the tag. A hand run builds.
+      prebuilt: ${{ inputs.released }}
+      artifact_name: github-pages
       dotnet_version: '10.0.x'
-      # Trusted input, written here and never from PR or event text. One solution restore up front
-      # is much faster than docfx restoring each of the 12 projects (docfx.json sets noRestore).
-      # docfx writes into a new temporary folder (docfx.json's `dest` under --output), so no page
-      # of a removed type survives from an earlier run and two runs never share a folder.
-      docs_pre_build_command: |
-        dotnet tool restore
-        dotnet restore SkathIO.Rogue.sln
-        docfx_out="$(mktemp -d)"
-        dotnet docfx metadata tools/docs-api/docfx.json --output "$docfx_out"
-        node tools/docs-api/clean-api.mjs "$docfx_out/docfx" "$DOCS_STAGE/api"
-        rm -rf "$docfx_out"
+      # Trusted input, written here and never from PR or event text.
+      docs_pre_build_command: bash tools/docs-api/pre-build.sh

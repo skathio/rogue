@@ -14,11 +14,15 @@ import { join, resolve } from 'node:path'
 const root = resolve(import.meta.dirname, '..', '..')
 const state = { stage: null, run: null }
 
-// site.yml's docs_pre_build_command: the `|` block under that key.
+// site.yml's docs_pre_build_command: a plain value, or the `|` block under that key.
 function preBuildCommand() {
   const lines = readFileSync(join(root, '.github/workflows/site.yml'), 'utf8').split('\n')
-  const at = lines.findIndex((l) => /^\s*docs_pre_build_command:\s*\|\s*$/.test(l))
-  assert.ok(at >= 0, 'site.yml has no docs_pre_build_command block')
+  const at = lines.findIndex((l) => /^\s*docs_pre_build_command:/.test(l))
+  assert.ok(at >= 0, 'site.yml has no docs_pre_build_command')
+  const plain = lines[at].replace(/^\s*docs_pre_build_command:\s*/, '').replace(/\s+#.*$/, '')
+  if (!/^\|\s*$/.test(plain)) {
+    return plain
+  }
   const depth = lines[at].match(/^ */)[0].length
   const end = lines.findIndex((l, i) => i > at && l.trim() !== '' && l.match(/^ */)[0].length <= depth)
   return lines.slice(at + 1, end < 0 ? undefined : end).join('\n')
@@ -104,8 +108,8 @@ test('docfx is a local dotnet tool at 2.81.0 and writes Markdown for net10.0', (
   }
 })
 
-test('the pre-build writes only Markdown pages under api/, starting with the SkathIO.Rogue namespace and ISender', () => {
-  assert.deepEqual(readdirSync(state.stage), ['api'])
+test('the pre-build writes only Markdown pages under api/ and the sidebar, starting with the SkathIO.Rogue namespace and ISender', () => {
+  assert.deepEqual(readdirSync(state.stage).sort(), ['.sidebar.json', 'api'])
   assert.deepEqual(readdirSync(apiDir()).filter((f) => !f.endsWith('.md')), [])
   assert.equal(h1('skathio-rogue.md'), 'Namespace SkathIO.Rogue')
   assert.equal(h1('skathio-rogue-isender.md'), 'Interface ISender')

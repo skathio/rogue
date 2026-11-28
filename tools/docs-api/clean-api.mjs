@@ -3,7 +3,7 @@
 // same command in ci.yml and publish.yml) runs it with <out-dir> set to $DOCS_STAGE/api, so the
 // pages are served under /rogue/docs/api/.
 //
-// Usage: node tools/docs-api/clean-api.mjs <docfx-md-dir> <out-dir>
+// Usage: node tools/docs-api/clean-api.mjs <docfx-md-dir> <out-dir> [--sidebar <file> <pages.json>]
 //
 // - File names become lowercase slugs (SkathIO.Rogue.ICommand-1.md -> skathio-rogue-icommand-1.md).
 // - <xref> becomes a link to the page of the type it names (or declares the member it names),
@@ -14,12 +14,19 @@
 // - The H1 loses its <a id> anchor and docfx's `\>` escape, and starts the page: docs-build takes
 //   a page's title and its sidebar label from that first heading as written, and adds nothing
 //   for front matter.
-// - Only Markdown pages are written: docs-build refuses any other file in the docs stage, so
-//   docfx's toc.yml is not carried over. Each namespace page lists its types by kind.
+// - Only Markdown pages are written to <out-dir>: docs-build refuses any other file in the docs
+//   stage. Each namespace page lists its types by kind.
+// - With --sidebar, it also writes the docs sidebar to <file> ($DOCS_STAGE/.sidebar.json, which
+//   docs-build reads in place of pages.json's sidebar and never publishes): pages.json's own
+//   sidebar entries (the guides) first, then one folded group per namespace, in docfx's toc.yml
+//   order, holding the namespace page and a group of types per kind, each labelled with its
+//   short name. Labels go in as plain text: docs-build escapes them.
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 const LEARN = /^https:\/\/learn\.microsoft\.com\//
+// docs-build's longest sidebar label.
+const MAX_LABEL = 60
 
 function fail(message) {
   process.stderr.write(`clean-api: ${message}\n`)
@@ -140,6 +147,77 @@ function writePage({ srcDir, outDir, byUid, written }, file) {
   writeFileSync(join(outDir, `${slug(file)}.md`), `${page.trimEnd()}\n`)
 }
 
+function yamlValue(raw) {
+  const value = raw.trim()
+  if (value.startsWith('"')) {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return fail(`toc.yml holds a quoted value it cannot read: ${value}`)
+    }
+  }
+  return value.startsWith("'") ? value.slice(1, -1).replace(/''/g, "'") : value
+}
+
+// The cut drops a high surrogate left last, so it never splits a character outside the BMP.
+const label = (text) => (text.length > MAX_LABEL ? `${text.slice(0, MAX_LABEL - 1).replace(/[\uD800-\uDBFF]$/, '')}…` : text)
+
+// docfx's toc.yml lists a namespace at the top level, then under it a kind label (no href)
+// followed by the types of that kind. `page` is the stage path of a docfx page.
+function apiSidebar(toc, written, page) {
+  const groups = []
+  const lines = toc.split('\n')
+  lines.forEach((line, i) => {
+    const m = line.match(/^(\s*)- name: (.+)$/)
+    if (!m) {
+      return
+    }
+    const text = label(yamlValue(m[2]))
+    const href = lines[i + 1]?.match(/^\s+href: (.+)$/)?.[1]
+    const file = href ? yamlValue(href) : null
+    if (file && !written.has(file)) {
+      fail(`toc.yml lists ${file}, which is not in the docfx output.`)
+    }
+    const namespace = groups.at(-1)
+    if (m[1] === '') {
+      groups.push({ label: text, collapsed: true, items: file ? [{ file: page(file), label: 'Overview' }] : [] })
+    } else if (!namespace) {
+      fail(`toc.yml lists ${text} before any namespace.`)
+    } else if (!file) {
+      namespace.items.push({ label: text, items: [] })
+    } else {
+      const kind = namespace.items.at(-1)
+      ;(kind?.items ?? namespace.items).push({ file: page(file), label: text })
+    }
+  })
+  // A kind label with no type under it would be an empty group, which docs-build refuses.
+  const kept = groups.map((g) => ({ ...g, items: g.items.filter((e) => !e.items || e.items.length > 0) })).filter((g) => g.items.length > 0)
+  // No group would leave every API page out of the sidebar: stop, as for a docfx run with no pages.
+  if (kept.length === 0) {
+    fail('toc.yml lists no namespace with a page, so the sidebar would hold no API page.')
+  }
+  return kept
+}
+
+// The guides of pages.json's sidebar, then the API groups, written where --sidebar says.
+function writeSidebar({ srcDir, outDir, written }, [sidebarFile, pagesFile]) {
+  const toc = reading(`read docfx's toc.yml in ${srcDir}`, () => readFileSync(join(srcDir, 'toc.yml'), 'utf8'))
+  // docs-build has checked pages.json by now; run by hand on another file, a sidebar of the
+  // wrong shape stops here instead of being written out.
+  const pages = reading(`read ${pagesFile}`, () => JSON.parse(readFileSync(pagesFile, 'utf8')))
+  if (pages === null || typeof pages !== 'object' || Array.isArray(pages)) {
+    fail(`${pagesFile} must hold an object.`)
+  }
+  const guides = pages.sidebar ?? []
+  if (!Array.isArray(guides)) {
+    fail(`${pagesFile}: sidebar must be a list.`)
+  }
+  const base = relative(join(sidebarFile, '..'), outDir).split('\\').join('/')
+  const groups = apiSidebar(toc, written, (file) => `${base}/${slug(file)}.md`)
+  writeFileSync(sidebarFile, `${JSON.stringify([...guides, ...groups], null, 1)}\n`)
+  return groups.length
+}
+
 // Reads through `read`, and on a file-system error names what was being read instead of
 // leaving a stack trace in the build log.
 function reading(what, read) {
@@ -150,9 +228,9 @@ function reading(what, read) {
   }
 }
 
-function main([srcDir, outDir]) {
-  if (!srcDir || !outDir) {
-    fail('usage: node clean-api.mjs <docfx-md-dir> <out-dir>')
+function main([srcDir, outDir, flag, ...sidebarArgs]) {
+  if (!srcDir || !outDir || (flag !== undefined && (flag !== '--sidebar' || sidebarArgs.length !== 2))) {
+    fail('usage: node clean-api.mjs <docfx-md-dir> <out-dir> [--sidebar <file> <pages.json>]')
   }
   const files = reading(`read the docfx output folder ${srcDir}`, () => readdirSync(srcDir)).filter((f) => f.endsWith('.md')).sort()
   // No pages means docfx wrote nothing: stop, or the site would be built without its API reference.
@@ -164,7 +242,8 @@ function main([srcDir, outDir]) {
   for (const file of files) {
     writePage(run, file)
   }
-  process.stdout.write(`clean-api: ${files.length} pages\n`)
+  const namespaces = flag ? `, ${writeSidebar(run, sidebarArgs)} namespaces in the sidebar` : ''
+  process.stdout.write(`clean-api: ${files.length} pages${namespaces}\n`)
 }
 
 main(process.argv.slice(2))
