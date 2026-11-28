@@ -75,6 +75,5 @@ docs under `docs/`). It clones hashira's `v3` tag unless `HASHIRA_DIR` names a l
 
 5. In the PR, attach the screenshots (or describe each one) and list any warnings.
 
-Known baseline: on `main` the comparison table already makes the phone page 647px wide, so the
-script warns for both phone shots. Report that warning as existing unless your change fixes or
-worsens it.
+No width warning is expected: on `main` every shot is as wide as its viewport (the landing's
+tables scroll inside their own box). Report any warning as a regression of your change.

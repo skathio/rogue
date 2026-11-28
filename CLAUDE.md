@@ -69,7 +69,8 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   allocation thresholds in `.bench/thresholds.json`), `docs/`, `site/`.
 - Docs at `/rogue/docs/`: hashira builds them from `docs/*.md` as they are (no front matter or
   link edits) and `.github/pages.json` (sidebar labels, header links, `governance.md` and
-  `roadmap.md` unpublished, `accent` and `accent_dark` the light and dark brand colours).
+  `roadmap.md` unpublished, `accent` and `accent_dark` the light and dark brand colours;
+  `.github/docs-sidebar.css`, its `theme_css`, only wraps long API names in the sidebar).
   `tools/docs-api/` holds `docfx.json`, `pre-build.sh` and `clean-api.mjs`, which generate the API
   pages under `/rogue/docs/api/` from the `///` comments and the sidebar that groups them by
   namespace and kind (`$DOCS_STAGE/.sidebar.json`: the guides of `pages.json`'s `sidebar` first),
@@ -113,7 +114,10 @@ dotnet test tests/SkathIO.Rogue.Generator.Tests -c Release   # one project
   approval in the `production` environment. Its `site-check` job first builds and scans the Pages
   site (`pages-site.yml` with `deploy: false`), so a broken docs build stops the release before the
   push; it then packs, pushes to nuget.org over OIDC, tags, and deploys that same build (`site.yml`
-  with `released: true`, which passes `prebuilt: true`). Prep steps are in the `release-prep` skill. Agents never dispatch a release.
+  with `released: true`, which passes `prebuilt: true`). The prebuilt site is kept for one day: if
+  `publish` is approved later, the packages and tag still go out and only `site` fails, so run
+  `site.yml` by hand, approved in `production`. Prep steps are in the `release-prep` skill. Agents
+  never dispatch a release.
 - `site.yml` calls hashira's `pages-site.yml@v3`, which copies `site/` to the root, adds the site
   kit in `_kit/`, builds the docs under `docs/` and deploys; only `publish.yml` may pass
   `released: true`, and `pages-site.yml` refuses it unless the run holds an approved `production`
@@ -143,7 +147,8 @@ Full steps are in the `visual-test` skill.
 
 - A fixed port such as 8000 or 8765 may already be served by another repo's site, and you would
   screenshot the wrong page. The script picks a free port and checks the page title is `Rogue`.
-- Known issue: the comparison table makes the phone layout 647px wide at a 390px viewport.
+- No width warning is expected: the landing's tables scroll inside their own box, so every shot is
+  as wide as its viewport. A warning is a regression.
 - `.claude/` is gitignored except `.claude/skills/`; `.somi/` is gitignored entirely.
 - Generator changes can break consumers in other projects even when unit tests pass; run the
   `Smoke.*` tests (they are part of the solution test run).

@@ -38,4 +38,7 @@ The source of these steps is `docs/governance.md`, "Release readiness".
    `dotnet test SkathIO.Rogue.sln -c Release --no-build`.
 
 7. Open the PR as `chore: release X.Y.Z prep` or `docs(changelog): …`, state the recommended bump,
-   wait for green CI, and hand off. The maintainer merges and dispatches `publish.yml`.
+   wait for green CI, and hand off. The maintainer merges and dispatches `publish.yml`. Tell the
+   maintainer that the site built by its `site-check` job is kept for one day: if `publish` is
+   approved later, the packages and the tag still go out and only the `site` job fails, so run
+   `site.yml` by hand, approved in `production`.

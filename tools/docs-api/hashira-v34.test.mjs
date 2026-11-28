@@ -280,9 +280,12 @@ describe('the workflows keep the repo conventions', () => {
 describe('accent_dark replaces the theme CSS with the same brand colours', () => {
   const css = (name) => read(LANDING).match(new RegExp(`${name}\\s*:\\s*(#[0-9a-fA-F]{3,6})\\b`))?.[1]
 
-  test(`.github/${THEME_CSS} is removed and pages.json names no theme_css`, () => {
+  test(`.github/${THEME_CSS} is removed and pages.json's theme_css sets no brand colour`, () => {
     assert.ok(!existsSync(join(root, '.github', THEME_CSS)), `.github/${THEME_CSS} still exists`)
-    assert.equal(pagesConfig().theme_css, undefined)
+    const themeCss = pagesConfig().theme_css
+    if (themeCss !== undefined) {
+      assert.doesNotMatch(read(themeCss), /--vp-c-brand|--vp-button-brand/, `${themeCss} overrides the brand colours`)
+    }
   })
 
   test(`pages.json keeps ${LIGHT_BRAND} in light mode and ${DARK_BRAND} in dark mode`, () => {

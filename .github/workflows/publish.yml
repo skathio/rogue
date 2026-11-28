@@ -133,6 +133,10 @@ jobs:
   # pages-site's `build` job, which holds `contents: read` only. pages and id-token are here only
   # because GitHub checks a called workflow's grants, its skipped deploy job included, before the
   # run starts; no job of this call that holds them runs.
+  # The uploaded site is kept for one day (pages-upload's retention, which pages-site.yml does not
+  # let a caller change). When `publish` is approved later than that, the packages and the tag
+  # still go out and only `site` fails, on a missing artifact: run site.yml by hand then, which
+  # builds main again and waits for the same approval.
   site-check:
     name: site-check
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''

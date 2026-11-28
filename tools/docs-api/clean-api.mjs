@@ -150,12 +150,17 @@ function writePage({ srcDir, outDir, byUid, written }, file) {
 function yamlValue(raw) {
   const value = raw.trim()
   if (value.startsWith('"')) {
-    return JSON.parse(value)
+    try {
+      return JSON.parse(value)
+    } catch {
+      return fail(`toc.yml holds a quoted value it cannot read: ${value}`)
+    }
   }
   return value.startsWith("'") ? value.slice(1, -1).replace(/''/g, "'") : value
 }
 
-const label = (text) => (text.length > MAX_LABEL ? `${text.slice(0, MAX_LABEL - 1)}…` : text)
+// The cut drops a high surrogate left last, so it never splits a character outside the BMP.
+const label = (text) => (text.length > MAX_LABEL ? `${text.slice(0, MAX_LABEL - 1).replace(/[\uD800-\uDBFF]$/, '')}…` : text)
 
 // docfx's toc.yml lists a namespace at the top level, then under it a kind label (no href)
 // followed by the types of that kind. `page` is the stage path of a docfx page.
@@ -186,13 +191,27 @@ function apiSidebar(toc, written, page) {
     }
   })
   // A kind label with no type under it would be an empty group, which docs-build refuses.
-  return groups.map((g) => ({ ...g, items: g.items.filter((e) => !e.items || e.items.length > 0) })).filter((g) => g.items.length > 0)
+  const kept = groups.map((g) => ({ ...g, items: g.items.filter((e) => !e.items || e.items.length > 0) })).filter((g) => g.items.length > 0)
+  // No group would leave every API page out of the sidebar: stop, as for a docfx run with no pages.
+  if (kept.length === 0) {
+    fail('toc.yml lists no namespace with a page, so the sidebar would hold no API page.')
+  }
+  return kept
 }
 
 // The guides of pages.json's sidebar, then the API groups, written where --sidebar says.
 function writeSidebar({ srcDir, outDir, written }, [sidebarFile, pagesFile]) {
   const toc = reading(`read docfx's toc.yml in ${srcDir}`, () => readFileSync(join(srcDir, 'toc.yml'), 'utf8'))
-  const guides = reading(`read ${pagesFile}`, () => JSON.parse(readFileSync(pagesFile, 'utf8'))).sidebar ?? []
+  // docs-build has checked pages.json by now; run by hand on another file, a sidebar of the
+  // wrong shape stops here instead of being written out.
+  const pages = reading(`read ${pagesFile}`, () => JSON.parse(readFileSync(pagesFile, 'utf8')))
+  if (pages === null || typeof pages !== 'object' || Array.isArray(pages)) {
+    fail(`${pagesFile} must hold an object.`)
+  }
+  const guides = pages.sidebar ?? []
+  if (!Array.isArray(guides)) {
+    fail(`${pagesFile}: sidebar must be a list.`)
+  }
   const base = relative(join(sidebarFile, '..'), outDir).split('\\').join('/')
   const groups = apiSidebar(toc, written, (file) => `${base}/${slug(file)}.md`)
   writeFileSync(sidebarFile, `${JSON.stringify([...guides, ...groups], null, 1)}\n`)
